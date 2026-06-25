@@ -1,0 +1,145 @@
+"""Models Django do contexto identity — camada de infraestrutura."""
+import uuid
+
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
+from django.db import models
+
+
+class UserManager(BaseUserManager):
+    """Manager do usuário custom — cria via email, sem username."""
+
+    use_in_migrations = True
+
+    def _create_user(self, email, password, **extra):
+        if not email:
+            raise ValueError("O email é obrigatório.")
+        email = self.normalize_email(email).lower()
+        user = self.model(email=email, **extra)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, email, password=None, **extra):
+        extra.setdefault("is_staff", False)
+        extra.setdefault("is_superuser", False)
+        return self._create_user(email, password, **extra)
+
+    def create_superuser(self, email, password=None, **extra):
+        extra.setdefault("is_staff", True)
+        extra.setdefault("is_superuser", True)
+        if extra.get("is_staff") is not True:
+            raise ValueError("Superusuário precisa de is_staff=True.")
+        if extra.get("is_superuser") is not True:
+            raise ValueError("Superusuário precisa de is_superuser=True.")
+        return self._create_user(email, password, **extra)
+
+
+class UserModel(AbstractBaseUser, PermissionsMixin):
+    """Usuário autenticado por email + senha."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True, help_text="Email de login")
+    full_name = models.CharField(max_length=200, help_text="Nome completo")
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False, help_text="Acesso ao admin")
+    date_joined = models.DateTimeField(auto_now_add=True)
+
+    objects = UserManager()
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["full_name"]
+
+    class Meta:
+        db_table = "identity_user"
+        verbose_name = "Usuário"
+        verbose_name_plural = "Usuários"
+
+    def __str__(self) -> str:
+        return self.email
+
+
+class WorkspaceModel(models.Model):
+    """Espaço de trabalho que agrupa membros e projetos."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=120, help_text="Nome do workspace")
+    slug = models.SlugField(max_length=140, unique=True, help_text="Identificador na URL")
+    owner = models.ForeignKey(
+        UserModel, on_delete=models.PROTECT, related_name="owned_workspaces"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "identity_workspace"
+        verbose_name = "Workspace"
+        verbose_name_plural = "Workspaces"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class MembershipModel(models.Model):
+    """Vínculo de um usuário a um workspace com um papel."""
+
+    ROLE_CHOICES = [
+        ("owner", "Owner"),
+        ("admin", "Admin"),
+        ("member", "Member"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        WorkspaceModel, on_delete=models.CASCADE, related_name="memberships"
+    )
+    user = models.ForeignKey(
+        UserModel, on_delete=models.CASCADE, related_name="memberships"
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="member")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "identity_membership"
+        verbose_name = "Membro"
+        verbose_name_plural = "Membros"
+        # Um usuário só pode ter um vínculo por workspace
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user"], name="unique_workspace_user"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} @ {self.workspace} ({self.role})"
+
+
+class InvitationModel(models.Model):
+    """Convite por email para ingressar em um workspace."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pendente"),
+        ("accepted", "Aceito"),
+        ("revoked", "Revogado"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        WorkspaceModel, on_delete=models.CASCADE, related_name="invitations"
+    )
+    email = models.EmailField(help_text="Email do convidado")
+    role = models.CharField(max_length=10, choices=MembershipModel.ROLE_CHOICES)
+    token = models.CharField(max_length=64, unique=True, help_text="Token do convite")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "identity_invitation"
+        verbose_name = "Convite"
+        verbose_name_plural = "Convites"
+
+    def __str__(self) -> str:
+        return f"{self.email} -> {self.workspace} ({self.status})"

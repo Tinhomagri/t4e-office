@@ -1,0 +1,48 @@
+# Stack completa (espelha o doc §12.3). Real-time/filas presentes mas com
+# uso adiado: web/db bastam para a Fundação (auth + projeto). redis/celery/
+# channels entram em ação quando Presença e Planning Poker forem implementados.
+services:
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: t4e
+      POSTGRES_PASSWORD: t4e
+      POSTGRES_DB: t4e_office
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # Worker de filas — uso adiado (métricas/automações). Mantido pronto.
+  celery:
+    build: .
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    profiles: ["workers"]
+
+volumes:
+  pgdata:

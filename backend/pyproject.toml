@@ -1,0 +1,47 @@
+[project]
+name = "t4e-office-backend"
+version = "0.1.0"
+description = "T4E Office (Pulse) — backend Django + DDD"
+requires-python = ">=3.11"
+dependencies = [
+    "django>=5.2,<6.0",
+    "djangorestframework>=3.15",
+    "djangorestframework-simplejwt>=5.3",
+    "drf-spectacular>=0.27",
+    "psycopg[binary]>=3.2",
+    "django-environ>=0.11",
+    "django-cors-headers>=4.4",
+    # Infra real-time/filas: presente no ambiente, uso adiado para Presença/Poker
+    "celery>=5.4",
+    "redis>=5.0",
+    "channels>=4.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = []
+mypy_path = "src"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.dev"
+pythonpath = ["src"]
+python_files = ["test_*.py", "*_test.py", "tests.py"]
+addopts = "--tb=short"

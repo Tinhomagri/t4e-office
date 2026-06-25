@@ -1,0 +1,5 @@
+# Tooling local do Claude Code (por desenvolvedor)
+.claude/
+
+# Sistema
+.DS_Store
