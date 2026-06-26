@@ -1,6 +1,7 @@
 // src/features/office/game/entities/RemoteSprite.ts
 import Phaser from "phaser"
 import type { Direction } from "@/features/office/office.types"
+import { useOfficeStore } from "@/features/office/store/officeStore"
 
 const LERP = 0.12
 
@@ -12,7 +13,7 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
   private targetY: number
   private _textureKey: string
 
-  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string, userId: string) {
     super(scene, x, y)
     this._textureKey = textureKey
     this.targetX = x
@@ -37,6 +38,19 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
     this.add(this.statusDot)
 
     scene.add.existing(this)
+
+    this.setSize(32, 48)
+    this.setInteractive()
+    scene.input.on("gameobjectover", (_ptr: unknown, obj: Phaser.GameObjects.GameObject) => {
+      if (obj === this) {
+        useOfficeStore.getState().setHoveredUserId(userId)
+      }
+    })
+    scene.input.on("gameobjectout", (_ptr: unknown, obj: Phaser.GameObjects.GameObject) => {
+      if (obj === this) {
+        useOfficeStore.getState().setHoveredUserId(null)
+      }
+    })
   }
 
   setTarget(x: number, y: number, dir: Direction) {

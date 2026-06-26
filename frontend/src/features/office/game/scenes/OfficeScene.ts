@@ -166,7 +166,7 @@ export class OfficeScene extends Phaser.Scene {
             this.textures.addCanvas(key, sheet)
             this._registerAnims(key)
           }
-          remote = new RemoteSprite(this, u.x, u.y, key, u.name)
+          remote = new RemoteSprite(this, u.x, u.y, key, u.name, u.user_id)
           this.remotes.set(u.user_id, remote)
         }
 

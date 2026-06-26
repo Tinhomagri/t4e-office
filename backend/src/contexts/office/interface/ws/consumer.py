@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.db import transaction
 from rest_framework_simplejwt.tokens import AccessToken, TokenError
 
 from contexts.identity.infrastructure.django.models import UserModel
@@ -33,7 +34,7 @@ class OfficeConsumer(AsyncWebsocketConsumer):
             token = AccessToken(token_str)
             user_id = str(token["user_id"])
             self.user = await database_sync_to_async(UserModel.objects.get)(id=user_id)
-        except (TokenError, UserModel.DoesNotExist, Exception):
+        except (TokenError, KeyError, UserModel.DoesNotExist):
             await self.close(code=4001)
             return
 
@@ -195,25 +196,26 @@ class OfficeConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _try_sit(self, desk_id: str) -> bool:
-        try:
-            desk = DeskModel.objects.get(id=desk_id)
-        except DeskModel.DoesNotExist:
-            return False
+        with transaction.atomic():
+            try:
+                desk = DeskModel.objects.select_for_update().get(id=desk_id)
+            except DeskModel.DoesNotExist:
+                return False
 
-        if desk.is_fixed and desk.owner and str(desk.owner.id) != self.user_id:
-            return False
+            if desk.is_fixed and desk.owner and str(desk.owner.id) != self.user_id:
+                return False
 
-        active = DeskSessionModel.objects.filter(desk=desk, ended_at__isnull=True).exists()
-        if active:
-            return False
+            active = DeskSessionModel.objects.filter(desk=desk, ended_at__isnull=True).exists()
+            if active:
+                return False
 
-        # Encerrar sessão anterior do usuário
-        DeskSessionModel.objects.filter(user=self.user, ended_at__isnull=True).update(
-            ended_at=datetime.now(timezone.utc)
-        )
-        session = DeskSessionModel.objects.create(desk=desk, user=self.user)
-        DeskCardModel.objects.create(desk_session=session)
-        return True
+            # Encerrar sessão anterior do usuário
+            DeskSessionModel.objects.filter(user=self.user, ended_at__isnull=True).update(
+                ended_at=datetime.now(timezone.utc)
+            )
+            session = DeskSessionModel.objects.create(desk=desk, user=self.user)
+            DeskCardModel.objects.create(desk_session=session)
+            return True
 
     @database_sync_to_async
     def _release_desk(self):
