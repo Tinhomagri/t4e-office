@@ -15,4 +15,5 @@ urlpatterns = [
     # Contextos
     path("api/auth/", include("contexts.identity.interface.api.urls")),
     path("api/", include("contexts.projects.interface.api.urls")),
+    path("api/office/", include("contexts.office.interface.api.urls")),
 ]
