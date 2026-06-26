@@ -9,7 +9,7 @@ const SEND_INTERVAL_MS = 100  // 10fps
 export class PlayerSprite extends Phaser.GameObjects.Container {
   private sprite: Phaser.GameObjects.Sprite
   private nameTag: Phaser.GameObjects.Text
-  private keys: Phaser.Types.Input.Keyboard.CursorKeys & { w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key; s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key; e: Phaser.Input.Keyboard.Key }
+  private keys: Phaser.Types.Input.Keyboard.CursorKeys & { w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key; s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key }
   private lastSentAt = 0
   private lastDir: Direction = "down"
   private isSeated = false
@@ -40,7 +40,6 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
       a: kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
       s: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       d: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      e: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
     }
 
     scene.add.existing(this)
@@ -87,7 +86,6 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
       if (this._canMoveTo(nx, this.y)) this.x = nx
       if (this._canMoveTo(this.x, ny)) this.y = ny
 
-      // Animar
       const animName = `${this._textureKey}_${dir}`
       if (this.sprite.anims.currentAnim?.key !== animName) {
         this.sprite.play(animName)
@@ -96,7 +94,6 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
       this.sprite.setFrame(this._idleFrameFor(dir))
     }
 
-    // Enviar posição via WebSocket a 10fps
     if (moving && time - this.lastSentAt > SEND_INTERVAL_MS) {
       officeSocket.send("move", { x: Math.round(this.x), y: Math.round(this.y), dir })
       this.lastSentAt = time
