@@ -46,3 +46,4 @@ DJANGO_SETTINGS_MODULE = "config.settings.dev"
 pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--tb=short"
+asyncio_mode = "auto"
