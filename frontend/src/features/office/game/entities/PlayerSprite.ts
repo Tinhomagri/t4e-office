@@ -15,12 +15,14 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
   private isSeated = false
   private _textureKey: string
 
-  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, tint: number, name: string) {
     super(scene, x, y)
     this._textureKey = textureKey
 
     this.sprite = scene.add.sprite(0, 0, textureKey, 0)
     this.sprite.setOrigin(0.5, 1)
+    this.sprite.setScale(0.38)
+    this.sprite.setTint(tint)
     this.add(this.sprite)
 
     this.nameTag = scene.add.text(0, -52, name, {
@@ -52,6 +54,7 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
   update(time: number) {
     if (this.isSeated) {
       this.sprite.setFrame(this._idleFrameFor(this.lastDir))
+      this.sprite.setFlipX(this.lastDir === 'left')
       return
     }
 
@@ -90,8 +93,10 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
       if (this.sprite.anims.currentAnim?.key !== animName) {
         this.sprite.play(animName)
       }
+      this.sprite.setFlipX(dir === 'left')
     } else {
       this.sprite.setFrame(this._idleFrameFor(dir))
+      this.sprite.setFlipX(dir === 'left')
     }
 
     if (moving && time - this.lastSentAt > SEND_INTERVAL_MS) {
@@ -108,7 +113,7 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
   }
 
   private _idleFrameFor(dir: Direction): number {
-    const dirRow: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
-    return dirRow[dir] * 3  // frame 0 de cada linha = idle
+    const dirFrame: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
+    return dirFrame[dir]
   }
 }

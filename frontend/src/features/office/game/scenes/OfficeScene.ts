@@ -1,6 +1,6 @@
 // src/features/office/game/scenes/OfficeScene.ts
 import Phaser from "phaser"
-import { generateAvatarSheet } from "@/features/avatar/avatarRenderer"
+import { getCharName, getCharTint } from "@/features/avatar/avatarRenderer"
 import type { AvatarConfig } from "@/features/avatar/avatar.types"
 import { MAP_TILES, MAP_W, MAP_H, TILE_SIZE, TILE_COLORS, TileType, DESK_TILE_POSITIONS } from "../map/mapData"
 import { PlayerSprite } from "../entities/PlayerSprite"
@@ -24,6 +24,7 @@ export class OfficeScene extends Phaser.Scene {
   private remotes = new Map<string, RemoteSprite>()
   private myUserId = ""
   private myAvatarKey = ""
+  private myTint = 0xffffff
   private eKey!: Phaser.Input.Keyboard.Key
   private nearDeskId: string | null = null
   private _unsubStore: (() => void) | null = null
@@ -34,21 +35,34 @@ export class OfficeScene extends Phaser.Scene {
 
   init(data: { userId: string; avatar: AvatarConfig; name: string }) {
     this.myUserId = data.userId
-    this.myAvatarKey = `avatar_${data.userId}`
+    const charName = getCharName(data.avatar.skin)
+    this.myAvatarKey = `char_${charName}`
+    this.myTint = getCharTint(data.avatar.cloth)
+  }
 
-    // Gera e registra spritesheet do player
-    const sheet = generateAvatarSheet(data.avatar)
-    this.textures.addCanvas(this.myAvatarKey, sheet)
-    this._registerAnims(this.myAvatarKey)
+  preload() {
+    const chars = ['player', 'adventurer', 'female', 'soldier', 'zombie']
+    chars.forEach((name) => {
+      this.load.spritesheet(`char_${name}`, `/assets/characters/${name}_tilesheet.png`, {
+        frameWidth: 80,
+        frameHeight: 110,
+      })
+    })
   }
 
   create() {
+    // Registrar animações para todos os personagens
+    const chars = ['player', 'adventurer', 'female', 'soldier', 'zombie']
+    chars.forEach((name) => {
+      this._registerAnims(`char_${name}`)
+    })
+
     this._drawMap()
 
     // Spawneia o player na entrada (tile 10, 35)
     const spawnX = 10 * TILE_SIZE + TILE_SIZE / 2
     const spawnY = 35 * TILE_SIZE
-    this.player = new PlayerSprite(this, spawnX, spawnY, this.myAvatarKey, "Eu")
+    this.player = new PlayerSprite(this, spawnX, spawnY, this.myAvatarKey, this.myTint, "Eu")
 
     // Câmera segue o player
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
@@ -129,18 +143,23 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private _registerAnims(key: string) {
-    const dirs: Direction[] = ["down", "left", "right", "up"]
-    dirs.forEach((dir, row) => {
-      this.anims.create({
-        key: `${key}_${dir}`,
-        frames: [
-          { key, frame: row * 3 + 1 },
-          { key, frame: row * 3 + 0 },
-          { key, frame: row * 3 + 2 },
-        ],
-        frameRate: 8,
-        repeat: -1,
-      })
+    const dirs: Direction[] = ['down', 'left', 'right', 'up']
+    const frameStarts: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
+
+    dirs.forEach((dir) => {
+      const start = frameStarts[dir]
+      if (!this.anims.exists(`${key}_${dir}`)) {
+        this.anims.create({
+          key: `${key}_${dir}`,
+          frames: [
+            { key, frame: start + 1 },
+            { key, frame: start + 0 },
+            { key, frame: start + 2 },
+          ],
+          frameRate: 8,
+          repeat: -1,
+        })
+      }
     })
   }
 
@@ -156,17 +175,10 @@ export class OfficeScene extends Phaser.Scene {
 
         let remote = this.remotes.get(u.user_id)
         if (!remote) {
-          // Criar sprite para novo usuário
-          const key = `avatar_${u.user_id}`
-          if (!this.textures.exists(key)) {
-            const sheet = generateAvatarSheet({
-              skin: u.skin, cloth: u.cloth, hair: u.hair, accessory: u.accessory,
-              configured: true,
-            })
-            this.textures.addCanvas(key, sheet)
-            this._registerAnims(key)
-          }
-          remote = new RemoteSprite(this, u.x, u.y, key, u.name, u.user_id)
+          // Criar sprite para novo usuário usando tilesheet Kenney
+          const key = `char_${getCharName(u.skin)}`
+          const tint = getCharTint(u.cloth)
+          remote = new RemoteSprite(this, u.x, u.y, key, tint, u.name, u.user_id)
           this.remotes.set(u.user_id, remote)
         }
 

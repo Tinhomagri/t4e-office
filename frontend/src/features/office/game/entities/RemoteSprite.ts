@@ -13,7 +13,7 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
   private targetY: number
   private _textureKey: string
 
-  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string, userId: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, tint: number, name: string, userId: string) {
     super(scene, x, y)
     this._textureKey = textureKey
     this.targetX = x
@@ -21,6 +21,8 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
 
     this.sprite = scene.add.sprite(0, 0, textureKey, 0)
     this.sprite.setOrigin(0.5, 1)
+    this.sprite.setScale(0.38)
+    this.sprite.setTint(tint)
     this.add(this.sprite)
 
     this.nameTag = scene.add.text(0, -52, name, {
@@ -60,6 +62,7 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
     if (this.sprite.anims.currentAnim?.key !== animName) {
       this.sprite.play(animName)
     }
+    this.sprite.setFlipX(dir === 'left')
   }
 
   setStatusColor(hex: number) {
@@ -69,8 +72,9 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
   }
 
   setIdle(dir: Direction) {
-    const dirRow: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
-    this.sprite.setFrame(dirRow[dir] * 3)
+    const dirFrame: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
+    this.sprite.setFrame(dirFrame[dir])
+    this.sprite.setFlipX(dir === 'left')
   }
 
   update() {
