@@ -32,9 +32,11 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "drf_spectacular",
     "corsheaders",
+    "channels",
     # Bounded contexts
     "contexts.identity",
     "contexts.projects",
+    "contexts.office",
 ]
 
 MIDDLEWARE = [
@@ -115,3 +117,10 @@ CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = REDIS_URL
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [REDIS_URL]},
+    }
+}

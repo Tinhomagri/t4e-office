@@ -15,6 +15,7 @@ dependencies = [
     "celery>=5.4",
     "redis>=5.0",
     "channels>=4.1",
+    "channels-redis>=4.2",
 ]
 
 [project.optional-dependencies]

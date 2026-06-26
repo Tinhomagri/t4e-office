@@ -1,7 +1,19 @@
-"""ASGI entrypoint — base para Channels (Presença/Poker) no futuro."""
+"""ASGI entrypoint com Django Channels para WebSocket de presença."""
 import os
 
+from channels.auth import AuthMiddlewareStack
+from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
-application = get_asgi_application()
+
+django_asgi_app = get_asgi_application()
+
+from contexts.office.interface.ws.routing import websocket_urlpatterns  # noqa: E402
+
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": AuthMiddlewareStack(URLRouter(websocket_urlpatterns)),
+    }
+)
