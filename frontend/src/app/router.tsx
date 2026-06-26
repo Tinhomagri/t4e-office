@@ -1,10 +1,11 @@
 import { Navigate, createBrowserRouter } from "react-router-dom"
-
 import { AppHome } from "@/features/auth/AppHome"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
+import { OfficePage } from "@/features/office/OfficePage"
+import { AvatarCustomizer } from "@/features/avatar/AvatarCustomizer"
 import type { ReactNode } from "react"
 
 // Protege rotas privadas: sem token -> volta para o login
@@ -25,5 +26,13 @@ export const router = createBrowserRouter([
         <AppHome />
       </RequireAuth>
     ),
+  },
+  {
+    path: "/onboarding",
+    element: <RequireAuth><AvatarCustomizer /></RequireAuth>,
+  },
+  {
+    path: "/office",
+    element: <RequireAuth><OfficePage /></RequireAuth>,
   },
 ])
