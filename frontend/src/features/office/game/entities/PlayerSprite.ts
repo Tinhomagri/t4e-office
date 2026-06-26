@@ -5,24 +5,28 @@ import type { Direction } from "@/features/office/office.types"
 
 const SPEED = 160
 const SEND_INTERVAL_MS = 100  // 10fps
+const BOB_SPEED = 0.008
+const BOB_AMP = 2
 
 export class PlayerSprite extends Phaser.GameObjects.Container {
-  private sprite: Phaser.GameObjects.Sprite
+  private sprite: Phaser.GameObjects.Image
   private nameTag: Phaser.GameObjects.Text
-  private keys: Phaser.Types.Input.Keyboard.CursorKeys & { w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key; s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key }
+  private keys: Phaser.Types.Input.Keyboard.CursorKeys & {
+    w: Phaser.Input.Keyboard.Key
+    a: Phaser.Input.Keyboard.Key
+    s: Phaser.Input.Keyboard.Key
+    d: Phaser.Input.Keyboard.Key
+  }
   private lastSentAt = 0
   private lastDir: Direction = "down"
   private isSeated = false
-  private _textureKey: string
 
-  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, tint: number, name: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string) {
     super(scene, x, y)
-    this._textureKey = textureKey
 
-    this.sprite = scene.add.sprite(0, 0, textureKey, 0)
+    this.sprite = scene.add.image(0, 0, textureKey)
     this.sprite.setOrigin(0.5, 1)
-    this.sprite.setScale(0.38)
-    this.sprite.setTint(tint)
+    this.sprite.setScale(3)
     this.add(this.sprite)
 
     this.nameTag = scene.add.text(0, -52, name, {
@@ -53,8 +57,8 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
 
   update(time: number) {
     if (this.isSeated) {
-      this.sprite.setFrame(this._idleFrameFor(this.lastDir))
-      this.sprite.setFlipX(this.lastDir === 'left')
+      this.sprite.y = 0
+      this.nameTag.y = -52
       return
     }
 
@@ -89,14 +93,14 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
       if (this._canMoveTo(nx, this.y)) this.x = nx
       if (this._canMoveTo(this.x, ny)) this.y = ny
 
-      const animName = `${this._textureKey}_${dir}`
-      if (this.sprite.anims.currentAnim?.key !== animName) {
-        this.sprite.play(animName)
-      }
+      const bob = Math.sin(time * BOB_SPEED) * BOB_AMP
+      this.sprite.y = bob
+      this.nameTag.y = -52 + bob
       this.sprite.setFlipX(dir === 'left')
     } else {
-      this.sprite.setFrame(this._idleFrameFor(dir))
-      this.sprite.setFlipX(dir === 'left')
+      this.sprite.y = 0
+      this.nameTag.y = -52
+      this.sprite.setFlipX(this.lastDir === 'left')
     }
 
     if (moving && time - this.lastSentAt > SEND_INTERVAL_MS) {
@@ -110,10 +114,5 @@ export class PlayerSprite extends Phaser.GameObjects.Container {
     const ty = Math.floor(ny / TILE_SIZE)
     if (ty < 0 || ty >= MAP_TILES.length || tx < 0 || tx >= MAP_TILES[0].length) return false
     return !SOLID_TILES.has(MAP_TILES[ty][tx])
-  }
-
-  private _idleFrameFor(dir: Direction): number {
-    const dirFrame: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
-    return dirFrame[dir]
   }
 }

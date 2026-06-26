@@ -1,13 +1,12 @@
 // src/features/office/game/scenes/OfficeScene.ts
 import Phaser from "phaser"
-import { getCharName, getCharTint } from "@/features/avatar/avatarRenderer"
+import { compositeAvatar, makeAvatarTexKey, TILE } from "@/features/avatar/avatarRenderer"
 import type { AvatarConfig } from "@/features/avatar/avatar.types"
 import { MAP_TILES, MAP_W, MAP_H, TILE_SIZE, TILE_COLORS, TileType, DESK_TILE_POSITIONS } from "../map/mapData"
 import { PlayerSprite } from "../entities/PlayerSprite"
 import { RemoteSprite } from "../entities/RemoteSprite"
 import { useOfficeStore } from "@/features/office/store/officeStore"
 import { officeSocket } from "@/features/office/ws/officeSocket"
-import type { Direction } from "@/features/office/office.types"
 
 const STATUS_COLORS: Record<string, number> = {
   in_progress: 0x2f6df0,
@@ -23,8 +22,8 @@ export class OfficeScene extends Phaser.Scene {
   private player!: PlayerSprite
   private remotes = new Map<string, RemoteSprite>()
   private myUserId = ""
-  private myAvatarKey = ""
-  private myTint = 0xffffff
+  private myAvatar: AvatarConfig = { skin: 0, cloth: 0, hair: 0, accessory: 0, configured: true }
+  private myName = ""
   private eKey!: Phaser.Input.Keyboard.Key
   private nearDeskId: string | null = null
   private _unsubStore: (() => void) | null = null
@@ -35,56 +34,36 @@ export class OfficeScene extends Phaser.Scene {
 
   init(data: { userId: string; avatar: AvatarConfig; name: string }) {
     this.myUserId = data.userId
-    const charName = getCharName(data.avatar.skin)
-    this.myAvatarKey = `char_${charName}`
-    this.myTint = getCharTint(data.avatar.cloth)
+    this.myAvatar = data.avatar
+    this.myName = data.name
   }
 
   preload() {
-    const chars = ['player', 'adventurer', 'female', 'soldier', 'zombie']
-    chars.forEach((name) => {
-      this.load.spritesheet(`char_${name}`, `/assets/characters/${name}_tilesheet.png`, {
-        frameWidth: 80,
-        frameHeight: 110,
-      })
-    })
+    this.load.image('roguelike', '/assets/characters/roguelike.png')
   }
 
   create() {
-    // Registrar animações para todos os personagens
-    const chars = ['player', 'adventurer', 'female', 'soldier', 'zombie']
-    chars.forEach((name) => {
-      this._registerAnims(`char_${name}`)
-    })
-
     this._drawMap()
 
-    // Spawneia o player na entrada (tile 10, 35)
+    const texKey = this._genTexture(this.myAvatar)
     const spawnX = 10 * TILE_SIZE + TILE_SIZE / 2
     const spawnY = 35 * TILE_SIZE
-    this.player = new PlayerSprite(this, spawnX, spawnY, this.myAvatarKey, this.myTint, "Eu")
+    this.player = new PlayerSprite(this, spawnX, spawnY, texKey, this.myName)
 
-    // Câmera segue o player
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
-    this.cameras.main.setZoom(1.5)
+    this.cameras.main.setZoom(2)
     this.cameras.main.setBounds(0, 0, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE)
 
     this.eKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E)
 
-    // Subscreve no store para atualizar remotes
     this._subscribeToStore()
   }
 
   update(time: number) {
     this.player.update(time)
-
-    // Atualizar remotes
     this.remotes.forEach((sprite) => sprite.update())
-
-    // Detectar proximidade de mesa
     this._checkProximity()
 
-    // Tecla E para sentar/levantar
     if (Phaser.Input.Keyboard.JustDown(this.eKey)) {
       const store = useOfficeStore.getState()
       if (store.seatedDeskId) {
@@ -95,6 +74,21 @@ export class OfficeScene extends Phaser.Scene {
         this.player.setSeated(true)
       }
     }
+  }
+
+  private _genTexture(avatar: AvatarConfig): string {
+    const key = makeAvatarTexKey(avatar.skin, avatar.cloth, avatar.hair, avatar.accessory)
+    if (this.textures.exists(key)) return key
+
+    const src = this.textures.get('roguelike').getSourceImage() as CanvasImageSource
+    const canvas = document.createElement('canvas')
+    canvas.width = TILE
+    canvas.height = TILE
+    const ctx = canvas.getContext('2d')!
+    ctx.imageSmoothingEnabled = false
+    compositeAvatar(ctx, src, avatar.skin, avatar.cloth, avatar.hair, avatar.accessory)
+    this.textures.addCanvas(key, canvas)
+    return key
   }
 
   private _drawMap() {
@@ -110,19 +104,16 @@ export class OfficeScene extends Phaser.Scene {
         gfx.fillStyle(color, tile === TileType.GLASS ? 0.5 : 1)
         gfx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
 
-        // Borda preta nas paredes
         if (tile === TileType.WALL) {
           gfx.lineStyle(1, 0x1a1a1a, 0.6)
           gfx.strokeRect(x, y, TILE_SIZE, TILE_SIZE)
         }
 
-        // Detalhe visual nas mesas
         if (tile === TileType.DESK) {
           gfx.fillStyle(0x222529, 1)
           gfx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4)
         }
 
-        // Planta — círculo verde
         if (tile === TileType.PLANT) {
           gfx.fillStyle(0x6aa84f, 1)
           gfx.fillCircle(x + TILE_SIZE / 2, y + TILE_SIZE / 2, 12)
@@ -130,7 +121,6 @@ export class OfficeScene extends Phaser.Scene {
           gfx.fillCircle(x + TILE_SIZE / 2 - 4, y + TILE_SIZE / 2 - 4, 7)
         }
 
-        // Logo T4E no topo
         if (tile === TileType.LOGO && row === 1) {
           const logoText = this.add.text(x, y + 4, "T4E", {
             fontSize: "14px", fontFamily: "Arial", fontStyle: "bold",
@@ -140,27 +130,6 @@ export class OfficeScene extends Phaser.Scene {
         }
       }
     }
-  }
-
-  private _registerAnims(key: string) {
-    const dirs: Direction[] = ['down', 'left', 'right', 'up']
-    const frameStarts: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
-
-    dirs.forEach((dir) => {
-      const start = frameStarts[dir]
-      if (!this.anims.exists(`${key}_${dir}`)) {
-        this.anims.create({
-          key: `${key}_${dir}`,
-          frames: [
-            { key, frame: start + 1 },
-            { key, frame: start + 0 },
-            { key, frame: start + 2 },
-          ],
-          frameRate: 8,
-          repeat: -1,
-        })
-      }
-    })
   }
 
   shutdown() {
@@ -175,10 +144,15 @@ export class OfficeScene extends Phaser.Scene {
 
         let remote = this.remotes.get(u.user_id)
         if (!remote) {
-          // Criar sprite para novo usuário usando tilesheet Kenney
-          const key = `char_${getCharName(u.skin)}`
-          const tint = getCharTint(u.cloth)
-          remote = new RemoteSprite(this, u.x, u.y, key, tint, u.name, u.user_id)
+          const avatarCfg: AvatarConfig = {
+            skin: u.skin ?? 0,
+            cloth: u.cloth ?? 0,
+            hair: u.hair ?? 0,
+            accessory: u.accessory ?? 0,
+            configured: true,
+          }
+          const key = this._genTexture(avatarCfg)
+          remote = new RemoteSprite(this, u.x, u.y, key, u.name, u.user_id)
           this.remotes.set(u.user_id, remote)
         }
 
@@ -188,7 +162,6 @@ export class OfficeScene extends Phaser.Scene {
         }
       })
 
-      // Remover usuários que saíram
       this.remotes.forEach((_, id) => {
         if (!state.users.has(id)) {
           this.remotes.get(id)?.destroy()
@@ -205,7 +178,6 @@ export class OfficeScene extends Phaser.Scene {
 
     let nearDesk: string | null = null
 
-    // Verificar proximidade das mesas
     store.users.forEach((u) => {
       if (u.user_id === this.myUserId || !u.desk_id) return
       const desk = store.desks.get(u.desk_id)
@@ -217,13 +189,11 @@ export class OfficeScene extends Phaser.Scene {
       }
     })
 
-    // Detectar mesa próxima para sentar
     this.nearDeskId = null
     for (const pos of DESK_TILE_POSITIONS) {
       const dx = px - pos.tx * TILE_SIZE
       const dy = py - pos.ty * TILE_SIZE
       if (Math.sqrt(dx * dx + dy * dy) < TILE_SIZE * 1.5) {
-        // Encontrar desk_id correspondente
         store.desks.forEach((desk) => {
           if (desk.tile_x === pos.tx && desk.tile_y === pos.ty) {
             this.nearDeskId = desk.id
@@ -238,3 +208,4 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 }
+

@@ -1,42 +1,39 @@
 // src/features/avatar/AvatarCustomizer.tsx
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation } from "@tanstack/react-query"
 import { api } from "@/shared/api/client"
-import { CHAR_NAMES, CHAR_TINTS } from "./avatarRenderer"
+import { TILE, compositeAvatar, getSheetAsync } from "./avatarRenderer"
 
-const CHAR_LABELS = ["Player", "Aventureiro", "Feminino", "Soldado", "Zumbi"]
-const TINT_LABELS = ["Padrão", "Azul", "Verde", "Laranja", "Roxo", "Rosa"]
-const TINT_PREVIEW = ["#ffffff", "#88bbff", "#88ffaa", "#ffaa66", "#cc88ff", "#ff88bb"]
+const SKIN_LABELS = ["Claro", "Médio", "Escuro", "Verde"]
+const SKIN_COLORS = ["#d2b28e", "#ba9570", "#8e6f45", "#3c935c"]
 
-// CSS para mostrar apenas o primeiro frame (80×110) do tilesheet (720×330)
-// usando background-position para cortar o idle frame (col 0, row 0)
-function CharPreview({ skin, cloth }: { skin: number; cloth: number }) {
-  const name = CHAR_NAMES[skin]
-  const hueRotate = [0, 200, 100, 30, 270, 320][cloth]
-  return (
-    <div className="relative w-20 h-28 flex items-center justify-center">
-      <div
-        className="w-full h-full"
-        style={{
-          backgroundImage: `url(/assets/characters/${name}_tilesheet.png)`,
-          backgroundSize: `${9 * 100}% ${3 * 100}%`, // 9 cols, 3 rows
-          backgroundPosition: '0% 0%', // primeiro frame
-          imageRendering: 'pixelated',
-          filter: cloth === 0 ? 'none' : `sepia(1) hue-rotate(${hueRotate}deg) saturate(2)`,
-        }}
-      />
-    </div>
-  )
-}
+const CLOTH_LABELS = ["Laranja", "Teal", "Roxo", "Marrom", "Verde", "Prata"]
+const CLOTH_COLORS = ["#c66f34", "#409187", "#c4afca", "#a1825d", "#89b039", "#c9c9c9"]
 
-// Export CHAR_TINTS for external consumers if needed
-export { CHAR_TINTS }
+const HAIR_LABELS = ["Castanho", "Ruivo", "Grisalho", "Loiro"]
+const HAIR_COLORS = ["#836542", "#a56519", "#c3b3aa", "#cccb96"]
+
+const ACCESSORY_LABELS = ["Nenhum", "Óculos", "Óculos dourado"]
 
 export function AvatarCustomizer() {
   const navigate = useNavigate()
+  const previewRef = useRef<HTMLCanvasElement>(null)
+
   const [skin, setSkin] = useState(0)
   const [cloth, setCloth] = useState(0)
+  const [hair, setHair] = useState(0)
+  const [accessory, setAccessory] = useState(0)
+
+  useEffect(() => {
+    const canvas = previewRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")!
+    ctx.imageSmoothingEnabled = false
+    getSheetAsync().then((img) => {
+      compositeAvatar(ctx, img, skin, cloth, hair, accessory)
+    })
+  }, [skin, cloth, hair, accessory])
 
   const mutation = useMutation({
     mutationFn: (data: { skin: number; cloth: number; hair: number; accessory: number }) =>
@@ -47,6 +44,7 @@ export function AvatarCustomizer() {
   return (
     <div className="min-h-screen bg-[#eef1f4] flex items-center justify-center p-6">
       <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full flex flex-col gap-6">
+
         <div className="text-center">
           <div className="inline-flex items-center gap-2 mb-2">
             <div className="bg-[#1a1a1a] text-white font-black text-xs px-2 py-1 rounded-md">T4E</div>
@@ -55,62 +53,97 @@ export function AvatarCustomizer() {
           <p className="text-sm text-gray-500">Como você vai aparecer no escritório</p>
         </div>
 
-        {/* Preview */}
+        {/* Preview pixel art */}
         <div className="flex justify-center">
-          <div className="w-24 h-32 bg-[#f4f6f8] rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-200 overflow-hidden">
-            <CharPreview skin={skin} cloth={cloth} />
+          <canvas
+            ref={previewRef}
+            width={TILE}
+            height={TILE}
+            style={{
+              width: TILE * 8,
+              height: TILE * 8,
+              imageRendering: "pixelated",
+              borderRadius: "16px",
+              background: "#eef1f4",
+              border: "2px dashed #d1d5db",
+            }}
+          />
+        </div>
+
+        {/* Cor de pele */}
+        <div>
+          <label className="text-xs font-semibold text-gray-500 mb-2 block">Cor de pele</label>
+          <div className="flex gap-3">
+            {SKIN_COLORS.map((color, i) => (
+              <button
+                key={i}
+                title={SKIN_LABELS[i]}
+                onClick={() => setSkin(i)}
+                className={`w-9 h-9 rounded-full border-2 transition-transform ${skin === i ? "border-blue-500 scale-110 shadow-md" : "border-transparent hover:scale-105"}`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Personagem */}
+        {/* Roupa */}
         <div>
-          <label className="text-xs font-semibold text-gray-500 mb-2 block">Personagem</label>
-          <div className="grid grid-cols-5 gap-2">
-            {CHAR_NAMES.map((name, i) => (
+          <label className="text-xs font-semibold text-gray-500 mb-2 block">Roupa</label>
+          <div className="flex flex-wrap gap-2">
+            {CLOTH_LABELS.map((label, i) => (
               <button
                 key={i}
-                onClick={() => setSkin(i)}
-                className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition ${skin === i ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+                onClick={() => setCloth(i)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition ${cloth === i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
               >
-                <div
-                  className="w-10 h-14"
-                  style={{
-                    backgroundImage: `url(/assets/characters/${name}_tilesheet.png)`,
-                    backgroundSize: `${9 * 100}% ${3 * 100}%`,
-                    backgroundPosition: '0% 0%',
-                    imageRendering: 'pixelated',
-                  }}
-                />
-                <span className="text-xs text-gray-600">{CHAR_LABELS[i]}</span>
+                <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: CLOTH_COLORS[i] }} />
+                {label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Cor */}
+        {/* Cabelo */}
         <div>
-          <label className="text-xs font-semibold text-gray-500 mb-2 block">Cor</label>
-          <div className="flex gap-2 flex-wrap">
-            {TINT_PREVIEW.map((color, i) => (
+          <label className="text-xs font-semibold text-gray-500 mb-2 block">Cabelo</label>
+          <div className="flex flex-wrap gap-2">
+            {HAIR_LABELS.map((label, i) => (
               <button
                 key={i}
-                onClick={() => setCloth(i)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition ${cloth === i ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+                onClick={() => setHair(i)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition ${hair === i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
               >
-                <span className="w-3 h-3 rounded-full inline-block border border-gray-300" style={{ backgroundColor: color }} />
-                {TINT_LABELS[i]}
+                <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: HAIR_COLORS[i] }} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Acessório */}
+        <div>
+          <label className="text-xs font-semibold text-gray-500 mb-2 block">Acessório</label>
+          <div className="flex gap-2">
+            {ACCESSORY_LABELS.map((label, i) => (
+              <button
+                key={i}
+                onClick={() => setAccessory(i)}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium border-2 transition ${accessory === i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+              >
+                {label}
               </button>
             ))}
           </div>
         </div>
 
         <button
-          onClick={() => mutation.mutate({ skin, cloth, hair: 0, accessory: 0 })}
+          onClick={() => mutation.mutate({ skin, cloth, hair, accessory })}
           disabled={mutation.isPending}
           className="w-full bg-[#1a1a1a] text-white font-bold py-3 rounded-2xl text-sm hover:bg-gray-800 transition disabled:opacity-50"
         >
           {mutation.isPending ? "Entrando…" : "Entrar no escritório →"}
         </button>
+
       </div>
     </div>
   )

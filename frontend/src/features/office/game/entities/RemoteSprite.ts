@@ -4,25 +4,25 @@ import type { Direction } from "@/features/office/office.types"
 import { useOfficeStore } from "@/features/office/store/officeStore"
 
 const LERP = 0.12
+const BOB_SPEED = 0.008
+const BOB_AMP = 2
+const MOVE_THRESHOLD = 1
 
 export class RemoteSprite extends Phaser.GameObjects.Container {
-  private sprite: Phaser.GameObjects.Sprite
+  private sprite: Phaser.GameObjects.Image
   private nameTag: Phaser.GameObjects.Text
   private statusDot: Phaser.GameObjects.Graphics
   private targetX: number
   private targetY: number
-  private _textureKey: string
 
-  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, tint: number, name: string, userId: string) {
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, name: string, userId: string) {
     super(scene, x, y)
-    this._textureKey = textureKey
     this.targetX = x
     this.targetY = y
 
-    this.sprite = scene.add.sprite(0, 0, textureKey, 0)
+    this.sprite = scene.add.image(0, 0, textureKey)
     this.sprite.setOrigin(0.5, 1)
-    this.sprite.setScale(0.38)
-    this.sprite.setTint(tint)
+    this.sprite.setScale(3)
     this.add(this.sprite)
 
     this.nameTag = scene.add.text(0, -52, name, {
@@ -44,24 +44,16 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
     this.setSize(32, 48)
     this.setInteractive()
     scene.input.on("gameobjectover", (_ptr: unknown, obj: Phaser.GameObjects.GameObject) => {
-      if (obj === this) {
-        useOfficeStore.getState().setHoveredUserId(userId)
-      }
+      if (obj === this) useOfficeStore.getState().setHoveredUserId(userId)
     })
     scene.input.on("gameobjectout", (_ptr: unknown, obj: Phaser.GameObjects.GameObject) => {
-      if (obj === this) {
-        useOfficeStore.getState().setHoveredUserId(null)
-      }
+      if (obj === this) useOfficeStore.getState().setHoveredUserId(null)
     })
   }
 
   setTarget(x: number, y: number, dir: Direction) {
     this.targetX = x
     this.targetY = y
-    const animName = `${this._textureKey}_${dir}`
-    if (this.sprite.anims.currentAnim?.key !== animName) {
-      this.sprite.play(animName)
-    }
     this.sprite.setFlipX(dir === 'left')
   }
 
@@ -71,14 +63,16 @@ export class RemoteSprite extends Phaser.GameObjects.Container {
     this.statusDot.fillCircle(12, -52, 4)
   }
 
-  setIdle(dir: Direction) {
-    const dirFrame: Record<Direction, number> = { down: 0, left: 9, right: 9, up: 18 }
-    this.sprite.setFrame(dirFrame[dir])
-    this.sprite.setFlipX(dir === 'left')
-  }
-
   update() {
     this.x = Phaser.Math.Linear(this.x, this.targetX, LERP)
     this.y = Phaser.Math.Linear(this.y, this.targetY, LERP)
+
+    const isMoving =
+      Math.abs(this.targetX - this.x) > MOVE_THRESHOLD ||
+      Math.abs(this.targetY - this.y) > MOVE_THRESHOLD
+
+    const bob = isMoving ? Math.sin(this.scene.time.now * BOB_SPEED) * BOB_AMP : 0
+    this.sprite.y = bob
+    this.nameTag.y = -52 + bob
   }
 }
