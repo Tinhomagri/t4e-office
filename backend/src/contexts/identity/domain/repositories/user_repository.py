@@ -13,7 +13,9 @@ class UserRepository(ABC):
         """Indica se já existe usuário com este email."""
 
     @abstractmethod
-    def create(self, *, email: Email, full_name: str, raw_password: str) -> User:
+    def create(
+        self, *, email: Email, full_name: str, raw_password: str, is_active: bool = False
+    ) -> User:
         """Cria o usuário com a senha já hasheada pela infraestrutura."""
 
     @abstractmethod

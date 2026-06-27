@@ -1,5 +1,8 @@
 """Models Django do contexto identity — camada de infraestrutura."""
 import uuid
+from datetime import timedelta
+
+from django.utils import timezone
 
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -31,6 +34,9 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra):
         extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
+        # Superusuário não passa por verificação de email — já entra ativo
+        extra.setdefault("is_active", True)
+        extra.setdefault("email_verified", True)
         if extra.get("is_staff") is not True:
             raise ValueError("Superusuário precisa de is_staff=True.")
         if extra.get("is_superuser") is not True:
@@ -44,7 +50,8 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, help_text="Email de login")
     full_name = models.CharField(max_length=200, help_text="Nome completo")
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)  # ativo apenas após verificar email
+    email_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False, help_text="Acesso ao admin")
     date_joined = models.DateTimeField(auto_now_add=True)
 
@@ -60,6 +67,54 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
+
+
+class EmailVerificationToken(models.Model):
+    """Token one-time para verificação de email após cadastro."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        UserModel, on_delete=models.CASCADE, related_name="verification_tokens"
+    )
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "identity_email_verification_token"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=24)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+
+class PasswordResetToken(models.Model):
+    """Token one-time para redefinição de senha (válido 1h)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        UserModel, on_delete=models.CASCADE, related_name="password_reset_tokens"
+    )
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "identity_password_reset_token"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=1)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
 
 
 class WorkspaceModel(models.Model):

@@ -30,6 +30,7 @@ import {
   useCreateCard,
   useCreateProject,
   useCreateSprint,
+  useCreateWorkspace,
   useMembers,
   useProjects,
   useSprints,
@@ -868,12 +869,45 @@ function CenterSpinner() {
 }
 
 function CreateWorkspacePrompt() {
+  const createWorkspace = useCreateWorkspace()
+  const [name, setName] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setError(null)
+    try {
+      await createWorkspace.mutateAsync(name.trim())
+      // o hook já define o novo workspace como ativo; a BoardsPage re-renderiza
+    } catch (e) {
+      setError(errMsg(e))
+    }
+  }
+
   return (
     <div className="mx-auto max-w-md py-20 text-center">
-      <h2 className="text-lg font-semibold text-ink">Nenhum workspace ainda</h2>
-      <p className="mt-1 text-sm text-paper-500">
-        Seu workspace pessoal deveria existir. Recarregue a página ou contate o suporte.
+      <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+        <SquareKanban className="size-6" />
+      </div>
+      <h2 className="text-lg font-semibold text-ink">Crie seu primeiro workspace</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-paper-500">
+        Um workspace agrupa seus projetos, sprints, cards e a equipe. Depois você cria os
+        projetos dentro dele.
       </p>
+      <div className="mx-auto mt-5 flex max-w-sm gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: T4E Group"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && name.trim()) submit()
+          }}
+        />
+        <Button onClick={submit} loading={createWorkspace.isPending} disabled={!name.trim()}>
+          Criar
+        </Button>
+      </div>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </div>
   )
 }

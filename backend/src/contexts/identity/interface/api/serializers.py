@@ -30,3 +30,45 @@ class WorkspaceSerializer(serializers.Serializer):
     id = serializers.CharField(source="workspace_id")
     name = serializers.CharField()
     slug = serializers.CharField()
+
+
+class WorkspaceListItemSerializer(serializers.Serializer):
+    """Item de listagem de workspace (entidade Workspace)."""
+
+    id = serializers.CharField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+
+
+class MemberSerializer(serializers.Serializer):
+    """Membro de um workspace."""
+
+    user_id = serializers.CharField()
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    role = serializers.CharField()
+
+
+_ROLES = ["admin", "member"]
+
+
+class CreateInvitationSerializer(serializers.Serializer):
+    """Payload de envio de convite."""
+
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=_ROLES, default="member")
+
+
+class InvitationSerializer(serializers.Serializer):
+    """Representação pública do convite."""
+
+    id = serializers.CharField()
+    email = serializers.EmailField()
+    role = serializers.CharField()
+    status = serializers.CharField()
+
+
+class AcceptInvitationSerializer(serializers.Serializer):
+    """Payload de aceite de convite."""
+
+    token = serializers.CharField()
