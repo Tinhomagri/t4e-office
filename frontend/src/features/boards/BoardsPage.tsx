@@ -237,16 +237,18 @@ function ProjectBoard({ project, workspaceId }: { project: Project; workspaceId:
         </button>
       </div>
 
-      {/* Kanban */}
+      {/* Kanban — colunas full-height com rolagem horizontal (estilo Jira) */}
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-slim">
           {COLUMNS.map((status) => (
             <Column
               key={status}
               status={status}
               cards={scopeCards.filter((c) => c.status === status)}
               members={members ?? []}
-              onAdd={() => setNewCardStatus(status)}
+              projectId={projectId}
+              sprintId={currentSprintId}
+              onAddDetailed={() => setNewCardStatus(status)}
               onOpen={setOpenCard}
             />
           ))}
@@ -280,17 +282,30 @@ function ProjectBoard({ project, workspaceId }: { project: Project; workspaceId:
 }
 
 // ============================ coluna ============================
+// Cores de topo da coluna por etapa (faixa sutil estilo Jira)
+const COLUMN_ACCENT: Record<CardStatus, string> = {
+  backlog: "bg-paper-300",
+  todo: "bg-paper-400",
+  doing: "bg-brand-400",
+  review: "bg-warning",
+  done: "bg-success",
+}
+
 function Column({
   status,
   cards,
   members,
-  onAdd,
+  projectId,
+  sprintId,
+  onAddDetailed,
   onOpen,
 }: {
   status: CardStatus
   cards: Card[]
   members: Member[]
-  onAdd: () => void
+  projectId: string
+  sprintId: string | null
+  onAddDetailed: () => void
   onOpen: (c: Card) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
@@ -298,37 +313,104 @@ function Column({
     <div
       ref={setNodeRef}
       className={cx(
-        "flex flex-col rounded-2xl border bg-paper-100/70 p-2 transition-colors",
+        "flex max-h-[calc(100vh-19rem)] w-[300px] shrink-0 flex-col rounded-2xl border bg-paper-100/70 transition-colors",
         isOver ? "border-brand-300 bg-brand-50/60" : "border-transparent",
       )}
     >
-      <div className="flex items-center justify-between px-2 py-1.5">
+      {/* Cabeçalho com faixa de cor + contagem */}
+      <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-ink">{STATUS_LABEL[status]}</span>
+          <span className={cx("size-2 rounded-full", COLUMN_ACCENT[status])} />
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-paper-600">
+            {STATUS_LABEL[status]}
+          </span>
           <span className="grid h-5 min-w-5 place-items-center rounded-full bg-paper-200 px-1.5 text-[11px] font-medium text-paper-600">
             {cards.length}
           </span>
         </div>
         <button
-          onClick={onAdd}
+          onClick={onAddDetailed}
           className="grid size-6 place-items-center rounded-md text-paper-400 transition-colors hover:bg-paper-200 hover:text-ink"
-          title="Adicionar card"
+          title="Novo card com detalhes"
         >
           <Plus className="size-4" />
         </button>
       </div>
-      <div className="flex min-h-[80px] flex-col gap-2 p-1">
+
+      {/* Lista rolável */}
+      <div className="flex min-h-[40px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
         {cards.map((card) => (
           <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} />
         ))}
-        {cards.length === 0 && (
-          <button
-            onClick={onAdd}
-            className="rounded-xl border border-dashed border-paper-300 py-6 text-center text-xs text-paper-400 transition-colors hover:border-brand-300 hover:text-brand-600"
-          >
-            + Adicionar card
-          </button>
-        )}
+      </div>
+
+      {/* Quick-add inline (estilo Jira) */}
+      <div className="p-2 pt-0">
+        <QuickAdd projectId={projectId} status={status} sprintId={sprintId} />
+      </div>
+    </div>
+  )
+}
+
+// "+ Criar" inline: digita o título e Enter cria o card já na coluna.
+function QuickAdd({
+  projectId,
+  status,
+  sprintId,
+}: {
+  projectId: string
+  status: CardStatus
+  sprintId: string | null
+}) {
+  const createCard = useCreateCard(projectId)
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState("")
+
+  const submit = async () => {
+    const t = title.trim()
+    if (!t) return
+    setTitle("")
+    await createCard.mutateAsync({ title: t, status, sprint_id: sprintId })
+  }
+
+  if (!open)
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-paper-500 transition-colors hover:bg-paper-200/70 hover:text-ink"
+      >
+        <Plus className="size-4" /> Criar
+      </button>
+    )
+
+  return (
+    <div className="rounded-xl border border-brand-300 bg-paper p-2 shadow-card">
+      <textarea
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="O que precisa ser feito?"
+        autoFocus
+        rows={2}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault()
+            submit()
+          }
+          if (e.key === "Escape") {
+            setOpen(false)
+            setTitle("")
+          }
+        }}
+        onBlur={() => {
+          if (!title.trim()) setOpen(false)
+        }}
+        className="w-full resize-none border-0 bg-transparent text-sm text-ink placeholder-paper-400 outline-none"
+      />
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-[11px] text-paper-400">Enter para criar</span>
+        <Button size="sm" onClick={submit} loading={createCard.isPending} disabled={!title.trim()}>
+          Criar
+        </Button>
       </div>
     </div>
   )
