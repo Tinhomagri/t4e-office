@@ -1,5 +1,6 @@
 """Entidade de card (tarefa do board) — Python puro."""
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
 
 from shared.domain.errors import ValidationError
@@ -52,7 +53,10 @@ class Card:
     priority: CardPriority = CardPriority.MEDIUM
     points: int | None = None
     assignee_id: str | None = None
+    reporter_id: str | None = None  # relator (quem pediu/abriu)
     sprint_id: str | None = None  # None = card no backlog do projeto
+    start_date: date | None = None
+    due_date: date | None = None
     order: int = 0
     source: str = "manual"  # manual | copilot (criado pela IA)
 
@@ -61,3 +65,9 @@ class Card:
             raise ValidationError("Título do card é obrigatório.")
         if self.points is not None and self.points < 0:
             raise ValidationError("Story points não podem ser negativos.")
+        if (
+            self.start_date is not None
+            and self.due_date is not None
+            and self.due_date < self.start_date
+        ):
+            raise ValidationError("O prazo não pode ser anterior à data de início.")

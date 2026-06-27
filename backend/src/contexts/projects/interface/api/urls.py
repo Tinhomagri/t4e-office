@@ -2,6 +2,7 @@
 from django.urls import path
 
 from contexts.projects.interface.api.card_views import (
+    CardCommentView,
     CardDetailView,
     CardListCreateView,
 )
@@ -19,6 +20,11 @@ urlpatterns = [
         name="card-list-create",
     ),
     path("cards/<uuid:card_id>/", CardDetailView.as_view(), name="card-detail"),
+    path(
+        "cards/<uuid:card_id>/comments/",
+        CardCommentView.as_view(),
+        name="card-comments",
+    ),
     path(
         "projects/<uuid:project_id>/sprints/",
         SprintListCreateView.as_view(),

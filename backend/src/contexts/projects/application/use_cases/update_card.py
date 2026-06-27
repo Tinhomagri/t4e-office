@@ -41,7 +41,10 @@ class UpdateCard:
         priority=_UNSET,
         points=_UNSET,
         assignee_id=_UNSET,
+        reporter_id=_UNSET,
         sprint_id=_UNSET,
+        start_date=_UNSET,
+        due_date=_UNSET,
         order=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
@@ -69,8 +72,14 @@ class UpdateCard:
             card.points = points
         if assignee_id is not _UNSET:
             card.assignee_id = assignee_id
+        if reporter_id is not _UNSET:
+            card.reporter_id = reporter_id
         if sprint_id is not _UNSET:
             card.sprint_id = sprint_id
+        if start_date is not _UNSET:
+            card.start_date = start_date
+        if due_date is not _UNSET:
+            card.due_date = due_date
         if order is not _UNSET:
             card.order = order
 

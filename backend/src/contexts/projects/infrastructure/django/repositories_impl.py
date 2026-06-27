@@ -8,15 +8,18 @@ from contexts.projects.domain.entities.card import (
     CardStatus,
     CardType,
 )
+from contexts.projects.domain.entities.comment import CardComment
 from contexts.projects.domain.entities.project import Project
 from contexts.projects.domain.entities.sprint import Sprint, SprintStatus
 from contexts.projects.domain.repositories.card_repository import CardRepository
+from contexts.projects.domain.repositories.comment_repository import CommentRepository
 from contexts.projects.domain.repositories.project_repository import (
     ProjectRepository,
     WorkspaceAccess,
 )
 from contexts.projects.domain.repositories.sprint_repository import SprintRepository
 from contexts.projects.infrastructure.django.models import (
+    CardCommentModel,
     CardModel,
     ProjectModel,
     SprintModel,
@@ -46,7 +49,10 @@ def _card_to_entity(row: CardModel) -> Card:
         priority=CardPriority(row.priority),
         points=row.points,
         assignee_id=str(row.assignee_id) if row.assignee_id else None,
+        reporter_id=str(row.reporter_id) if row.reporter_id else None,
         sprint_id=str(row.sprint_id) if row.sprint_id else None,
+        start_date=row.start_date,
+        due_date=row.due_date,
         order=row.order,
         source=row.source,
     )
@@ -106,7 +112,10 @@ class DjangoCardRepository(CardRepository):
             priority=card.priority.value,
             points=card.points,
             assignee_id=card.assignee_id,
+            reporter_id=card.reporter_id,
             sprint_id=card.sprint_id,
+            start_date=card.start_date,
+            due_date=card.due_date,
             order=card.order,
             source=card.source,
         )
@@ -129,7 +138,10 @@ class DjangoCardRepository(CardRepository):
             priority=card.priority.value,
             points=card.points,
             assignee_id=card.assignee_id,
+            reporter_id=card.reporter_id,
             sprint_id=card.sprint_id,
+            start_date=card.start_date,
+            due_date=card.due_date,
             order=card.order,
         )
         row = CardModel.objects.get(id=card.id)
@@ -174,6 +186,35 @@ class DjangoSprintRepository(SprintRepository):
         SprintModel.objects.filter(project_id=project_id, status="active").exclude(
             id=except_id
         ).update(status="closed")
+
+
+def _comment_to_entity(row: CardCommentModel) -> CardComment:
+    """Traduz o model ORM de comentário para a entidade de domínio."""
+    return CardComment(
+        id=str(row.id),
+        card_id=str(row.card_id),
+        author_id=str(row.author_id),
+        body=row.body,
+        created_at=row.created_at,
+        author_name=row.author.full_name if row.author_id else "",
+    )
+
+
+class DjangoCommentRepository(CommentRepository):
+    """Persistência de comentários via Django ORM."""
+
+    def list_by_card(self, *, card_id: str) -> list[CardComment]:
+        rows = CardCommentModel.objects.filter(card_id=card_id).select_related("author")
+        return [_comment_to_entity(r) for r in rows]
+
+    def create(self, *, comment: CardComment) -> CardComment:
+        row = CardCommentModel.objects.create(
+            card_id=comment.card_id,
+            author_id=comment.author_id,
+            body=comment.body,
+        )
+        row = CardCommentModel.objects.select_related("author").get(id=row.id)
+        return _comment_to_entity(row)
 
 
 class DjangoWorkspaceAccess(WorkspaceAccess):

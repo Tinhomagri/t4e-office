@@ -105,6 +105,14 @@ class CardModel(models.Model):
         blank=True,
         related_name="assigned_cards",
     )
+    # Relator: quem abriu/pediu o card
+    reporter = models.ForeignKey(
+        "identity.UserModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reported_cards",
+    )
     # Sprint do card; null = card no backlog do projeto
     sprint = models.ForeignKey(
         SprintModel,
@@ -113,6 +121,8 @@ class CardModel(models.Model):
         blank=True,
         related_name="cards",
     )
+    start_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
     order = models.IntegerField(default=0, help_text="Ordem dentro da coluna")
     # Procedência: marca cards criados pela IA do copiloto (Fase 2)
     source = models.CharField(max_length=20, default="manual")
@@ -132,3 +142,26 @@ class CardModel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.project.key}-{self.number} {self.title}"
+
+
+class CardCommentModel(models.Model):
+    """Comentário na atividade de um card."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    card = models.ForeignKey(
+        CardModel, on_delete=models.CASCADE, related_name="comments"
+    )
+    author = models.ForeignKey(
+        "identity.UserModel", on_delete=models.CASCADE, related_name="card_comments"
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "projects_card_comment"
+        verbose_name = "Comentário"
+        verbose_name_plural = "Comentários"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"comentário em {self.card_id}"

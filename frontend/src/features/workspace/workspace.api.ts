@@ -2,6 +2,7 @@ import { api } from "@/shared/api/client"
 
 import type {
   Card,
+  Comment,
   CreateCardInput,
   CreateProjectInput,
   CreateSprintInput,
@@ -91,6 +92,17 @@ export async function updateCard(
   payload: UpdateCardInput,
 ): Promise<Card> {
   const { data } = await api.patch<Card>(`/cards/${cardId}/`, payload)
+  return data
+}
+
+// ---- Comentários ----
+export async function listComments(cardId: string): Promise<Comment[]> {
+  const { data } = await api.get<Comment[]>(`/cards/${cardId}/comments/`)
+  return data
+}
+
+export async function createComment(cardId: string, body: string): Promise<Comment> {
+  const { data } = await api.post<Comment>(`/cards/${cardId}/comments/`, { body })
   return data
 }
 

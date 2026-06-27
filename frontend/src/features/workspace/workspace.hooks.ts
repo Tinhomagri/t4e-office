@@ -118,6 +118,23 @@ export function useWorkspaceCards(workspaceId: string | null) {
   return { projects, cards, isLoading }
 }
 
+// ---- Comentários ----
+export function useComments(cardId: string | null) {
+  return useQuery({
+    queryKey: ["comments", cardId],
+    queryFn: () => wsApi.listComments(cardId!),
+    enabled: !!cardId,
+  })
+}
+
+export function useCreateComment(cardId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) => wsApi.createComment(cardId!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments", cardId] }),
+  })
+}
+
 // ---- Sprints ----
 export function useSprints(projectId: string | null) {
   return useQuery({

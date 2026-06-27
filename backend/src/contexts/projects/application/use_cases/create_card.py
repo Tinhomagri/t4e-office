@@ -38,7 +38,10 @@ class CreateCard:
         priority: str = "medium",
         points: int | None = None,
         assignee_id: str | None = None,
+        reporter_id: str | None = None,
         sprint_id: str | None = None,
+        start_date=None,
+        due_date=None,
         source: str = "manual",
     ) -> Card:
         project = self.project_repository.get(project_id=project_id)
@@ -61,7 +64,10 @@ class CreateCard:
             priority=CardPriority(priority),
             points=points,
             assignee_id=assignee_id,
+            reporter_id=reporter_id,
             sprint_id=sprint_id,
+            start_date=start_date,
+            due_date=due_date,
             source=source,
         )
         return self.card_repository.create(card=card)

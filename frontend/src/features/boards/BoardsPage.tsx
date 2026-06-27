@@ -24,7 +24,7 @@ import {
   Spinner,
   cx,
 } from "@/shared/ui/primitives"
-import { RichEditor } from "@/shared/ui/RichEditor"
+import { CardDrawer } from "./CardDrawer"
 import {
   useCards,
   useCreateCard,
@@ -44,7 +44,6 @@ import type {
   CardType,
   Member,
   Project,
-  Sprint,
 } from "@/features/workspace/workspace.types"
 
 // --------------------------- constantes de UI ---------------------------
@@ -720,145 +719,6 @@ function NewSprintModal({
 }
 
 // drawer/modal de detalhe de card com edição rica
-function CardDrawer({
-  card,
-  projectId,
-  sprints,
-  members,
-  onClose,
-}: {
-  card: Card | null
-  projectId: string
-  sprints: Sprint[]
-  members: Member[]
-  onClose: () => void
-}) {
-  const updateCard = useUpdateCard(projectId)
-  const [draft, setDraft] = useState<Card | null>(card)
-
-  useEffect(() => setDraft(card), [card])
-
-  if (!card || !draft) return null
-
-  const set = <K extends keyof Card>(k: K, v: Card[K]) => setDraft({ ...draft, [k]: v })
-
-  const save = async () => {
-    await updateCard.mutateAsync({
-      cardId: card.id,
-      input: {
-        title: draft.title,
-        description: draft.description,
-        status: draft.status,
-        type: draft.type,
-        priority: draft.priority,
-        points: draft.points,
-        assignee_id: draft.assignee_id,
-        sprint_id: draft.sprint_id,
-      },
-    })
-    onClose()
-  }
-
-  return (
-    <Modal
-      open={!!card}
-      onClose={onClose}
-      size="lg"
-      title={card.ref}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Fechar
-          </Button>
-          <Button onClick={save} loading={updateCard.isPending}>
-            Salvar alterações
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-5">
-        <Input
-          value={draft.title}
-          onChange={(e) => set("title", e.target.value)}
-          className="!text-base font-semibold"
-        />
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Status">
-            <Select value={draft.status} onChange={(e) => set("status", e.target.value as CardStatus)}>
-              {(["backlog", ...COLUMNS] as CardStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Tipo">
-            <Select value={draft.type} onChange={(e) => set("type", e.target.value as CardType)}>
-              {(Object.keys(TYPE_LABEL) as CardType[]).map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABEL[t]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Prioridade">
-            <Select value={draft.priority} onChange={(e) => set("priority", e.target.value as CardPriority)}>
-              {(Object.keys(PRIORITY_LABEL) as CardPriority[]).map((p) => (
-                <option key={p} value={p}>
-                  {PRIORITY_LABEL[p]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Pontos">
-            <Input
-              type="number"
-              min={0}
-              value={draft.points ?? ""}
-              onChange={(e) => set("points", e.target.value === "" ? null : Number(e.target.value))}
-              placeholder="—"
-            />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Responsável">
-            <Select
-              value={draft.assignee_id ?? ""}
-              onChange={(e) => set("assignee_id", e.target.value || null)}
-            >
-              <option value="">Sem responsável</option>
-              {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Sprint">
-            <Select
-              value={draft.sprint_id ?? ""}
-              onChange={(e) => set("sprint_id", e.target.value || null)}
-            >
-              <option value="">Backlog</option>
-              {sprints.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-
-        <Field label="Descrição">
-          <RichEditor value={draft.description} onChange={(html) => set("description", html)} />
-        </Field>
-      </div>
-    </Modal>
-  )
-}
-
 // ============================ auxiliares ============================
 function CenterSpinner() {
   return (

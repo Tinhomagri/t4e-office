@@ -35,7 +35,10 @@ class CreateCardSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=_PRIORITY, default="medium")
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     assignee_id = serializers.CharField(required=False, allow_null=True)
+    reporter_id = serializers.CharField(required=False, allow_null=True)
     sprint_id = serializers.CharField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    due_date = serializers.DateField(required=False, allow_null=True)
 
 
 class UpdateCardSerializer(serializers.Serializer):
@@ -48,7 +51,10 @@ class UpdateCardSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=_PRIORITY, required=False)
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     assignee_id = serializers.CharField(required=False, allow_null=True)
+    reporter_id = serializers.CharField(required=False, allow_null=True)
     sprint_id = serializers.CharField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    due_date = serializers.DateField(required=False, allow_null=True)
     order = serializers.IntegerField(required=False)
 
 
@@ -66,8 +72,28 @@ class CardSerializer(serializers.Serializer):
     priority = serializers.CharField()
     points = serializers.IntegerField(allow_null=True)
     assignee_id = serializers.CharField(allow_null=True)
+    reporter_id = serializers.CharField(allow_null=True)
     sprint_id = serializers.CharField(allow_null=True)
+    start_date = serializers.DateField(allow_null=True)
+    due_date = serializers.DateField(allow_null=True)
     order = serializers.IntegerField()
+
+
+class CreateCommentSerializer(serializers.Serializer):
+    """Payload de criação de comentário."""
+
+    body = serializers.CharField()
+
+
+class CommentSerializer(serializers.Serializer):
+    """Representação pública do comentário."""
+
+    id = serializers.CharField()
+    card_id = serializers.CharField()
+    author_id = serializers.CharField()
+    author_name = serializers.CharField()
+    body = serializers.CharField()
+    created_at = serializers.DateTimeField()
 
 
 class CreateSprintSerializer(serializers.Serializer):

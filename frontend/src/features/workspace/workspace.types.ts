@@ -34,8 +34,20 @@ export interface Card {
   priority: CardPriority
   points: number | null
   assignee_id: string | null
+  reporter_id: string | null
   sprint_id: string | null
+  start_date: string | null
+  due_date: string | null
   order: number
+}
+
+export interface Comment {
+  id: string
+  card_id: string
+  author_id: string
+  author_name: string
+  body: string
+  created_at: string
 }
 
 export interface Sprint {
@@ -76,7 +88,10 @@ export interface CreateCardInput {
   priority?: CardPriority
   points?: number | null
   assignee_id?: string | null
+  reporter_id?: string | null
   sprint_id?: string | null
+  start_date?: string | null
+  due_date?: string | null
 }
 
 export type UpdateCardInput = Partial<CreateCardInput> & { order?: number }
