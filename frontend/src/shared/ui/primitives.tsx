@@ -10,8 +10,7 @@ import type {
 } from "react"
 import { Loader2, X } from "lucide-react"
 
-import type { CardType, Priority } from "@/features/today/today.mock"
-import type { PresenceStatus } from "@/features/workspace/workspace.mock"
+import type { PresenceStatus } from "@/features/workspace/workspace.types"
 
 // Pequeno helper para concatenar classes condicionais sem dependência externa.
 export function cx(...parts: Array<string | false | null | undefined>): string {
@@ -251,32 +250,6 @@ export function Select({
   )
 }
 
-const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature",
-  bug: "Bug",
-  spike: "Spike",
-  debt: "Débito",
-}
-
-export function ShortId({ id }: { id: string }) {
-  return <span className="font-mono text-xs font-medium text-paper-500">{id}</span>
-}
-
-export function TypeTag({ type }: { type: CardType }) {
-  return (
-    <span className="rounded border border-ink/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-paper-500">
-      {TYPE_LABEL[type]}
-    </span>
-  )
-}
-
-// Prioridade: barra cheia / meia / vazia (sem depender de cor)
-export function PriorityMark({ priority }: { priority: Priority }) {
-  const fill =
-    priority === "high" ? "bg-ink" : priority === "medium" ? "bg-paper-400" : "bg-paper-300"
-  return <span className={`h-8 w-1 shrink-0 rounded-full ${fill}`} title={`Prioridade ${priority}`} />
-}
-
 const PRESENCE_DOT: Record<PresenceStatus, string> = {
   available: "bg-emerald-500",
   focus: "bg-rose-500",
@@ -367,11 +340,3 @@ export function PageHeader({
   )
 }
 
-// Selo "em breve" para superfícies ainda não ligadas à API
-export function SoonBadge() {
-  return (
-    <span className="rounded-full border border-ink/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-paper-400">
-      em breve
-    </span>
-  )
-}

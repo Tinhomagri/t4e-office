@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 
 import * as wsApi from "./workspace.api"
 import { useWorkspaceStore } from "./workspace.store"
+import type { Card } from "./workspace.types"
 import type {
   CreateCardInput,
   CreateSprintInput,
@@ -79,6 +80,42 @@ export function useUpdateCard(projectId: string | null) {
       wsApi.updateCard(cardId, input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cards", projectId] }),
   })
+}
+
+// Card enriquecido com a chave/nome do projeto (para telas agregadas).
+export interface BoardCard extends Card {
+  projectKey: string
+  projectName: string
+}
+
+// Agrega cards de TODOS os projetos do workspace (Meu Dia, Relatórios, Portfólio).
+// Faz fan-out de uma query de cards por projeto e achata o resultado.
+export function useWorkspaceCards(workspaceId: string | null) {
+  const projectsQuery = useProjects(workspaceId)
+  const projects = projectsQuery.data ?? []
+
+  const cardQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ["cards", p.id],
+      queryFn: () => wsApi.listCards(p.id),
+      enabled: !!workspaceId,
+    })),
+  })
+
+  const cards: BoardCard[] = []
+  projects.forEach((p, i) => {
+    const data = cardQueries[i]?.data
+    if (data) {
+      for (const c of data) {
+        cards.push({ ...c, projectKey: p.key, projectName: p.name })
+      }
+    }
+  })
+
+  const isLoading =
+    projectsQuery.isLoading || cardQueries.some((q) => q.isLoading)
+
+  return { projects, cards, isLoading }
 }
 
 // ---- Sprints ----

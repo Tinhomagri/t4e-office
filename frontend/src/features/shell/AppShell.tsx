@@ -36,7 +36,7 @@ import {
   StatusDot,
   cx,
 } from "@/shared/ui/primitives"
-import type { PresenceStatus } from "@/features/workspace/workspace.mock"
+import type { PresenceStatus } from "@/features/workspace/workspace.types"
 
 interface NavItem {
   label: string

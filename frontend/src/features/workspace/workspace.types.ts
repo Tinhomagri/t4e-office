@@ -6,6 +6,8 @@ export type CardPriority = "low" | "medium" | "high" | "urgent"
 export type Role = "owner" | "admin" | "member"
 export type InvitationStatus = "pending" | "accepted" | "revoked"
 export type SprintStatus = "planned" | "active" | "closed"
+// Status de presença do usuário (pilar Presença — backend na Fase 5).
+export type PresenceStatus = "available" | "focus" | "meeting" | "away"
 
 export interface Workspace {
   id: string

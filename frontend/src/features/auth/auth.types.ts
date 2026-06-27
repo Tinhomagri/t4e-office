@@ -22,3 +22,20 @@ export interface AuthUser {
   email: string
   full_name: string
 }
+
+export interface ForgotPasswordPayload {
+  email: string
+}
+
+export interface ResetPasswordPayload {
+  token: string
+  new_password: string
+}
+
+export interface VerifyEmailPayload {
+  token: string
+}
+
+export interface MessageResponse {
+  message: string
+}
