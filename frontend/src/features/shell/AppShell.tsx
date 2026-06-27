@@ -22,11 +22,15 @@ import { useState } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
-import { useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useCreateWorkspace, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   Avatar,
+  Button,
+  Field,
   IconButton,
+  Input,
   Kbd,
+  Modal,
   PRESENCE_LABEL,
   SectionLabel,
   StatusDot,
@@ -221,8 +225,8 @@ export function AppShell() {
 // Seletor de workspace no topo da sidebar — mostra o ativo e permite trocar.
 function WorkspaceSwitcher() {
   const { data: workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspaces()
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const active = workspaces?.find((w) => w.id === activeWorkspaceId) ?? workspaces?.[0]
   const tile = (active?.name ?? "Pulse").trim().charAt(0).toUpperCase()
@@ -276,7 +280,7 @@ function WorkspaceSwitcher() {
             <button
               onClick={() => {
                 setOpen(false)
-                navigate("/app/boards")
+                setCreateOpen(true)
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-paper-400 transition-colors hover:bg-white/5 hover:text-paper-200"
             >
@@ -288,6 +292,63 @@ function WorkspaceSwitcher() {
           </div>
         </>
       )}
+
+      <NewWorkspaceModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
+  )
+}
+
+// Modal de criação de workspace — define como ativo e fecha ao concluir.
+function NewWorkspaceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const createWorkspace = useCreateWorkspace()
+  const [name, setName] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setError(null)
+    try {
+      await createWorkspace.mutateAsync(name.trim())
+      setName("")
+      onClose()
+    } catch (e) {
+      const anyE = e as { response?: { data?: { error?: string; detail?: string } } }
+      setError(
+        anyE?.response?.data?.error ??
+          anyE?.response?.data?.detail ??
+          "Não foi possível criar o workspace.",
+      )
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Criar workspace"
+      description="Um workspace agrupa seus projetos, sprints, cards e a equipe."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} loading={createWorkspace.isPending} disabled={!name.trim()}>
+            Criar workspace
+          </Button>
+        </>
+      }
+    >
+      <Field label="Nome do workspace">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: T4E Group"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && name.trim()) submit()
+          }}
+        />
+      </Field>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </Modal>
   )
 }
