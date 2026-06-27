@@ -1,4 +1,5 @@
 """Views finas do contexto projects."""
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -22,6 +23,7 @@ class ProjectListCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=CreateProjectSerializer, responses=ProjectSerializer)
     def post(self, request: Request) -> Response:
         serializer = CreateProjectSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -48,6 +50,7 @@ class ProjectListCreateView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(responses=ProjectSerializer(many=True))
     def get(self, request: Request) -> Response:
         # workspace_id obrigatório na query string
         workspace_id = request.query_params.get("workspace_id")
