@@ -45,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "boards", element: <BoardsPage /> },
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
+      { path: "poker/:sessionId", element: <PokerPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "office", element: <OfficePage /> },

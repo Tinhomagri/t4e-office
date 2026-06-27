@@ -10,8 +10,9 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { useQueryClient } from "@tanstack/react-query"
-import { FolderPlus, Plus, SquareKanban } from "lucide-react"
+import { FolderPlus, Plus, SquareKanban, Spade } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 import {
   Badge,
@@ -90,6 +91,7 @@ export function BoardsPage() {
 }
 
 function BoardsInner({ workspaceId }: { workspaceId: string }) {
+  const navigate = useNavigate()
   const { data: projects, isLoading } = useProjects(workspaceId)
   const [projectId, setProjectId] = useState<string | null>(null)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
@@ -120,6 +122,9 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
             : "Projetos e cards do workspace"
         }
       >
+        <Button variant="ghost" icon={<Spade className="size-4" />} onClick={() => navigate("/app/poker")}>
+          Planning Poker
+        </Button>
         <Button variant="outline" icon={<FolderPlus className="size-4" />} onClick={() => setNewProjectOpen(true)}>
           Novo projeto
         </Button>

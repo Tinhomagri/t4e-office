@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "contexts.identity",
     "contexts.projects",
     "contexts.copilot",
+    "contexts.estimation",
 ]
 
 MIDDLEWARE = [
