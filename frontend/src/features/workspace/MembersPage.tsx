@@ -47,20 +47,20 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
     <div className="space-y-6">
       <PageHeader title="Membros" subtitle="Equipe e convites do workspace" />
 
-      <section className="rounded-2xl border border-ink/10 bg-paper p-5">
-        <h3 className="mb-3 text-sm font-semibold text-ink">Convidar pessoa</h3>
+      <section className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5">
+        <h3 className="mb-3 text-sm font-semibold text-ink dark:text-paper">Convidar pessoa</h3>
         <div className="flex flex-wrap gap-2">
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="email@empresa.com"
-            className="min-w-[220px] flex-1 rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm"
+            className="min-w-[220px] flex-1 rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
           />
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
-            className="rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm"
+            className="rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
           >
             <option value="member">Membro</option>
             <option value="admin">Admin</option>
@@ -76,15 +76,15 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
         {feedback && <p className="mt-2 text-xs text-paper-600">{feedback}</p>}
       </section>
 
-      <section className="rounded-2xl border border-ink/10 bg-paper p-5">
-        <h3 className="mb-3 text-sm font-semibold text-ink">
+      <section className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5">
+        <h3 className="mb-3 text-sm font-semibold text-ink dark:text-paper">
           Membros ({members.data?.length ?? 0})
         </h3>
         <ul className="divide-y divide-ink/5">
           {(members.data ?? []).map((m) => (
             <li key={m.user_id} className="flex items-center justify-between py-2">
               <div>
-                <p className="text-sm text-ink">{m.name}</p>
+                <p className="text-sm text-ink dark:text-paper">{m.name}</p>
                 <p className="text-xs text-paper-500">{m.email}</p>
               </div>
               <span className="rounded bg-ink/5 px-2 py-0.5 text-xs uppercase text-paper-600">
@@ -96,15 +96,15 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
       </section>
 
       {pending.length > 0 && (
-        <section className="rounded-2xl border border-ink/10 bg-paper p-5">
-          <h3 className="mb-3 text-sm font-semibold text-ink">
+        <section className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5">
+          <h3 className="mb-3 text-sm font-semibold text-ink dark:text-paper">
             Convites pendentes ({pending.length})
           </h3>
           <ul className="divide-y divide-ink/5">
             {pending.map((i) => (
               <li key={i.id} className="flex items-center justify-between py-2">
                 <div>
-                  <p className="text-sm text-ink">{i.email}</p>
+                  <p className="text-sm text-ink dark:text-paper">{i.email}</p>
                   <p className="text-xs text-paper-500">{i.role}</p>
                 </div>
                 <button

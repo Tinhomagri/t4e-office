@@ -1,5 +1,5 @@
 """Entidade de card (tarefa do board) — Python puro."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 
@@ -24,6 +24,7 @@ class CardType(str, Enum):
     DEBT = "debt"
     SPIKE = "spike"
     CHORE = "chore"
+    EPIC = "epic"
 
 
 class CardPriority(str, Enum):
@@ -59,10 +60,14 @@ class Card:
     due_date: date | None = None
     order: int = 0
     source: str = "manual"  # manual | copilot (criado pela IA)
+    parent_id: str | None = None  # card pai (subtarefa) — None = card de topo
+    labels: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.title.strip():
             raise ValidationError("Título do card é obrigatório.")
+        if self.parent_id is not None and self.parent_id == self.id:
+            raise ValidationError("Um card não pode ser subtarefa de si mesmo.")
         if self.points is not None and self.points < 0:
             raise ValidationError("Story points não podem ser negativos.")
         if (

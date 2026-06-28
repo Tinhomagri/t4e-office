@@ -2,11 +2,13 @@ import { motion } from "framer-motion"
 import {
   Bell,
   Building2,
+  CalendarClock,
   Check,
   ChevronsUpDown,
   LayoutDashboard,
   LineChart,
   LogOut,
+  Moon,
   type LucideIcon,
   Plus,
   Search,
@@ -15,10 +17,12 @@ import {
   Sparkles,
   Spade,
   SquareKanban,
+  Sun,
   UserPlus,
   Users,
 } from "lucide-react"
 import { useState } from "react"
+import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
@@ -53,6 +57,7 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
       { label: "Meu Dia", to: "/app", icon: LayoutDashboard, end: true },
       { label: "Boards", to: "/app/boards", icon: SquareKanban },
       { label: "Planning Poker", to: "/app/poker", icon: Spade },
+      { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
     ],
   },
   {
@@ -92,6 +97,8 @@ export function AppShell() {
   const clear = useAuthStore((s) => s.clear)
   const [status, setStatus] = useState<PresenceStatus>("available")
 
+  const { theme, toggle: toggleTheme } = useThemeStore()
+
   const handleLogout = () => {
     clear()
     navigate("/login")
@@ -102,9 +109,9 @@ export function AppShell() {
     setStatus(PRESENCE_ORDER[(PRESENCE_ORDER.indexOf(status) + 1) % PRESENCE_ORDER.length])
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
+    <div className="flex h-screen w-screen overflow-hidden bg-canvas dark:bg-ink-950 text-ink dark:text-paper">
       {/* ---------------- Sidebar ---------------- */}
-      <aside className="hidden w-[264px] shrink-0 flex-col bg-gradient-to-b from-ink-900 to-ink-950 md:flex">
+      <aside className="hidden w-[264px] shrink-0 flex-col bg-gradient-to-b from-ink-900 to-ink-950 dark:from-ink-950 dark:to-[#070709] md:flex">
         <WorkspaceSwitcher />
 
         <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5 scrollbar-slim-dark">
@@ -178,8 +185,8 @@ export function AppShell() {
       {/* ---------------- Coluna principal ---------------- */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-paper-200 bg-paper/80 px-6 backdrop-blur-xl">
-          <button className="group flex h-10 max-w-md flex-1 items-center gap-2.5 rounded-xl border border-paper-200 bg-paper-50 px-3.5 text-left text-sm text-paper-400 transition-colors hover:border-paper-300 hover:bg-paper-100 focus-ring">
+        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-paper-200 dark:border-ink-800 bg-paper/80 dark:bg-ink-900/80 px-6 backdrop-blur-xl">
+          <button className="group flex h-10 max-w-md flex-1 items-center gap-2.5 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 px-3.5 text-left text-sm text-paper-400 transition-colors hover:border-paper-300 dark:hover:border-ink-600 hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring">
             <Search className="size-4 shrink-0" strokeWidth={1.9} />
             <span className="flex-1 truncate">Buscar cards, projetos, pessoas…</span>
             <Kbd>⌘K</Kbd>
@@ -189,15 +196,23 @@ export function AppShell() {
             <button
               onClick={cycleStatus}
               title="Clique para mudar seu status"
-              className="flex items-center gap-2 rounded-full border border-paper-200 bg-paper px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-paper-100 focus-ring"
+              className="flex items-center gap-2 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-1.5 text-xs font-medium text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring"
             >
               <StatusDot status={status} />
               {PRESENCE_LABEL[status]}
             </button>
 
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Modo claro" : "Modo escuro"}
+              className="grid size-9 place-items-center rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 text-paper-500 dark:text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-700"
+            >
+              {theme === "dark" ? <Sun className="size-[17px]" strokeWidth={1.9} /> : <Moon className="size-[17px]" strokeWidth={1.9} />}
+            </button>
+
             <IconButton className="relative" title="Notificações">
               <Bell className="size-[18px]" strokeWidth={1.9} />
-              <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-brand-500 ring-2 ring-paper" />
+              <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-brand-500 ring-2 ring-paper dark:ring-ink-900" />
             </IconButton>
             <IconButton title="Configurações">
               <Settings className="size-[18px]" strokeWidth={1.9} />
@@ -211,9 +226,9 @@ export function AppShell() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="flex-1 overflow-y-auto px-6 py-7 scrollbar-slim"
+          className="flex-1 overflow-y-auto px-6 py-7 scrollbar-slim dark:bg-ink-950"
         >
-          <div className="mx-auto w-full max-w-6xl">
+          <div className={cx("w-full", !location.pathname.startsWith("/app/boards") && "mx-auto max-w-6xl")}>
             <Outlet />
           </div>
         </motion.main>

@@ -9,10 +9,16 @@ from contexts.projects.domain.entities.card import (
     CardType,
 )
 from contexts.projects.domain.entities.comment import CardComment
+from contexts.projects.domain.entities.history import CardHistoryEntry
+from contexts.projects.domain.entities.issue_link import IssueLink, LinkType
 from contexts.projects.domain.entities.project import Project
 from contexts.projects.domain.entities.sprint import Sprint, SprintStatus
 from contexts.projects.domain.repositories.card_repository import CardRepository
 from contexts.projects.domain.repositories.comment_repository import CommentRepository
+from contexts.projects.domain.repositories.history_repository import HistoryRepository
+from contexts.projects.domain.repositories.issue_link_repository import (
+    IssueLinkRepository,
+)
 from contexts.projects.domain.repositories.project_repository import (
     ProjectRepository,
     WorkspaceAccess,
@@ -20,7 +26,9 @@ from contexts.projects.domain.repositories.project_repository import (
 from contexts.projects.domain.repositories.sprint_repository import SprintRepository
 from contexts.projects.infrastructure.django.models import (
     CardCommentModel,
+    CardHistoryModel,
     CardModel,
+    IssueLinkModel,
     ProjectModel,
     SprintModel,
 )
@@ -55,6 +63,8 @@ def _card_to_entity(row: CardModel) -> Card:
         due_date=row.due_date,
         order=row.order,
         source=row.source,
+        parent_id=str(row.parent_id) if row.parent_id else None,
+        labels=list(row.labels or []),
     )
 
 
@@ -118,6 +128,8 @@ class DjangoCardRepository(CardRepository):
             due_date=card.due_date,
             order=card.order,
             source=card.source,
+            parent_id=card.parent_id,
+            labels=card.labels,
         )
         return _card_to_entity(row)
 
@@ -143,6 +155,8 @@ class DjangoCardRepository(CardRepository):
             start_date=card.start_date,
             due_date=card.due_date,
             order=card.order,
+            parent_id=card.parent_id,
+            labels=card.labels,
         )
         row = CardModel.objects.get(id=card.id)
         return _card_to_entity(row)
@@ -215,6 +229,81 @@ class DjangoCommentRepository(CommentRepository):
         )
         row = CardCommentModel.objects.select_related("author").get(id=row.id)
         return _comment_to_entity(row)
+
+
+def _link_to_entity(row: IssueLinkModel) -> IssueLink:
+    """Traduz o model ORM de vínculo para a entidade de domínio."""
+    return IssueLink(
+        id=str(row.id),
+        source_id=str(row.source_id),
+        target_id=str(row.target_id),
+        link_type=LinkType(row.link_type),
+    )
+
+
+class DjangoIssueLinkRepository(IssueLinkRepository):
+    """Persistência de vínculos entre cards via Django ORM."""
+
+    def create(self, *, link: IssueLink) -> IssueLink:
+        row = IssueLinkModel.objects.create(
+            source_id=link.source_id,
+            target_id=link.target_id,
+            link_type=link.link_type.value,
+        )
+        return _link_to_entity(row)
+
+    def list_for_card(self, *, card_id: str) -> list[IssueLink]:
+        from django.db.models import Q
+
+        rows = IssueLinkModel.objects.filter(
+            Q(source_id=card_id) | Q(target_id=card_id)
+        )
+        return [_link_to_entity(r) for r in rows]
+
+    def get(self, *, link_id: str) -> IssueLink | None:
+        row = IssueLinkModel.objects.filter(id=link_id).first()
+        return _link_to_entity(row) if row else None
+
+    def exists(self, *, source_id: str, target_id: str, link_type: str) -> bool:
+        return IssueLinkModel.objects.filter(
+            source_id=source_id, target_id=target_id, link_type=link_type
+        ).exists()
+
+    def delete(self, *, link_id: str) -> None:
+        IssueLinkModel.objects.filter(id=link_id).delete()
+
+
+def _history_to_entity(row: CardHistoryModel) -> CardHistoryEntry:
+    """Traduz o model ORM de histórico para a entidade de domínio."""
+    return CardHistoryEntry(
+        id=str(row.id),
+        card_id=str(row.card_id),
+        author_id=str(row.author_id) if row.author_id else None,
+        field=row.field,
+        old_value=row.old_value,
+        new_value=row.new_value,
+        created_at=row.created_at,
+        author_name=row.author.full_name if row.author_id else "",
+    )
+
+
+class DjangoHistoryRepository(HistoryRepository):
+    """Persistência do histórico de cards via Django ORM."""
+
+    def add(self, *, entry: CardHistoryEntry) -> CardHistoryEntry:
+        row = CardHistoryModel.objects.create(
+            card_id=entry.card_id,
+            author_id=entry.author_id,
+            field=entry.field,
+            old_value=entry.old_value,
+            new_value=entry.new_value,
+        )
+        row = CardHistoryModel.objects.select_related("author").get(id=row.id)
+        return _history_to_entity(row)
+
+    def list_by_card(self, *, card_id: str) -> list[CardHistoryEntry]:
+        rows = CardHistoryModel.objects.filter(card_id=card_id).select_related("author")
+        return [_history_to_entity(r) for r in rows]
 
 
 class DjangoWorkspaceAccess(WorkspaceAccess):

@@ -43,6 +43,8 @@ class CreateCard:
         start_date=None,
         due_date=None,
         source: str = "manual",
+        parent_id: str | None = None,
+        labels: list[str] | None = None,
     ) -> Card:
         project = self.project_repository.get(project_id=project_id)
         if project is None:
@@ -69,5 +71,7 @@ class CreateCard:
             start_date=start_date,
             due_date=due_date,
             source=source,
+            parent_id=parent_id,
+            labels=labels or [],
         )
         return self.card_repository.create(card=card)

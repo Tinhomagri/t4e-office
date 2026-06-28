@@ -10,8 +10,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    // Proxy da API: front em :5173 fala com Django em :8000 sem CORS no dev
+    port: 8080,
+    // Proxy da API: front em: 8080 fala com Django em :8000 sem CORS no dev
     proxy: {
       "/api": "http://localhost:8000",
     },

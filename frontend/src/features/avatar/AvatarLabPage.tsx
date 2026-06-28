@@ -52,7 +52,7 @@ export function AvatarLabPage() {
                   key={d}
                   onClick={() => setDir(d)}
                   className={`flex-1 rounded-lg border px-2 py-1.5 text-xs capitalize transition-colors ${
-                    dir === d ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-500 hover:text-ink"
+                    dir === d ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-500 hover:text-ink dark:hover:text-paper"
                   }`}
                 >
                   {d}
@@ -68,7 +68,7 @@ export function AvatarLabPage() {
                   key={a}
                   onClick={() => setAnim(a)}
                   className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-                    anim === a ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink"
+                    anim === a ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
                   }`}
                 >
                   {ANIM_LABELS[a] ?? a}
@@ -79,7 +79,7 @@ export function AvatarLabPage() {
         </div>
 
         {/* Customização */}
-        <div className="grid grid-cols-1 gap-5 rounded-2xl border border-ink/10 bg-paper p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5 sm:grid-cols-2">
           <Field label="Gênero">
             <div className="flex gap-2">
               {(["male", "female"] as const).map((g) => (
@@ -87,7 +87,7 @@ export function AvatarLabPage() {
                   key={g}
                   onClick={() => setField("gender", g)}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                    config.gender === g ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink"
+                    config.gender === g ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
                   }`}
                 >
                   {g === "male" ? "Homem" : "Mulher"}
@@ -99,7 +99,7 @@ export function AvatarLabPage() {
             <input
               value={config.name}
               onChange={(e) => setField("name", e.target.value)}
-              className="w-full rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm text-ink outline-none focus:border-ink/40"
+              className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-ink/40"
             />
           </Field>
 
@@ -156,7 +156,7 @@ function Opts({ label, items, value, onPick }: { label: string; items: string[];
             key={it}
             onClick={() => onPick(i)}
             className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-              value === i ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink"
+              value === i ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
             }`}
           >
             {it}

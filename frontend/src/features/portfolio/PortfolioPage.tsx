@@ -122,7 +122,7 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
               {row.project.key.slice(0, 2)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink">{row.project.name}</p>
+              <p className="truncate text-sm font-semibold text-ink dark:text-paper">{row.project.name}</p>
               <p className="font-mono text-[11px] text-paper-400">{row.project.key}</p>
             </div>
           </div>
@@ -133,9 +133,9 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
       <div className="mt-4">
         <div className="mb-1.5 flex items-center justify-between text-xs">
           <span className="text-paper-500">Progresso (pontos)</span>
-          <span className="font-medium text-ink tabular">{pct}%</span>
+          <span className="font-medium text-ink dark:text-paper tabular">{pct}%</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-paper-100">
+        <div className="h-2 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
           <div
             className={cx("h-full rounded-full transition-all", HEALTH_BAR[row.health])}
             style={{ width: `${pct}%` }}
@@ -160,8 +160,8 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
 
 function Mini({ label, value, warn = false }: { label: string; value: number; warn?: boolean }) {
   return (
-    <div className="rounded-lg bg-paper-50 py-2">
-      <p className={cx("text-lg font-bold tabular", warn ? "text-warning" : "text-ink")}>{value}</p>
+    <div className="rounded-lg bg-paper-50 dark:bg-ink-900 py-2">
+      <p className={cx("text-lg font-bold tabular", warn ? "text-warning" : "text-ink dark:text-paper")}>{value}</p>
       <p className="text-[11px] text-paper-500">{label}</p>
     </div>
   )
@@ -170,8 +170,8 @@ function Mini({ label, value, warn = false }: { label: string; value: number; wa
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="surface p-4">
-      <p className="text-[26px] font-bold leading-none text-ink tabular">{value}</p>
-      <p className="mt-2 text-[13px] font-medium text-ink">{label}</p>
+      <p className="text-[26px] font-bold leading-none text-ink dark:text-paper tabular">{value}</p>
+      <p className="mt-2 text-[13px] font-medium text-ink dark:text-paper">{label}</p>
     </div>
   )
 }
@@ -179,7 +179,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 function Empty() {
   return (
     <div className="surface p-10 text-center">
-      <p className="text-sm font-medium text-ink">Nenhum projeto no workspace.</p>
+      <p className="text-sm font-medium text-ink dark:text-paper">Nenhum projeto no workspace.</p>
       <p className="mt-1 text-sm text-paper-500">
         Crie projetos nos boards para ver a saúde do portfólio aqui.
       </p>

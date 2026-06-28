@@ -79,7 +79,7 @@ export function LoginPage() {
           </label>
           <Link
             to="/forgot-password"
-            className="text-sm font-medium text-ink underline-offset-4 hover:underline"
+            className="text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline"
           >
             Esqueceu a senha?
           </Link>
@@ -91,7 +91,7 @@ export function LoginPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink"
+              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink dark:text-paper"
             >
               <AlertCircle className="size-4 shrink-0" />
               {error}
@@ -109,7 +109,7 @@ export function LoginPage() {
           Não tem conta?{" "}
           <Link
             to="/register"
-            className="font-semibold text-ink underline-offset-4 hover:underline"
+            className="font-semibold text-ink dark:text-paper underline-offset-4 hover:underline"
           >
             Criar agora
           </Link>

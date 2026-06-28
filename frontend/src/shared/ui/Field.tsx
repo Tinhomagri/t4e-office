@@ -32,7 +32,7 @@ export function Field({
 
   return (
     <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-medium text-ink">
+      <label htmlFor={id} className="mb-2 block text-sm font-medium text-ink dark:text-paper">
         {label}
       </label>
       <div className="relative">
@@ -54,7 +54,7 @@ export function Field({
             type="button"
             onClick={() => setRevealed((v) => !v)}
             aria-label={revealed ? "Ocultar senha" : "Mostrar senha"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-paper-400 transition-colors hover:text-ink"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-paper-400 transition-colors hover:text-ink dark:hover:text-paper"
           >
             {revealed ? (
               <EyeOff className="size-[18px]" strokeWidth={1.75} />

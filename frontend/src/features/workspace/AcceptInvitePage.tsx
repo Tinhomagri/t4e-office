@@ -44,7 +44,7 @@ export function AcceptInvitePage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-lg font-semibold text-ink">Convite para workspace</h1>
+      <h1 className="text-lg font-semibold text-ink dark:text-paper">Convite para workspace</h1>
 
       {state === "working" && <p className="text-sm text-paper-500">Aceitando convite…</p>}
 
@@ -67,7 +67,7 @@ export function AcceptInvitePage() {
             </Link>
             <Link
               to="/register"
-              className="rounded-lg border border-ink/15 px-4 py-2 text-sm text-ink"
+              className="rounded-lg border border-ink/15 px-4 py-2 text-sm text-ink dark:text-paper"
             >
               Criar conta
             </Link>
@@ -78,7 +78,7 @@ export function AcceptInvitePage() {
       {state === "error" && (
         <>
           <p className="text-sm text-red-600">{message}</p>
-          <Link to="/app/boards" className="text-sm text-ink underline">
+          <Link to="/app/boards" className="text-sm text-ink dark:text-paper underline">
             Ir para o app
           </Link>
         </>

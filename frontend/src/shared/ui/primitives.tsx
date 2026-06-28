@@ -30,8 +30,8 @@ const BTN_VARIANT: Record<ButtonVariant, string> = {
   primary:
     "bg-brand-500 text-white shadow-brand-glow hover:bg-brand-600",
   solid: "bg-ink text-paper hover:bg-ink-700",
-  outline: "border border-paper-300 bg-paper text-ink hover:bg-paper-100",
-  ghost: "text-paper-600 hover:bg-paper-100 hover:text-ink",
+  outline: "border border-paper-300 bg-paper dark:bg-ink-900 text-ink dark:text-paper hover:bg-paper-100 dark:hover:bg-ink-800",
+  ghost: "text-paper-600 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
   danger: "bg-danger text-white hover:brightness-95",
 }
 
@@ -79,7 +79,7 @@ export function IconButton({
   return (
     <button
       className={cx(
-        "grid size-9 place-items-center rounded-xl text-paper-500 transition-colors hover:bg-paper-100 hover:text-ink focus-ring",
+        "grid size-9 place-items-center rounded-xl text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper focus-ring",
         className,
       )}
       {...rest}
@@ -95,7 +95,7 @@ export function IconButton({
 type BadgeTone = "neutral" | "brand" | "success" | "warning" | "danger" | "outline"
 
 const BADGE_TONE: Record<BadgeTone, string> = {
-  neutral: "bg-paper-100 text-paper-600",
+  neutral: "bg-paper-100 dark:bg-ink-800 text-paper-600",
   brand: "bg-brand-50 text-brand-700",
   success: "bg-success/10 text-success",
   warning: "bg-warning/10 text-warning",
@@ -128,7 +128,7 @@ export function Badge({
 // Atalho de teclado (⌘K) — para a busca/command palette
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded-md border border-paper-300 bg-paper px-1.5 py-0.5 font-sans text-[10px] font-medium text-paper-500 shadow-xs">
+    <kbd className="rounded-md border border-paper-300 bg-paper dark:bg-ink-900 px-1.5 py-0.5 font-sans text-[10px] font-medium text-paper-500 shadow-xs">
       {children}
     </kbd>
   )
@@ -145,6 +145,53 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 
 export function Spinner({ className = "" }: { className?: string }) {
   return <Loader2 className={cx("animate-spin text-paper-400", className)} />
+}
+
+// Estado vazio com CTA — usado quando uma lista/visão não tem itens.
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  className = "",
+}: {
+  icon?: ReactNode
+  title: string
+  description?: string
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={cx(
+        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-paper-300 dark:border-ink-700 bg-paper-50/60 dark:bg-ink-900/40 px-6 py-14 text-center",
+        className,
+      )}
+    >
+      {icon && (
+        <div className="mb-3 grid size-12 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 text-paper-400">
+          {icon}
+        </div>
+      )}
+      <h3 className="text-[15px] font-semibold text-ink dark:text-paper">{title}</h3>
+      {description && (
+        <p className="mt-1 max-w-sm text-sm text-paper-500">{description}</p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
+// Bloco de carregamento (shimmer) — placeholder de conteúdo enquanto carrega.
+export function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={cx(
+        "animate-pulse rounded-md bg-paper-200/70 dark:bg-ink-700/70",
+        className,
+      )}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -176,25 +223,25 @@ export function Modal({
       />
       <div
         className={cx(
-          "relative z-10 max-h-[90vh] w-full animate-scale-in overflow-hidden rounded-2xl border border-paper-200 bg-paper shadow-pop",
+          "relative z-10 max-h-[90vh] w-full animate-scale-in overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-pop",
           size === "lg" ? "max-w-2xl" : "max-w-md",
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-paper-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-paper-200 dark:border-ink-700 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-ink">{title}</h2>
+            <h2 className="text-base font-semibold text-ink dark:text-paper">{title}</h2>
             {description && <p className="mt-0.5 text-sm text-paper-500">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="-mr-1 grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 hover:text-ink"
+            className="-mr-1 grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
           >
             <X className="size-4" />
           </button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4 scrollbar-slim">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-paper-200 bg-paper-50 px-5 py-3">
+          <div className="flex items-center justify-end gap-2 border-t border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-900 px-5 py-3">
             {footer}
           </div>
         )}
@@ -217,7 +264,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink dark:text-paper">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-paper-500">{hint}</span>}
     </label>
@@ -225,7 +272,7 @@ export function Field({
 }
 
 const CONTROL =
-  "w-full rounded-xl border border-paper-300 bg-paper px-3 py-2 text-sm text-ink placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
+  "w-full rounded-xl border border-paper-300 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
 
 export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cx(CONTROL, className)} {...rest} />
@@ -330,7 +377,7 @@ export function PageHeader({
             {eyebrow}
           </div>
         )}
-        <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink">
+        <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
           {title}
         </h1>
         {subtitle && <p className="mt-1 text-sm text-paper-500">{subtitle}</p>}

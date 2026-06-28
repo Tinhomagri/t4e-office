@@ -64,13 +64,13 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
       </div>
 
       {/* Metade direita: branco + formulário */}
-      <div className="relative flex w-full items-center justify-center bg-paper px-6 py-10 sm:px-12 md:w-1/2">
+      <div className="relative flex w-full items-center justify-center bg-paper dark:bg-ink-900 px-6 py-10 sm:px-12 md:w-1/2">
         {/* Logo no topo */}
         <div className="absolute left-8 top-8 flex items-center gap-2.5">
           <div className="grid size-8 place-items-center rounded-lg bg-ink text-xs font-bold text-paper">
             T4
           </div>
-          <span className="text-sm font-semibold tracking-[0.25em] text-ink">
+          <span className="text-sm font-semibold tracking-[0.25em] text-ink dark:text-paper">
             T4E OFFICE
           </span>
         </div>
@@ -81,7 +81,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           className="w-full max-w-[400px]"
         >
-          <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink">
+          <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
             {title}
           </h1>
           <p className="mt-2 text-[15px] text-paper-500">{subtitle}</p>

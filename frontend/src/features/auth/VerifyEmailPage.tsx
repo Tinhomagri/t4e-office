@@ -46,8 +46,8 @@ export function VerifyEmailPage() {
   if (mutation.isPending || mutation.isIdle) {
     return (
       <AuthLayout title="Confirmando seu email" subtitle="Só um instante…">
-        <div className="flex items-center gap-3 rounded-xl border border-ink/10 bg-paper-100 p-4">
-          <Loader2 className="size-5 animate-spin text-ink" strokeWidth={1.75} />
+        <div className="flex items-center gap-3 rounded-xl border border-ink/10 bg-paper-100 dark:bg-ink-800 p-4">
+          <Loader2 className="size-5 animate-spin text-ink dark:text-paper" strokeWidth={1.75} />
           <p className="text-sm text-paper-500">Validando seu link de confirmação.</p>
         </div>
       </AuthLayout>
@@ -89,9 +89,9 @@ function ResultCard({ tone, message }: { tone: "success" | "error"; message: str
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 p-4"
+      className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 dark:bg-ink-800 p-4"
     >
-      <Icon className="mt-0.5 size-5 shrink-0 text-ink" strokeWidth={1.75} />
+      <Icon className="mt-0.5 size-5 shrink-0 text-ink dark:text-paper" strokeWidth={1.75} />
       <p className="text-sm leading-relaxed text-paper-500">{message}</p>
     </motion.div>
   )
@@ -101,7 +101,7 @@ function BackToLogin() {
   return (
     <Link
       to="/login"
-      className="flex items-center justify-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline"
+      className="flex items-center justify-center gap-2 text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline"
     >
       Voltar para o login
     </Link>

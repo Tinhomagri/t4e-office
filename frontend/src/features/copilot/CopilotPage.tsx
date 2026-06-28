@@ -104,14 +104,14 @@ export function CopilotPage() {
       <PageHeader title="Copiloto" subtitle="Leia documentos e transcrições e gere tarefas com IA" />
 
       {/* Entrada */}
-      <div className="rounded-2xl border border-ink/10 bg-paper p-5 space-y-4">
+      <div className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5 space-y-4">
         <div className="flex gap-2">
           {(["text", "file"] as Mode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                mode === m ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink"
+                mode === m ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
               }`}
             >
               {m === "text" ? "Colar texto" : "Enviar arquivo"}
@@ -123,7 +123,7 @@ export function CopilotPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Título do documento (opcional)"
-          className="w-full rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
         />
 
         {mode === "text" ? (
@@ -132,7 +132,7 @@ export function CopilotPage() {
             onChange={(e) => setText(e.target.value)}
             placeholder="Cole aqui a transcrição da reunião, ata ou especificação…"
             rows={8}
-            className="w-full rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
           />
         ) : (
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-ink/20 px-4 py-6 text-sm text-paper-500 hover:border-ink/40">
@@ -162,7 +162,7 @@ export function CopilotPage() {
       {analysis && (
         <div className="space-y-5">
           <Section title="Resumo">
-            <p className="text-sm leading-relaxed text-ink">{analysis.summary}</p>
+            <p className="text-sm leading-relaxed text-ink dark:text-paper">{analysis.summary}</p>
           </Section>
 
           {analysis.tasks.length > 0 && (
@@ -182,7 +182,7 @@ export function CopilotPage() {
                       {selected.has(i) && <Check className="size-3.5" />}
                     </button>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink">{t.title}</p>
+                      <p className="text-sm font-medium text-ink dark:text-paper">{t.title}</p>
                       {t.description && (
                         <p className="text-xs text-paper-500">{t.description}</p>
                       )}
@@ -199,7 +199,7 @@ export function CopilotPage() {
                 <select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
-                  className="rounded-lg border border-ink/15 bg-paper-100 px-3 py-2 text-sm"
+                  className="rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
                 >
                   <option value="">Escolha o projeto…</option>
                   {(projects ?? []).map((p) => (
@@ -229,7 +229,7 @@ export function CopilotPage() {
 
           {analysis.decisions.length > 0 && (
             <Section title="Decisões">
-              <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
+              <ul className="list-disc space-y-1 pl-5 text-sm text-ink dark:text-paper">
                 {analysis.decisions.map((d, i) => (
                   <li key={i}>{d}</li>
                 ))}
@@ -239,7 +239,7 @@ export function CopilotPage() {
 
           {analysis.risks.length > 0 && (
             <Section title="Riscos">
-              <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
+              <ul className="list-disc space-y-1 pl-5 text-sm text-ink dark:text-paper">
                 {analysis.risks.map((r, i) => (
                   <li key={i}>{r}</li>
                 ))}
@@ -254,8 +254,8 @@ export function CopilotPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-ink/10 bg-paper p-5">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+    <div className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink dark:text-paper">
         <FileText className="size-4" /> {title}
       </h3>
       {children}

@@ -53,13 +53,13 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <AuthLayout title="Link inválido" subtitle="Não encontramos o token de redefinição.">
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 p-4">
-          <AlertCircle className="mt-0.5 size-5 shrink-0 text-ink" strokeWidth={1.75} />
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 dark:bg-ink-800 p-4">
+          <AlertCircle className="mt-0.5 size-5 shrink-0 text-ink dark:text-paper" strokeWidth={1.75} />
           <p className="text-sm leading-relaxed text-paper-500">
             Abra o link diretamente do email de redefinição.
           </p>
         </div>
-        <Link to="/forgot-password" className="flex items-center justify-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline">
+        <Link to="/forgot-password" className="flex items-center justify-center gap-2 text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline">
           Solicitar novo link
         </Link>
       </AuthLayout>
@@ -72,9 +72,9 @@ export function ResetPasswordPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 p-4"
+          className="mb-5 flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 dark:bg-ink-800 p-4"
         >
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ink" strokeWidth={1.75} />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ink dark:text-paper" strokeWidth={1.75} />
           <p className="text-sm leading-relaxed text-paper-500">
             Sua senha foi atualizada com sucesso.
           </p>
@@ -123,12 +123,12 @@ export function ResetPasswordPage() {
                 <li
                   key={rule.label}
                   className={`flex items-center gap-1.5 text-xs transition-colors ${
-                    rule.ok ? "text-ink" : "text-paper-400"
+                    rule.ok ? "text-ink dark:text-paper" : "text-paper-400"
                   }`}
                 >
                   <span
                     className={`grid size-4 place-items-center rounded-full transition-colors ${
-                      rule.ok ? "bg-ink text-paper" : "bg-paper-200"
+                      rule.ok ? "bg-ink text-paper" : "bg-paper-200 dark:bg-ink-700"
                     }`}
                   >
                     <Check className="size-2.5" strokeWidth={3} />
@@ -146,7 +146,7 @@ export function ResetPasswordPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink"
+              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink dark:text-paper"
             >
               <AlertCircle className="size-4 shrink-0" />
               {error}
@@ -162,7 +162,7 @@ export function ResetPasswordPage() {
 
         <Link
           to="/login"
-          className="flex items-center justify-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline"
+          className="flex items-center justify-center gap-2 text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline"
         >
           Voltar para o login
         </Link>

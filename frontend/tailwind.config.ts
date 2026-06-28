@@ -1,73 +1,138 @@
 import type { Config } from "tailwindcss"
 
-// Design system do Pulse — "Graphite Premium".
-// Base monocromática refinada (ink/paper) + 1 acento (brand violeta) usado com
-// parcimônia para estados ativos, foco, CTAs e data-viz. Nunca hex solto no JSX.
+// Design system do Pulse — Atlassian Design System (light).
+// Migrado de "Graphite Premium" (violeta/ink-paper/dark) para a paleta Jira:
+// neutros frios + brand azul (#0C66E4) + status/prioridade. Os nomes de token
+// legados (ink/paper/brand/canvas) foram REMAPEADOS para valores Atlassian, de
+// modo que todo o JSX existente passa a renderizar no tema novo sem reescrita.
+// Nunca usar hex solto no JSX — sempre via token.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        // Tinta (escala neutra escura) — superfícies escuras e texto
+        // ── Escalas Atlassian canônicas (use estas em código novo) ──────────
+        neutral: {
+          0: "#FFFFFF",
+          50: "#F7F8F9",
+          100: "#F1F2F4",
+          200: "#DCDFE4",
+          300: "#B3B9C4",
+          400: "#8590A2",
+          500: "#626F86",
+          600: "#44546F",
+          700: "#44546F",
+          800: "#2C3E5D",
+          900: "#172B4D",
+        },
+        blue: {
+          50: "#E9F2FF",
+          100: "#CCE0FF",
+          200: "#85B8FF",
+          300: "#579DFF",
+          400: "#388BFF",
+          500: "#0C66E4",
+          600: "#0055CC",
+          700: "#09326C",
+        },
+        green: {
+          50: "#DCFFF1",
+          100: "#DCFFF1",
+          400: "#4BCE97",
+          500: "#22A06B",
+          600: "#1F845A",
+          700: "#216E4E",
+          900: "#164B35",
+        },
+        red: {
+          50: "#FFECEB",
+          100: "#FFECEB",
+          200: "#FFD5D2",
+          400: "#F87168",
+          500: "#E2483D",
+          600: "#C9372C",
+          700: "#AE2E24",
+        },
+        orange: {
+          100: "#FFF3EB",
+          400: "#FCA700",
+          500: "#E56910",
+          700: "#A54800",
+        },
+        yellow: { 100: "#FFF7D6", 500: "#E2B203", 700: "#946F00" },
+
+        // ── Tokens legados remapeados → Atlassian ───────────────────────────
+        // ink: texto/superfícies fortes (era escuro no dark theme).
         ink: {
-          DEFAULT: "#0b0b0d",
-          950: "#08080a",
-          900: "#0e0e11",
-          800: "#16161a",
-          700: "#1f1f24",
-          600: "#2c2c33",
-          500: "#3a3a42",
-          400: "#52525b",
+          DEFAULT: "#172B4D",
+          950: "#091E42",
+          900: "#172B4D",
+          800: "#1D2B45",
+          700: "#2C3E5D",
+          600: "#44546F",
+          500: "#626F86",
+          400: "#8590A2",
         },
-        // Papel (escala neutra clara) — superfícies claras, bordas e texto suave
+        // paper: superfícies claras, bordas e texto suave.
         paper: {
-          DEFAULT: "#ffffff",
-          50: "#fbfbfc",
-          100: "#f4f4f6",
-          200: "#e9e9ee",
-          300: "#d8d8e0",
-          400: "#a1a1ad",
-          500: "#71717f",
-          600: "#52525c",
+          DEFAULT: "#FFFFFF",
+          50: "#F7F8F9",
+          100: "#F1F2F4",
+          200: "#DCDFE4",
+          300: "#DCDFE4",
+          400: "#8590A2",
+          500: "#626F86",
+          600: "#44546F",
         },
-        // Fundo da aplicação (canvas) — levemente acinzentado p/ os painéis "subirem"
-        canvas: "#f6f6f8",
-        // Acento da marca — violeta sofisticado
+        // canvas: fundo da aplicação.
+        canvas: "#F7F8F9",
+        // brand: acento de ação primária — azul Atlassian.
         brand: {
-          DEFAULT: "#6c5cf0",
-          50: "#f2f1ff",
-          100: "#e7e4ff",
-          200: "#d0caff",
-          300: "#b1a6ff",
-          400: "#8f7dff",
-          500: "#6c5cf0",
-          600: "#5a47e0",
-          700: "#4a39bd",
-          800: "#3d3199",
-          900: "#332a7a",
+          DEFAULT: "#0C66E4",
+          50: "#E9F2FF",
+          100: "#CCE0FF",
+          200: "#85B8FF",
+          300: "#579DFF",
+          400: "#388BFF",
+          500: "#0C66E4",
+          600: "#0055CC",
+          700: "#09326C",
+          800: "#09326C",
+          900: "#082B5E",
         },
-        // Cores semânticas (sutis, dessaturadas para casar com o tema)
-        success: "#16a34a",
-        warning: "#d97706",
-        danger: "#e11d48",
+        // Semânticas (status) — tons Atlassian.
+        success: "#22A06B",
+        warning: "#E56910",
+        danger: "#E2483D",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "Roboto",
+          "Inter",
+          "system-ui",
+          "sans-serif",
+        ],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       borderRadius: {
-        xl: "0.75rem",
-        "2xl": "1rem",
-        "3xl": "1.25rem",
+        // Atlassian: inputs/botões 3px, cards/modais 6px.
+        DEFAULT: "0.1875rem",
+        md: "0.375rem",
+        lg: "0.5rem",
+        xl: "0.5rem",
+        "2xl": "0.625rem",
+        "3xl": "0.75rem",
       },
       boxShadow: {
-        // Sombras em camadas, suaves — profundidade sem "drop-shadow tosco"
-        xs: "0 1px 2px 0 rgb(10 10 15 / 0.04)",
-        card: "0 1px 2px 0 rgb(10 10 15 / 0.04), 0 1px 3px 0 rgb(10 10 15 / 0.06)",
-        panel:
-          "0 1px 2px 0 rgb(10 10 15 / 0.04), 0 4px 16px -4px rgb(10 10 15 / 0.10)",
-        pop: "0 8px 32px -8px rgb(10 10 15 / 0.20), 0 2px 8px -2px rgb(10 10 15 / 0.12)",
-        "brand-glow": "0 8px 24px -8px rgb(108 92 240 / 0.45)",
+        xs: "0 1px 1px rgb(9 30 66 / 0.08)",
+        card: "0 1px 1px rgb(9 30 66 / 0.10), 0 0 1px rgb(9 30 66 / 0.10)",
+        panel: "0 1px 1px rgb(9 30 66 / 0.10), 0 4px 8px -2px rgb(9 30 66 / 0.12)",
+        pop: "0 8px 16px -4px rgb(9 30 66 / 0.20), 0 0 1px rgb(9 30 66 / 0.20)",
+        "brand-glow": "0 1px 1px rgb(9 30 66 / 0.10), 0 0 1px rgb(9 30 66 / 0.10)",
       },
       keyframes: {
         "fade-up": {
@@ -90,6 +155,18 @@ export default {
           "0%": { backgroundPosition: "0 0" },
           "100%": { backgroundPosition: "40px 40px" },
         },
+        "pulse-ring": {
+          "0%, 100%": { boxShadow: "0 0 0 0 rgb(226 72 61 / 0.5)" },
+          "50%": { boxShadow: "0 0 0 6px rgb(226 72 61 / 0)" },
+        },
+        "slide-in-right": {
+          "0%": { opacity: "0", transform: "translateX(24px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        "drop-zone": {
+          "0%, 100%": { borderColor: "rgb(12 102 228 / 0.4)" },
+          "50%": { borderColor: "rgb(12 102 228 / 0.9)" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.5s cubic-bezier(0.16,1,0.3,1) both",
@@ -97,6 +174,9 @@ export default {
         "scale-in": "scale-in 0.18s cubic-bezier(0.16,1,0.3,1) both",
         shimmer: "shimmer 2.5s linear infinite",
         "grid-pan": "grid-pan 6s linear infinite",
+        "pulse-ring": "pulse-ring 1.8s ease-in-out infinite",
+        "slide-in-right": "slide-in-right 0.22s cubic-bezier(0.16,1,0.3,1) both",
+        "drop-zone": "drop-zone 1.2s ease-in-out infinite",
       },
     },
   },

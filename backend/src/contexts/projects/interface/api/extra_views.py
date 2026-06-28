@@ -1,0 +1,406 @@
+"""Views para Versions, Components, Worklogs, Attachments e CustomFields.
+
+Todas as rotas validam pertencimento ao workspace (multi-tenancy) e a
+capacidade do papel de projeto (Domínio 12) antes de qualquer escrita.
+Leituras exigem apenas BROWSE (ser membro). Detail views resolvem o projeto a
+partir do próprio objeto.
+"""
+import uuid
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from contexts.projects.infrastructure.django.models import (
+    AttachmentModel, CardComponentModel, CardModel, CardVersionModel,
+    ComponentModel, CustomFieldModel, IssueFieldValueModel, VersionModel, WorkflowStatusModel, WorklogModel,
+)
+from contexts.projects.interface.api import capabilities as caps
+from contexts.projects.interface.api.permissions import (
+    assert_card_capability,
+    assert_card_member,
+    assert_project_capability,
+    assert_project_member,
+)
+from shared.domain.errors import NotFoundError
+
+
+def _uid(request: Request) -> str:
+    return str(request.user.id)
+
+
+def _guard_obj(model, object_id: str, user_id: str, capability: str):
+    """Resolve o projeto de um objeto project-scoped e valida a capacidade. Retorna o objeto."""
+    obj = model.objects.filter(pk=object_id).first()
+    if obj is None:
+        raise NotFoundError("Recurso não encontrado.")
+    assert_project_capability(
+        project_id=str(obj.project_id), user_id=user_id, capability=capability
+    )
+    return obj
+
+
+# ── Versions ──────────────────────────────────────────────────────────────────
+
+class VersionListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        qs = VersionModel.objects.filter(project_id=project_id)
+        return Response([_ser_version(v) for v in qs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        assert_project_capability(
+            project_id=str(project_id), user_id=_uid(request), capability=caps.MANAGE_VERSIONS
+        )
+        v = VersionModel.objects.create(
+            project_id=project_id,
+            name=request.data.get("name", ""),
+            description=request.data.get("description", ""),
+            release_date=request.data.get("release_date") or None,
+            released=request.data.get("released", False),
+        )
+        return Response(_ser_version(v), status=status.HTTP_201_CREATED)
+
+
+class VersionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, version_id: str) -> Response:
+        v = _guard_obj(VersionModel, str(version_id), _uid(request), caps.MANAGE_VERSIONS)
+        for f in ("name", "description", "release_date", "released"):
+            if f in request.data:
+                setattr(v, f, request.data[f] or None if f == "release_date" else request.data[f])
+        v.save()
+        return Response(_ser_version(v))
+
+    def delete(self, request: Request, version_id: str) -> Response:
+        v = _guard_obj(VersionModel, str(version_id), _uid(request), caps.MANAGE_VERSIONS)
+        v.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _ser_version(v: VersionModel) -> dict:
+    return {
+        "id": str(v.id), "project_id": str(v.project_id), "name": v.name,
+        "description": v.description,
+        "release_date": v.release_date.isoformat() if v.release_date else None,
+        "released": v.released, "created_at": v.created_at.isoformat(),
+    }
+
+
+# ── Card ↔ Version ────────────────────────────────────────────────────────────
+
+class CardVersionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        qs = CardVersionModel.objects.filter(card_id=card_id).select_related("version")
+        return Response([_ser_version(r.version) for r in qs])
+
+    def post(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        version_id = request.data.get("version_id")
+        CardVersionModel.objects.get_or_create(card_id=card_id, version_id=version_id)
+        return Response(status=status.HTTP_201_CREATED)
+
+    def delete(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        version_id = request.data.get("version_id")
+        CardVersionModel.objects.filter(card_id=card_id, version_id=version_id).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Components ────────────────────────────────────────────────────────────────
+
+class ComponentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        qs = ComponentModel.objects.filter(project_id=project_id)
+        return Response([_ser_component(c) for c in qs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        assert_project_capability(
+            project_id=str(project_id), user_id=_uid(request), capability=caps.MANAGE_COMPONENTS
+        )
+        c = ComponentModel.objects.create(
+            project_id=project_id,
+            name=request.data.get("name", ""),
+            lead_id=request.data.get("lead_id") or None,
+        )
+        return Response(_ser_component(c), status=status.HTTP_201_CREATED)
+
+
+class ComponentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, component_id: str) -> Response:
+        c = _guard_obj(ComponentModel, str(component_id), _uid(request), caps.MANAGE_COMPONENTS)
+        c.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _ser_component(c: ComponentModel) -> dict:
+    return {"id": str(c.id), "project_id": str(c.project_id), "name": c.name, "lead_id": str(c.lead_id) if c.lead_id else None}
+
+
+# ── Card ↔ Component ──────────────────────────────────────────────────────────
+
+class CardComponentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        qs = CardComponentModel.objects.filter(card_id=card_id).select_related("component")
+        return Response([_ser_component(r.component) for r in qs])
+
+    def post(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        CardComponentModel.objects.get_or_create(card_id=card_id, component_id=request.data.get("component_id"))
+        return Response(status=status.HTTP_201_CREATED)
+
+    def delete(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        CardComponentModel.objects.filter(card_id=card_id, component_id=request.data.get("component_id")).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Worklogs ──────────────────────────────────────────────────────────────────
+
+class WorklogListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        qs = WorklogModel.objects.filter(card_id=card_id).select_related("author")
+        return Response([_ser_worklog(w) for w in qs])
+
+    def post(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        w = WorklogModel.objects.create(
+            card_id=card_id,
+            author=request.user,
+            time_seconds=int(request.data.get("time_seconds", 0)),
+            started_at=request.data.get("started_at") or timezone.now(),
+            comment=request.data.get("comment", ""),
+        )
+        return Response(_ser_worklog(w), status=status.HTTP_201_CREATED)
+
+
+class WorklogDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, worklog_id: str) -> Response:
+        w = WorklogModel.objects.filter(pk=worklog_id).select_related("card__project").first()
+        if w is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        assert_card_member(card_id=str(w.card_id), user_id=_uid(request))
+        # Só o autor remove seu próprio worklog.
+        if str(w.author_id) == _uid(request):
+            w.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _ser_worklog(w: WorklogModel) -> dict:
+    return {
+        "id": str(w.id), "card_id": str(w.card_id),
+        "author_id": str(w.author_id), "author_name": w.author.full_name,
+        "time_seconds": w.time_seconds,
+        "started_at": w.started_at.isoformat(),
+        "comment": w.comment, "created_at": w.created_at.isoformat(),
+    }
+
+
+# ── Attachments ───────────────────────────────────────────────────────────────
+
+class AttachmentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        qs = AttachmentModel.objects.filter(card_id=card_id)
+        return Response([_ser_attachment(a, request) for a in qs])
+
+    def post(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "file required"}, status=status.HTTP_400_BAD_REQUEST)
+        a = AttachmentModel.objects.create(
+            card_id=card_id, author=request.user,
+            filename=file.name, file=file,
+            mime_type=getattr(file, "content_type", ""),
+            size=file.size,
+        )
+        return Response(_ser_attachment(a, request), status=status.HTTP_201_CREATED)
+
+
+class AttachmentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, attachment_id: str) -> Response:
+        att = AttachmentModel.objects.filter(pk=attachment_id).select_related("card__project").first()
+        if att is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        assert_card_member(card_id=str(att.card_id), user_id=_uid(request))
+        # Só o autor remove seu próprio anexo.
+        if str(att.author_id) == _uid(request):
+            att.file.delete(save=False)
+            att.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _ser_attachment(a: AttachmentModel, request: Request) -> dict:
+    url = request.build_absolute_uri(a.file.url) if a.file else None
+    return {
+        "id": str(a.id), "card_id": str(a.card_id),
+        "author_id": str(a.author_id), "filename": a.filename,
+        "url": url, "mime_type": a.mime_type, "size": a.size,
+        "created_at": a.created_at.isoformat(),
+    }
+
+
+# ── CustomFields ──────────────────────────────────────────────────────────────
+
+class CustomFieldListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        qs = CustomFieldModel.objects.filter(project_id=project_id)
+        return Response([_ser_cf(f) for f in qs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        assert_project_capability(
+            project_id=str(project_id), user_id=_uid(request), capability=caps.MANAGE_CUSTOM_FIELDS
+        )
+        f = CustomFieldModel.objects.create(
+            project_id=project_id,
+            name=request.data.get("name", ""),
+            field_type=request.data.get("field_type", "text"),
+            options=request.data.get("options", []),
+            required=request.data.get("required", False),
+        )
+        return Response(_ser_cf(f), status=status.HTTP_201_CREATED)
+
+
+class CustomFieldDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, field_id: str) -> Response:
+        f = _guard_obj(CustomFieldModel, str(field_id), _uid(request), caps.MANAGE_CUSTOM_FIELDS)
+        f.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _ser_cf(f: CustomFieldModel) -> dict:
+    return {
+        "id": str(f.id), "project_id": str(f.project_id),
+        "name": f.name, "field_type": f.field_type,
+        "options": f.options, "required": f.required,
+    }
+
+
+# ── IssueFieldValues ──────────────────────────────────────────────────────────
+
+class IssueFieldValueView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        qs = IssueFieldValueModel.objects.filter(card_id=card_id).select_related("field")
+        return Response([_ser_fv(v) for v in qs])
+
+    def put(self, request: Request, card_id: str) -> Response:
+        """Upsert: {field_id, value_json}"""
+        assert_card_capability(card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE)
+        field_id = request.data.get("field_id")
+        value = request.data.get("value_json")
+        obj, _ = IssueFieldValueModel.objects.update_or_create(
+            card_id=card_id, field_id=field_id,
+            defaults={"value_json": value},
+        )
+        return Response(_ser_fv(obj))
+
+
+def _ser_fv(v: IssueFieldValueModel) -> dict:
+    return {
+        "id": str(v.id), "card_id": str(v.card_id),
+        "field_id": str(v.field_id), "field_name": v.field.name,
+        "field_type": v.field.field_type, "value_json": v.value_json,
+    }
+
+
+# ── WorkflowStatuses ──────────────────────────────────────────────────────────
+
+DEFAULT_STATUSES = [
+    {"name": "A fazer", "slug": "todo", "category": "todo", "color": "#6b7280", "order": 0},
+    {"name": "Em andamento", "slug": "doing", "category": "in_progress", "color": "#3b82f6", "order": 1},
+    {"name": "Em revisão", "slug": "review", "category": "in_progress", "color": "#f59e0b", "order": 2},
+    {"name": "Concluído", "slug": "done", "category": "done", "color": "#10b981", "order": 3},
+]
+
+
+def _ser_ws(ws: WorkflowStatusModel) -> dict:
+    return {
+        "id": str(ws.id), "project_id": str(ws.project_id),
+        "name": ws.name, "slug": ws.slug,
+        "category": ws.category, "color": ws.color,
+        "order": ws.order, "is_default": ws.is_default,
+    }
+
+
+class WorkflowStatusListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        qs = WorkflowStatusModel.objects.filter(project_id=project_id)
+        if not qs.exists():
+            # Seed defaults on first access
+            for d in DEFAULT_STATUSES:
+                WorkflowStatusModel.objects.create(project_id=project_id, is_default=True, **d)
+            qs = WorkflowStatusModel.objects.filter(project_id=project_id)
+        return Response([_ser_ws(ws) for ws in qs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        assert_project_capability(
+            project_id=str(project_id), user_id=_uid(request), capability=caps.MANAGE_WORKFLOW
+        )
+        max_order = WorkflowStatusModel.objects.filter(
+            project_id=project_id
+        ).values_list("order", flat=True).order_by("-order").first() or 0
+        ws = WorkflowStatusModel.objects.create(
+            project_id=project_id,
+            name=request.data.get("name", "Novo status"),
+            slug=request.data.get("slug", "").strip().lower().replace(" ", "-") or str(uuid.uuid4())[:8],
+            category=request.data.get("category", "todo"),
+            color=request.data.get("color", "#6b7280"),
+            order=max_order + 1,
+        )
+        return Response(_ser_ws(ws), status=status.HTTP_201_CREATED)
+
+
+class WorkflowStatusDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, status_id: str) -> Response:
+        ws = _guard_obj(WorkflowStatusModel, str(status_id), _uid(request), caps.MANAGE_WORKFLOW)
+        for f in ("name", "slug", "category", "color", "order"):
+            if f in request.data:
+                setattr(ws, f, request.data[f])
+        ws.save()
+        return Response(_ser_ws(ws))
+
+    def delete(self, request: Request, status_id: str) -> Response:
+        ws = _guard_obj(WorkflowStatusModel, str(status_id), _uid(request), caps.MANAGE_WORKFLOW)
+        ws.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -19,7 +19,7 @@ env = environ.Env(
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
     DEFAULT_FROM_EMAIL=(str, "T4E Office <no-reply@t4egroup.com.br>"),
-    FRONTEND_URL=(str, "http://localhost:5173"),
+    FRONTEND_URL=(str, "http://localhost:8080"),
     ANTHROPIC_API_KEY=(str, ""),
     ANTHROPIC_MODEL=(str, "claude-opus-4-8"),
 )
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "contexts.projects",
     "contexts.copilot",
     "contexts.estimation",
+    "contexts.google",
 ]
 
 MIDDLEWARE = [
@@ -140,6 +141,17 @@ FRONTEND_URL = env("FRONTEND_URL")
 # Copiloto IA (Anthropic Claude)
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = env("ANTHROPIC_MODEL")
+
+# Integração Google (OAuth + Calendar)
+GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
+GOOGLE_OAUTH_CLIENT_SECRET = env("GOOGLE_OAUTH_CLIENT_SECRET", default="")
+GOOGLE_OAUTH_REDIRECT_URI = env(
+    "GOOGLE_OAUTH_REDIRECT_URI",
+    default="http://localhost:8000/api/google/callback/",
+)
+# Chave Fernet p/ cifrar tokens Google no banco — gere com:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+GOOGLE_TOKEN_ENC_KEY = env("GOOGLE_TOKEN_ENC_KEY", default="")
 
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

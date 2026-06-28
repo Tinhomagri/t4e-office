@@ -1,5 +1,7 @@
 """Caso de uso: atualização de sprint (editar, iniciar, encerrar)."""
+from contexts.projects.domain.entities.card import CardStatus
 from contexts.projects.domain.entities.sprint import Sprint, SprintStatus
+from contexts.projects.domain.repositories.card_repository import CardRepository
 from contexts.projects.domain.repositories.project_repository import (
     ProjectRepository,
     WorkspaceAccess,
@@ -23,10 +25,12 @@ class UpdateSprint:
         project_repository: ProjectRepository,
         sprint_repository: SprintRepository,
         workspace_access: WorkspaceAccess,
+        card_repository: CardRepository,
     ):
         self.project_repository = project_repository
         self.sprint_repository = sprint_repository
         self.workspace_access = workspace_access
+        self.card_repository = card_repository
 
     def execute(
         self,
@@ -70,4 +74,16 @@ class UpdateSprint:
             self.sprint_repository.clear_active(
                 project_id=updated.project_id, except_id=updated.id
             )
+
+        # Ao encerrar: cards não concluídos voltam ao backlog do projeto.
+        # Cards `done` permanecem na sprint (histórico para relatórios).
+        if updated.status == SprintStatus.CLOSED:
+            cards = self.card_repository.list_by_project(
+                project_id=updated.project_id
+            )
+            for card in cards:
+                if card.sprint_id == updated.id and card.status != CardStatus.DONE:
+                    card.sprint_id = None
+                    card.status = CardStatus.BACKLOG
+                    self.card_repository.update(card=card)
         return updated

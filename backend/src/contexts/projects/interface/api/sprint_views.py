@@ -11,6 +11,7 @@ from contexts.projects.application.use_cases.list_sprints import ListSprints
 from contexts.projects.application.use_cases.update_sprint import UpdateSprint
 from contexts.projects.domain.entities.sprint import Sprint
 from contexts.projects.infrastructure.django.repositories_impl import (
+    DjangoCardRepository,
     DjangoProjectRepository,
     DjangoSprintRepository,
     DjangoWorkspaceAccess,
@@ -41,6 +42,10 @@ def _deps():
         DjangoSprintRepository(),
         DjangoWorkspaceAccess(),
     )
+
+
+def _card_repo():
+    return DjangoCardRepository()
 
 
 class SprintListCreateView(APIView):
@@ -83,7 +88,7 @@ class SprintDetailView(APIView):
         serializer = UpdateSprintSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         projects, sprints, access = _deps()
-        sprint = UpdateSprint(projects, sprints, access).execute(
+        sprint = UpdateSprint(projects, sprints, access, _card_repo()).execute(
             sprint_id=str(sprint_id),
             actor_id=str(request.user.id),
             **serializer.validated_data,
