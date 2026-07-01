@@ -1,5 +1,17 @@
-import { CalendarCheck, CircleDot, ExternalLink, Loader2, Sparkles, Zap } from "lucide-react"
+import { motion, useInView, useMotionValue, useSpring } from "framer-motion"
+import { CalendarCheck, CircleDot, ExternalLink, Loader2, Sparkles, TrendingDown, Zap } from "lucide-react"
+import { useEffect, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import {
@@ -34,6 +46,7 @@ const PRIORITY_BAR: Record<CardPriority, string> = {
 }
 
 const ACTIVE: CardStatus[] = ["todo", "doing", "review"]
+const SPRINT_LENGTH_DAYS = 10
 
 const DAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 const MONTH_NAMES = [
@@ -44,6 +57,16 @@ const MONTH_NAMES = [
 function formatDateHeader() {
   const now = new Date()
   return `${DAY_NAMES[now.getDay()].toUpperCase()} · ${now.getDate()} ${MONTH_NAMES[now.getMonth()].toUpperCase()}`
+}
+
+const listVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06 } },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
 }
 
 export function MyDayPage() {
@@ -65,7 +88,27 @@ export function MyDayPage() {
   })
   const inProgress = mine.filter((c) => c.status === "doing")
   const review = mine.filter((c) => c.status === "review")
+  const done = mine.filter((c) => c.status === "done")
   const points = myActive.reduce((s, c) => s + (c.points ?? 0), 0)
+  const totalPoints = mine.reduce((s, c) => s + (c.points ?? 0), 0)
+  const donePoints = done.reduce((s, c) => s + (c.points ?? 0), 0)
+
+  // Burndown derivado no client: sem histórico real no backend ainda, então
+  // traçamos a linha ideal (queda linear) contra o restante atual mantido plano
+  // até o dia de hoje. Troca por dado real quando existir endpoint de histórico.
+  const burndownData = useMemo(() => {
+    const remainingToday = Math.max(totalPoints - donePoints, 0)
+    const todayIdx = Math.min(new Date().getDate() % SPRINT_LENGTH_DAYS, SPRINT_LENGTH_DAYS - 1)
+    return Array.from({ length: SPRINT_LENGTH_DAYS + 1 }, (_, day) => {
+      const ideal = Math.max(totalPoints - (totalPoints / SPRINT_LENGTH_DAYS) * day, 0)
+      const real = day <= todayIdx ? remainingToday + ((totalPoints - remainingToday) * (todayIdx - day)) / Math.max(todayIdx, 1) : null
+      return {
+        day: `D${day}`,
+        ideal: Math.round(ideal),
+        real: real != null ? Math.round(real) : null,
+      }
+    })
+  }, [totalPoints, donePoints])
 
   const firstName = user?.full_name?.split(/\s+/)[0] ?? "você"
   const focusCards = [...inProgress, ...review, ...mine.filter((c) => c.status === "todo")].slice(0, 5)
@@ -105,19 +148,48 @@ export function MyDayPage() {
           <Loader2 className="size-6 animate-spin text-paper-400" />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          {/* Left column */}
-          <div className="space-y-6">
-            {/* Stats */}
+        <motion.div
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 gap-4 xl:grid-cols-4"
+        >
+          {/* Stats */}
+          <motion.div variants={itemVariants} className="xl:col-span-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat icon="📅" label="Vencem hoje" value={vencem.length} accent="text-danger" />
               <Stat icon="🔄" label="Em andamento" value={inProgress.length} />
               <Stat icon="👀" label="Em revisão" value={review.length} accent="text-amber-500" />
               <Stat icon="⚡" label="Pontos ativos" value={points} accent="text-brand-500" />
             </div>
+          </motion.div>
 
-            {/* Seu foco agora */}
-            <div className="surface p-5">
+          {/* Burndown */}
+          <motion.div variants={itemVariants} className="xl:col-span-3">
+            <BurndownCard data={burndownData} totalPoints={totalPoints} donePoints={donePoints} />
+          </motion.div>
+
+          {/* Pulse Intelligence + Resumo */}
+          <motion.div variants={itemVariants} className="space-y-4 xl:col-span-1">
+            <PulseIntelligence points={points} inProgressCount={inProgress.length} />
+
+            <div className="surface p-4 space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
+                Resumo da sprint
+              </h3>
+              <div className="flex flex-col gap-2.5">
+                <SprintRow label="Total de cards" value={mine.length} />
+                <SprintRow label="Concluídos" value={done.length} highlight />
+                <SprintRow label="Em progresso" value={inProgress.length} />
+                <SprintRow label="Aguardando" value={review.length} />
+                <SprintRow label="Story points" value={points} />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Seu foco agora */}
+          <motion.div variants={itemVariants} className="xl:col-span-3">
+            <div className="surface p-5 lift">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CircleDot className="size-4 text-brand-500" strokeWidth={2} />
@@ -137,16 +209,23 @@ export function MyDayPage() {
                   Nenhum card atribuído a você.
                 </p>
               ) : (
-                <div className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
+                <motion.div
+                  variants={listVariants}
+                  initial="hidden"
+                  animate="show"
+                  className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800"
+                >
                   {focusCards.map((c) => (
                     <FocusCard key={c.id} card={c} />
                   ))}
-                </div>
+                </motion.div>
               )}
             </div>
+          </motion.div>
 
-            {/* Minhas filas rápidas */}
-            <div className="grid gap-3 sm:grid-cols-2">
+          {/* Minhas filas rápidas */}
+          <motion.div variants={itemVariants} className="xl:col-span-1">
+            <div className="flex flex-col gap-3">
               <MiniPanel
                 title="A fazer"
                 icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
@@ -160,30 +239,31 @@ export function MyDayPage() {
                 empty="Nenhum card em revisão."
               />
             </div>
-          </div>
-
-          {/* Right column — Pulse Intelligence */}
-          <div className="space-y-4">
-            <PulseIntelligence points={points} inProgressCount={inProgress.length} />
-
-            {/* Sprint summary */}
-            <div className="surface p-4 space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
-                Resumo da sprint
-              </h3>
-              <div className="flex flex-col gap-2.5">
-                <SprintRow label="Total de cards" value={mine.length} />
-                <SprintRow label="Concluídos" value={mine.filter((c) => c.status === "done").length} highlight />
-                <SprintRow label="Em progresso" value={inProgress.length} />
-                <SprintRow label="Aguardando" value={review.length} />
-                <SprintRow label="Story points" value={points} />
-              </div>
-            </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </div>
   )
+}
+
+function CountUp({ value }: { value: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const isInView = useInView(ref, { once: true })
+  const motionVal = useMotionValue(0)
+  const spring = useSpring(motionVal, { duration: 0.8, bounce: 0.25 })
+
+  useEffect(() => {
+    if (isInView) motionVal.set(value)
+  }, [isInView, value, motionVal])
+
+  useEffect(() => {
+    const unsub = spring.on("change", (v) => {
+      if (ref.current) ref.current.textContent = String(Math.round(v))
+    })
+    return unsub
+  }, [spring])
+
+  return <span ref={ref}>0</span>
 }
 
 function Stat({
@@ -198,17 +278,86 @@ function Stat({
   accent?: string
 }) {
   return (
-    <div className="surface p-4">
-      <span className="text-xl">{icon}</span>
-      <p className={cx("mt-2 text-2xl font-bold tabular leading-none", accent)}>{value}</p>
-      <p className="mt-1.5 text-[12px] font-medium text-paper-500 dark:text-ink-400">{label}</p>
+    <div className="surface lift group relative overflow-hidden p-4 transition-transform hover:-translate-y-0.5">
+      <div className="absolute -right-3 -top-3 size-14 rounded-full bg-brand-400/10 blur-xl transition-opacity group-hover:opacity-80" />
+      <span className="relative text-xl">{icon}</span>
+      <p className={cx("relative mt-2 text-2xl font-bold tabular leading-none", accent)}>
+        <CountUp value={value} />
+      </p>
+      <p className="relative mt-1.5 text-[12px] font-medium text-paper-500 dark:text-ink-400">{label}</p>
+    </div>
+  )
+}
+
+function BurndownCard({
+  data,
+  totalPoints,
+  donePoints,
+}: {
+  data: { day: string; ideal: number; real: number | null }[]
+  totalPoints: number
+  donePoints: number
+}) {
+  const pct = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0
+
+  return (
+    <div className="surface p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <TrendingDown className="size-4 text-brand-500" strokeWidth={2} />
+          <h2 className="text-sm font-semibold text-ink dark:text-paper">Burndown da sprint</h2>
+        </div>
+        <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+          {pct}% concluído
+        </span>
+      </div>
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
+            <defs>
+              <linearGradient id="realGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--chart-brand, #6366f1)" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="var(--chart-brand, #6366f1)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
+            <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
+            <Tooltip
+              contentStyle={{ borderRadius: 12, fontSize: 12, border: "1px solid rgba(0,0,0,0.08)" }}
+              labelStyle={{ fontWeight: 600 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="ideal"
+              stroke="#94a3b8"
+              strokeDasharray="4 4"
+              strokeWidth={1.5}
+              dot={false}
+              name="Ideal"
+              isAnimationActive
+            />
+            <Area
+              type="monotone"
+              dataKey="real"
+              stroke="#6366f1"
+              strokeWidth={2.5}
+              fill="url(#realGradient)"
+              name="Restante"
+              connectNulls
+              isAnimationActive
+              animationDuration={900}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }
 
 function FocusCard({ card }: { card: BoardCard }) {
   return (
-    <div className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+    <motion.div variants={itemVariants} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
       <span
         className={cx(
           "h-8 w-1 shrink-0 rounded-full",
@@ -235,7 +384,7 @@ function FocusCard({ card }: { card: BoardCard }) {
           {card.points}pts
         </span>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -263,7 +412,7 @@ function MiniPanel({
         {cards.slice(0, 4).map((c) => (
           <div
             key={c.id}
-            className="truncate rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2 text-sm text-ink dark:text-paper-200"
+            className="truncate rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2 text-sm text-ink dark:text-paper-200 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800"
           >
             {c.title}
           </div>
@@ -331,7 +480,7 @@ function SprintRow({
           highlight ? "text-green-500 dark:text-green-400" : "text-ink dark:text-paper",
         )}
       >
-        {value}
+        <CountUp value={value} />
       </span>
     </div>
   )

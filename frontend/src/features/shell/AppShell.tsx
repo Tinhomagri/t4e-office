@@ -228,7 +228,14 @@ export function AppShell() {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="flex-1 overflow-y-auto px-6 py-7 scrollbar-slim dark:bg-ink-950"
         >
-          <div className={cx("w-full", !location.pathname.startsWith("/app/boards") && "mx-auto max-w-6xl")}>
+          <div
+            className={cx(
+              "w-full",
+              location.pathname !== "/app" &&
+                !location.pathname.startsWith("/app/boards") &&
+                "mx-auto max-w-6xl",
+            )}
+          >
             <Outlet />
           </div>
         </motion.main>
