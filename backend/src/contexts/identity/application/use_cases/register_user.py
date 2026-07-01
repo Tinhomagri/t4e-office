@@ -22,13 +22,23 @@ class RegisterUser:
         # Recebe a porta, não a implementação concreta
         self.user_repository = user_repository
 
-    def execute(self, *, email: str, full_name: str, password: str) -> RegisterUserResult:
+    def execute(
+        self,
+        *,
+        email: str,
+        full_name: str,
+        password: str,
+        is_active: bool = False,
+    ) -> RegisterUserResult:
         email_vo = Email(email)
         if self.user_repository.exists_by_email(email_vo):
             raise ConflictError("Já existe uma conta com este email.")
 
         user = self.user_repository.create(
-            email=email_vo, full_name=full_name, raw_password=password
+            email=email_vo,
+            full_name=full_name,
+            raw_password=password,
+            is_active=is_active,
         )
         return RegisterUserResult(
             user_id=str(user.id), email=str(user.email), full_name=user.full_name

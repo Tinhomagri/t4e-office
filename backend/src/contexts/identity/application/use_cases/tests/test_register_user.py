@@ -17,8 +17,10 @@ class FakeUserRepository(UserRepository):
     def exists_by_email(self, email: Email) -> bool:
         return str(email) in self._by_email
 
-    def create(self, *, email: Email, full_name: str, raw_password: str) -> User:
-        user = User(id="fake-1", email=email, full_name=full_name)
+    def create(
+        self, *, email: Email, full_name: str, raw_password: str, is_active: bool = False
+    ) -> User:
+        user = User(id="fake-1", email=email, full_name=full_name, is_active=is_active)
         self._by_email[str(email)] = user
         return user
 

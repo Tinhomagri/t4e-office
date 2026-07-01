@@ -110,12 +110,12 @@ export function RegisterPage() {
                 <li
                   key={rule.label}
                   className={`flex items-center gap-1.5 text-xs transition-colors ${
-                    rule.ok ? "text-ink" : "text-paper-400"
+                    rule.ok ? "text-ink dark:text-paper" : "text-paper-400"
                   }`}
                 >
                   <span
                     className={`grid size-4 place-items-center rounded-full transition-colors ${
-                      rule.ok ? "bg-ink text-paper" : "bg-paper-200"
+                      rule.ok ? "bg-ink text-paper" : "bg-paper-200 dark:bg-ink-700"
                     }`}
                   >
                     <Check className="size-2.5" strokeWidth={3} />
@@ -133,7 +133,7 @@ export function RegisterPage() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink"
+              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink dark:text-paper"
             >
               <AlertCircle className="size-4 shrink-0" />
               {error}
@@ -158,7 +158,7 @@ export function RegisterPage() {
           Já tem conta?{" "}
           <Link
             to="/login"
-            className="font-semibold text-ink underline-offset-4 hover:underline"
+            className="font-semibold text-ink dark:text-paper underline-offset-4 hover:underline"
           >
             Entrar
           </Link>

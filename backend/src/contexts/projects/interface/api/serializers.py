@@ -17,3 +17,170 @@ class ProjectSerializer(serializers.Serializer):
     name = serializers.CharField()
     key = serializers.CharField()
     workspace_id = serializers.CharField()
+
+
+_STATUS = ["backlog", "todo", "doing", "review", "done"]
+_TYPE = ["feature", "bug", "debt", "spike", "chore", "epic"]
+_PRIORITY = ["low", "medium", "high", "urgent"]
+_SPRINT_STATUS = ["planned", "active", "closed"]
+
+
+class CreateCardSerializer(serializers.Serializer):
+    """Payload de criação de card."""
+
+    title = serializers.CharField(max_length=200)
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    status = serializers.ChoiceField(choices=_STATUS, default="todo")
+    type = serializers.ChoiceField(choices=_TYPE, default="feature")
+    priority = serializers.ChoiceField(choices=_PRIORITY, default="medium")
+    points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    assignee_id = serializers.CharField(required=False, allow_null=True)
+    reporter_id = serializers.CharField(required=False, allow_null=True)
+    sprint_id = serializers.CharField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    due_date = serializers.DateField(required=False, allow_null=True)
+    parent_id = serializers.CharField(required=False, allow_null=True)
+    labels = serializers.ListField(
+        child=serializers.CharField(max_length=40), required=False
+    )
+
+
+class UpdateCardSerializer(serializers.Serializer):
+    """Payload de atualização parcial de card (todos os campos opcionais)."""
+
+    title = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=_STATUS, required=False)
+    type = serializers.ChoiceField(choices=_TYPE, required=False)
+    priority = serializers.ChoiceField(choices=_PRIORITY, required=False)
+    points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    assignee_id = serializers.CharField(required=False, allow_null=True)
+    reporter_id = serializers.CharField(required=False, allow_null=True)
+    sprint_id = serializers.CharField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    due_date = serializers.DateField(required=False, allow_null=True)
+    order = serializers.IntegerField(required=False)
+    parent_id = serializers.CharField(required=False, allow_null=True)
+    labels = serializers.ListField(
+        child=serializers.CharField(max_length=40), required=False
+    )
+
+
+class CardSerializer(serializers.Serializer):
+    """Representação pública do card."""
+
+    id = serializers.CharField()
+    ref = serializers.CharField()  # ex.: MIA-142
+    project_id = serializers.CharField()
+    number = serializers.IntegerField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    status = serializers.CharField()
+    type = serializers.CharField()
+    priority = serializers.CharField()
+    points = serializers.IntegerField(allow_null=True)
+    assignee_id = serializers.CharField(allow_null=True)
+    reporter_id = serializers.CharField(allow_null=True)
+    sprint_id = serializers.CharField(allow_null=True)
+    start_date = serializers.DateField(allow_null=True)
+    due_date = serializers.DateField(allow_null=True)
+    order = serializers.IntegerField()
+    parent_id = serializers.CharField(allow_null=True)
+    labels = serializers.ListField(child=serializers.CharField())
+    # Contadores para densidade do card (anotados na view, sem N+1).
+    comments_count = serializers.IntegerField(default=0)
+    attachments_count = serializers.IntegerField(default=0)
+    subtasks_count = serializers.IntegerField(default=0)
+    subtasks_done = serializers.IntegerField(default=0)
+
+
+class CreateCommentSerializer(serializers.Serializer):
+    """Payload de criação de comentário."""
+
+    body = serializers.CharField()
+    # Ids de usuários mencionados (@) — notificados na criação.
+    mentions = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
+
+
+class CommentSerializer(serializers.Serializer):
+    """Representação pública do comentário."""
+
+    id = serializers.CharField()
+    card_id = serializers.CharField()
+    author_id = serializers.CharField()
+    author_name = serializers.CharField()
+    body = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+
+_LINK_TYPE = ["relates", "blocks", "duplicates"]
+
+
+class CreateIssueLinkSerializer(serializers.Serializer):
+    """Payload de criação de vínculo entre cards."""
+
+    target_id = serializers.CharField()
+    link_type = serializers.ChoiceField(choices=_LINK_TYPE, default="relates")
+
+
+class _LinkedCardSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    ref = serializers.CharField()
+    title = serializers.CharField()
+    status = serializers.CharField()
+    type = serializers.CharField()
+
+
+class IssueLinkSerializer(serializers.Serializer):
+    """Representação de vínculo na perspectiva do card observado."""
+
+    id = serializers.CharField()
+    link_type = serializers.CharField()
+    direction = serializers.CharField()  # outgoing | incoming
+    other_card = _LinkedCardSerializer(allow_null=True)
+
+
+class CardHistorySerializer(serializers.Serializer):
+    """Representação de uma entrada de histórico do card."""
+
+    id = serializers.CharField()
+    card_id = serializers.CharField()
+    author_id = serializers.CharField(allow_null=True)
+    author_name = serializers.CharField()
+    field = serializers.CharField()
+    old_value = serializers.CharField(allow_blank=True)
+    new_value = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class CreateSprintSerializer(serializers.Serializer):
+    """Payload de criação de sprint."""
+
+    name = serializers.CharField(max_length=120)
+    goal = serializers.CharField(required=False, allow_blank=True, default="")
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+
+
+class UpdateSprintSerializer(serializers.Serializer):
+    """Payload de atualização parcial de sprint."""
+
+    name = serializers.CharField(max_length=120, required=False)
+    goal = serializers.CharField(required=False, allow_blank=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=_SPRINT_STATUS, required=False)
+
+
+class SprintSerializer(serializers.Serializer):
+    """Representação pública da sprint."""
+
+    id = serializers.CharField()
+    project_id = serializers.CharField()
+    name = serializers.CharField()
+    goal = serializers.CharField()
+    start_date = serializers.DateField(allow_null=True)
+    end_date = serializers.DateField(allow_null=True)
+    status = serializers.CharField()

@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   html,
@@ -14,12 +14,43 @@
   }
 
   body {
-    @apply bg-ink text-paper font-sans antialiased;
+    @apply bg-canvas text-ink font-sans antialiased;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numerais tabulares em métricas/IDs para alinhamento de colunas */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
+  /* Painel/superfície elevada padrão do app */
+  .surface {
+    @apply rounded-2xl border border-paper-200 bg-paper shadow-card
+      dark:border-ink-700/70 dark:bg-ink-900 dark:shadow-[0_1px_0_0_rgb(255_255_255/0.03)_inset,0_8px_24px_-12px_rgb(0_0_0/0.6)];
+  }
+
+  /* Card/elemento interativo — elevação sutil no hover (toque "Jira") */
+  .lift {
+    @apply transition-[transform,box-shadow,border-color] duration-200 ease-out
+      hover:-translate-y-0.5 hover:shadow-panel
+      dark:hover:border-ink-600 dark:hover:shadow-[0_10px_28px_-12px_rgb(0_0_0/0.7)];
+  }
+
+  /* Chip neutro tema-aware (botões de toolbar, filtros) */
+  .chip-neutral {
+    @apply border border-paper-200 bg-paper text-paper-600 hover:bg-paper-100
+      dark:border-ink-700 dark:bg-ink-800 dark:text-paper-400 dark:hover:bg-ink-700 dark:hover:text-paper;
+  }
+
+  /* Anel de foco acessível com o acento da marca */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-paper dark:focus-visible:ring-offset-ink-900;
+  }
+
   /* Campo de input com moldura, ícone e anel de foco — estética monocromática */
   .input-box {
     @apply w-full rounded-xl border border-ink/15 bg-paper-100 py-3.5 pl-11 pr-11
@@ -43,16 +74,169 @@
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(
       90deg,
-      #737373 0%,
-      #ffffff 50%,
-      #737373 100%
+      #0c66e4 0%,
+      #579dff 50%,
+      #0c66e4 100%
     );
     background-size: 200% auto;
   }
 }
 
-/* Esconde a barra de rolagem mantendo o scroll funcional */
-::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+/* Scrollbar slim e discreta (substitui o "esconder tudo") — UX melhor */
+@layer utilities {
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(0 0 0 / 0.18) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background-color: rgb(0 0 0 / 0.16);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(0 0 0 / 0.28);
+  }
+  /* Variante para superfícies escuras (sidebar) */
+  .scrollbar-slim-dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.16) transparent;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar-thumb {
+    background-color: rgb(255 255 255 / 0.14);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ── react-datepicker custom theme ───────────────────────────────────────── */
+.react-datepicker {
+  font-family: inherit;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px -4px rgb(0 0 0 / 0.12), 0 4px 8px -2px rgb(0 0 0 / 0.06);
+  background: #fff;
+  overflow: hidden;
+}
+.react-datepicker__header {
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 12px 12px 0 0;
+  padding: 12px 8px 8px;
+}
+.react-datepicker__current-month {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  text-transform: capitalize;
+}
+.react-datepicker__day-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  width: 2rem;
+  line-height: 2rem;
+}
+.react-datepicker__day {
+  width: 2rem;
+  line-height: 2rem;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111827;
+  transition: background-color 0.1s, color 0.1s;
+}
+.react-datepicker__day:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background: #2563eb !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.react-datepicker__day--today {
+  font-weight: 700;
+  color: #2563eb;
+}
+.react-datepicker__day--outside-month {
+  color: #d1d5db;
+}
+.react-datepicker__navigation-icon::before {
+  border-color: #9ca3af;
+}
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: #2563eb;
+}
+.react-datepicker__close-icon::after {
+  background: #9ca3af;
+  font-size: 12px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.react-datepicker__triangle {
+  display: none;
+}
+.react-datepicker-popper {
+  z-index: 9999 !important;
+}
+
+/* Datepicker no tema escuro */
+.dark .react-datepicker {
+  border-color: #1f1f24;
+  background: #16161a;
+  box-shadow: 0 10px 28px -8px rgb(0 0 0 / 0.7);
+}
+.dark .react-datepicker__header {
+  background: #0e0e11;
+  border-bottom-color: #1f1f24;
+}
+.dark .react-datepicker__current-month {
+  color: #f4f4f6;
+}
+.dark .react-datepicker__day {
+  color: #d8d8e0;
+}
+.dark .react-datepicker__day:hover {
+  background: #2c2c33;
+  color: #b1a6ff;
+}
+.dark .react-datepicker__day--selected,
+.dark .react-datepicker__day--keyboard-selected {
+  background: #6c5cf0 !important;
+  color: #fff !important;
+}
+.dark .react-datepicker__day--today {
+  color: #8f7dff;
+}
+.dark .react-datepicker__day--outside-month {
+  color: #3a3a42;
+}
+
+/* Transição suave padrão em controles interativos (microanimação global) */
+@layer base {
+  button,
+  a,
+  [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }

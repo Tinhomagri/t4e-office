@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import { ArrowLeft, MailCheck, Mail } from "lucide-react"
 import { useState } from "react"
@@ -6,22 +7,22 @@ import { Link } from "react-router-dom"
 import { Field } from "@/shared/ui/Field"
 import { SubmitButton } from "@/shared/ui/SubmitButton"
 
+import { forgotPassword } from "./auth.api"
 import { AuthLayout } from "./AuthLayout"
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [sent, setSent] = useState(false)
-  const [loading, setLoading] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () => forgotPassword({ email }),
+    // sempre marca como enviado — o backend nunca revela se o email existe
+    onSettled: () => setSent(true),
+  })
 
   const handleSubmit = () => {
     if (!email.trim()) return
-    setLoading(true)
-    // TODO: integrar com endpoint de reset de senha do backend (ainda não existe).
-    // Mensagem neutra para não revelar se o email está cadastrado.
-    setTimeout(() => {
-      setLoading(false)
-      setSent(true)
-    }, 700)
+    mutation.mutate()
   }
 
   if (sent) {
@@ -32,17 +33,17 @@ export function ForgotPasswordPage() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
-          <div className="flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 p-4">
-            <MailCheck className="mt-0.5 size-5 shrink-0 text-ink" strokeWidth={1.75} />
+          <div className="flex items-start gap-3 rounded-xl border border-ink/10 bg-paper-100 dark:bg-ink-800 p-4">
+            <MailCheck className="mt-0.5 size-5 shrink-0 text-ink dark:text-paper" strokeWidth={1.75} />
             <p className="text-sm leading-relaxed text-paper-500">
               Se houver uma conta associada a{" "}
-              <span className="font-medium text-ink">{email}</span>, você receberá
+              <span className="font-medium text-ink dark:text-paper">{email}</span>, você receberá
               um link para redefinir sua senha em instantes.
             </p>
           </div>
           <Link
             to="/login"
-            className="flex items-center justify-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline"
+            className="flex items-center justify-center gap-2 text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline"
           >
             <ArrowLeft className="size-4" /> Voltar para o login
           </Link>
@@ -70,13 +71,13 @@ export function ForgotPasswordPage() {
 
         <SubmitButton
           label="Enviar link"
-          loading={loading}
+          loading={mutation.isPending}
           onClick={handleSubmit}
         />
 
         <Link
           to="/login"
-          className="flex items-center justify-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline"
+          className="flex items-center justify-center gap-2 text-sm font-medium text-ink dark:text-paper underline-offset-4 hover:underline"
         >
           <ArrowLeft className="size-4" /> Voltar para o login
         </Link>

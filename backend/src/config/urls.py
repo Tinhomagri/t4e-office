@@ -15,4 +15,7 @@ urlpatterns = [
     # Contextos
     path("api/auth/", include("contexts.identity.interface.api.urls")),
     path("api/", include("contexts.projects.interface.api.urls")),
+    path("api/copilot/", include("contexts.copilot.interface.api.urls")),
+    path("api/", include("contexts.estimation.interface.api.urls")),
+    path("api/google/", include("contexts.google.interface.api.urls")),
 ]

@@ -1,0 +1,1522 @@
+import {
+  Calendar,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  FileText,
+  Link2,
+  Loader2,
+  MessageSquare,
+  Paperclip,
+  Plus,
+  Send,
+  Square,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import DatePicker, { registerLocale } from "react-datepicker"
+import { ptBR } from "date-fns/locale"
+
+registerLocale("pt-BR", ptBR)
+
+import { useAuthStore } from "@/features/auth/auth.store"
+import {
+  useAddCardComponent,
+  useAddCardVersion,
+  useAttachments,
+  useCardComponents,
+  useCardHistory,
+  useCardLinks,
+  useCardVersions,
+  useCards,
+  useComments,
+  useComponents,
+  useCreateCard,
+  useCreateCardLink,
+  useCreateComment,
+  useCreateWorklog,
+  useCustomFields,
+  useDeleteAttachment,
+  useDeleteCardLink,
+  useDeleteWorklog,
+  useFieldValues,
+  useRemoveCardComponent,
+  useRemoveCardVersion,
+  useUpdateCard,
+  useUploadAttachment,
+  useUpsertFieldValue,
+  useVersions,
+  useWorklogs,
+} from "@/features/workspace/workspace.hooks"
+import type {
+  Attachment,
+  Card,
+  CardHistoryEntry,
+  CardPriority,
+  CardStatus,
+  CardType,
+  Component,
+  CustomField,
+  FieldValue,
+  IssueLink,
+  LinkType,
+  Member,
+  Sprint,
+  Version,
+  Worklog,
+} from "@/features/workspace/workspace.types"
+import { Avatar, Badge, Button, cx, Skeleton } from "@/shared/ui/primitives"
+import { StatusLozenge } from "@/shared/ui/issue"
+import { RichEditor } from "@/shared/ui/RichEditor"
+
+const STATUS_LABEL: Record<CardStatus, string> = {
+  backlog: "Backlog",
+  todo: "A fazer",
+  doing: "Em andamento",
+  review: "Em revisão",
+  done: "Concluído",
+}
+const TYPE_LABEL: Record<CardType, string> = {
+  feature: "Feature",
+  bug: "Bug",
+  debt: "Débito",
+  spike: "Spike",
+  chore: "Tarefa",
+  epic: "Epic",
+}
+const PRIORITY_LABEL: Record<CardPriority, string> = {
+  low: "Baixa",
+  medium: "Média",
+  high: "Alta",
+  urgent: "Urgente",
+}
+const STATUS_TONE: Record<CardStatus, "neutral" | "brand" | "warning" | "success"> = {
+  backlog: "neutral",
+  todo: "neutral",
+  doing: "brand",
+  review: "warning",
+  done: "success",
+}
+
+
+
+
+
+const TYPE_ICON: Record<CardType, string> = {
+  feature: "⚡", bug: "🐛", debt: "💳", spike: "🔬", chore: "🔧", epic: "🏔",
+}
+
+const AVATAR_GRADIENTS = [
+  "from-violet-500 to-purple-700", "from-blue-500 to-indigo-700",
+  "from-emerald-500 to-teal-700", "from-rose-500 to-pink-700",
+  "from-amber-500 to-orange-700", "from-cyan-500 to-sky-700",
+]
+function avatarGradient(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length]
+}
+
+// Drawer de detalhe de card estilo Jira: 2 colunas (conteúdo + painel lateral).
+export function CardDrawer({
+  card,
+  projectId,
+  sprints,
+  members,
+  onClose,
+}: {
+  card: Card | null
+  projectId: string
+  sprints: Sprint[]
+  members: Member[]
+  onClose: () => void
+}) {
+  const updateCard = useUpdateCard(projectId)
+  const [draft, setDraft] = useState<Card | null>(card)
+  const [savedHint, setSavedHint] = useState(false)
+
+  useEffect(() => setDraft(card), [card])
+
+  if (!card || !draft) return null
+
+  const set = <K extends keyof Card>(k: K, v: Card[K]) => setDraft({ ...draft, [k]: v })
+
+  // Salva um campo imediatamente (autosave por campo, como o Jira).
+  const persist = async (patch: Partial<Card>) => {
+    await updateCard.mutateAsync({ cardId: card.id, input: patch })
+    setSavedHint(true)
+    setTimeout(() => setSavedHint(false), 1500)
+  }
+
+  const assignee = members.find((m) => m.user_id === draft.assignee_id)
+  const reporter = members.find((m) => m.user_id === draft.reporter_id)
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-center p-0 sm:p-4">
+      <div
+        className="absolute inset-0 animate-fade-in bg-ink-950/60 backdrop-blur-sm pointer-events-auto"
+        onMouseDown={(e) => {
+          // Fecha apenas se o clique for realmente no overlay (não em inputs/datepicker)
+          if (e.target === e.currentTarget) onClose()
+        }}
+      />
+      <div className="relative z-10 flex h-full w-full max-w-5xl animate-slide-in-right flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl">
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2.5 bg-white dark:bg-ink-900">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge tone="brand" className="font-mono">{card.ref}</Badge>
+
+              <span className={cx(
+                "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1",
+                draft.priority === "urgent"
+                  ? "bg-danger/15 ring-danger/30 text-danger"
+                  : draft.priority === "high"
+                    ? "bg-warning/15 ring-warning/30 text-warning"
+                    : draft.priority === "medium"
+                      ? "bg-brand-50 ring-brand-200 text-brand-700"
+                      : "bg-paper-100 dark:bg-ink-800 ring-paper-200 text-paper-600",
+              )}>
+                <span className={cx(
+                  "size-1.5 rounded-full",
+                  draft.priority === "urgent"
+                    ? "bg-danger"
+                    : draft.priority === "high"
+                      ? "bg-warning"
+                      : draft.priority === "medium"
+                        ? "bg-brand-500"
+                        : "bg-paper-400",
+                )} />
+                {PRIORITY_LABEL[draft.priority]}
+              </span>
+
+              <Badge tone="outline" className="rounded-full">
+                <span className="mr-0.5">{TYPE_ICON[draft.type]}</span>
+                {TYPE_LABEL[draft.type]}
+              </Badge>
+
+              {draft.sprint_id && (
+                <Badge tone="outline" className="rounded-full">
+                  Sprint
+                </Badge>
+              )}
+
+              {savedHint && (
+                <span className="flex items-center gap-1 text-xs font-medium text-success animate-fade-in">
+                  ✓ salvo
+                </span>
+              )}
+
+              {updateCard.isPending && <Loader2 className="size-3.5 animate-spin text-paper-400" />}
+            </div>
+          <button
+            onClick={onClose}
+            className="grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper ml-2 shrink-0"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Corpo: 2 colunas */}
+        <div className="grid flex-1 grid-cols-1 overflow-y-auto scrollbar-slim lg:grid-cols-[1fr_300px]">
+          {/* Coluna principal */}
+          <div className="min-w-0 space-y-6 p-5">
+            <input
+              value={draft.title}
+              onChange={(e) => set("title", e.target.value)}
+              onBlur={() => draft.title !== card.title && persist({ title: draft.title })}
+              className="w-full rounded-lg border border-transparent bg-transparent text-xl font-semibold text-ink dark:text-paper outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
+            />
+
+            <Section title="Descrição">
+              <RichEditor
+                value={draft.description}
+                onChange={(html) => set("description", html)}
+                placeholder="Adicione uma descrição detalhada…"
+              />
+              {draft.description !== card.description && (
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" onClick={() => persist({ description: draft.description })} loading={updateCard.isPending}>
+                    Salvar descrição
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => set("description", card.description)}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </Section>
+
+            <Subtasks parentCard={card} projectId={projectId} />
+
+            <Links card={card} projectId={projectId} />
+
+            <Versions cardId={card.id} projectId={projectId} />
+
+            <Components cardId={card.id} projectId={projectId} />
+
+            <WorklogSection cardId={card.id} />
+
+            <Attachments cardId={card.id} />
+
+            <CustomFields cardId={card.id} projectId={projectId} />
+
+            <Activity cardId={card.id} members={members} />
+          </div>
+
+          {/* Painel lateral de detalhes */}
+          <aside className="space-y-3 border-t border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/50 p-4 lg:border-l lg:border-t-0">
+            <div className="flex items-center gap-2 pb-2 border-b border-paper-200 dark:border-ink-700">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-paper-400 flex-1">
+                Detalhes
+              </p>
+              {card.points != null && (
+                <span className="flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700 ring-1 ring-brand-200">
+                  🃏 {card.points} pts
+                </span>
+              )}
+            </div>
+
+            <DetailRow label="Status">
+              <StatusDropdown
+                value={draft.status}
+                onChange={(v) => {
+                  set("status", v)
+                  persist({ status: v })
+                }}
+              />
+            </DetailRow>
+
+            <DetailRow label="Responsável">
+              <PersonSelect
+                value={draft.assignee_id}
+                members={members}
+                person={assignee}
+                onChange={(v) => {
+                  set("assignee_id", v)
+                  persist({ assignee_id: v })
+                }}
+              />
+            </DetailRow>
+
+            <DetailRow label="Relator">
+              <PersonSelect
+                value={draft.reporter_id}
+                members={members}
+                person={reporter}
+                onChange={(v) => {
+                  set("reporter_id", v)
+                  persist({ reporter_id: v })
+                }}
+              />
+            </DetailRow>
+
+            <DetailSelect
+              label="Tipo"
+              value={draft.type}
+              onChange={(v) => {
+                set("type", v as CardType)
+                persist({ type: v as CardType })
+              }}
+              options={(Object.keys(TYPE_LABEL) as CardType[]).map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
+            />
+
+            <DetailSelect
+              label="Prioridade"
+              value={draft.priority}
+              onChange={(v) => {
+                set("priority", v as CardPriority)
+                persist({ priority: v as CardPriority })
+              }}
+              options={(Object.keys(PRIORITY_LABEL) as CardPriority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))}
+            />
+
+            <DetailRow label="Pontos">
+              <input
+                type="number"
+                min={0}
+                value={draft.points ?? ""}
+                onChange={(e) => set("points", e.target.value === "" ? null : Number(e.target.value))}
+                onBlur={() => draft.points !== card.points && persist({ points: draft.points })}
+                placeholder="—"
+                className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2.5 py-1.5 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+              />
+            </DetailRow>
+
+            <DetailSelect
+              label="Sprint"
+              value={draft.sprint_id ?? ""}
+              onChange={(v) => {
+                set("sprint_id", v || null)
+                persist({ sprint_id: v || null })
+              }}
+              options={[{ value: "", label: "Backlog" }, ...sprints.map((s) => ({ value: s.id, label: s.name }))]}
+            />
+
+            <DetailRow label="Início">
+              <DateInput
+                value={draft.start_date}
+                onChange={(v) => { set("start_date", v); persist({ start_date: v }) }}
+              />
+            </DetailRow>
+
+            <DetailRow label="Prazo">
+              <DateInput
+                value={draft.due_date}
+                onChange={(v) => { set("due_date", v); persist({ due_date: v }) }}
+              />
+            </DetailRow>
+
+            <Labels
+              value={draft.labels ?? []}
+              onChange={(next) => {
+                set("labels", next)
+                persist({ labels: next })
+              }}
+            />
+          </aside>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Subtarefas (cards filhos via parent_id) — hit no backend
+// ---------------------------------------------------------------------------
+function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: string }) {
+  const { data: cards } = useCards(projectId)
+  const createCard = useCreateCard(projectId)
+  const updateCard = useUpdateCard(projectId)
+  const [title, setTitle] = useState("")
+  const [adding, setAdding] = useState(false)
+
+  const children = (cards ?? []).filter((c) => c.parent_id === parentCard.id)
+  const doneN = children.filter((c) => c.status === "done").length
+  const pct = children.length ? Math.round((doneN / children.length) * 100) : 0
+
+  const add = async () => {
+    const t = title.trim()
+    if (!t) return
+    setTitle("")
+    setAdding(false)
+    await createCard.mutateAsync({
+      title: t,
+      type: "chore",
+      parent_id: parentCard.id,
+      sprint_id: parentCard.sprint_id,
+    })
+  }
+
+  const toggle = (c: Card) =>
+    updateCard.mutate({
+      cardId: c.id,
+      input: { status: c.status === "done" ? "todo" : "done" },
+    })
+
+  return (
+    <Section title={`Subtarefas${children.length ? ` (${doneN}/${children.length})` : ""}`}>
+      {children.length > 0 && (
+        <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
+          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <ul className="space-y-1">
+        {children.map((c) => (
+          <li key={c.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+            <button onClick={() => toggle(c)} className="text-paper-400 hover:text-success">
+              {c.status === "done" ? (
+                <CheckSquare className="size-4 text-success" />
+              ) : (
+                <Square className="size-4" />
+              )}
+            </button>
+            <span className="font-mono text-[11px] text-paper-400">{c.ref}</span>
+            <span className={cx("flex-1 truncate text-sm", c.status === "done" ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>
+              {c.title}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {adding ? (
+        <div className="mt-2 flex gap-2">
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false) }}
+            placeholder="Título da subtarefa"
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          />
+          <Button size="sm" onClick={add} loading={createCard.isPending} disabled={!title.trim()}>Adicionar</Button>
+          <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancelar</Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <Plus className="size-4" /> Adicionar subtarefa
+        </button>
+      )}
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Vínculos entre cards (issue links) — hit no backend
+// ---------------------------------------------------------------------------
+const LINK_LABEL: Record<LinkType, { outgoing: string; incoming: string }> = {
+  relates: { outgoing: "Relacionado a", incoming: "Relacionado a" },
+  blocks: { outgoing: "Bloqueia", incoming: "Bloqueado por" },
+  duplicates: { outgoing: "Duplica", incoming: "Duplicado por" },
+}
+
+function Links({ card, projectId }: { card: Card; projectId: string }) {
+  const { data: links } = useCardLinks(card.id)
+  const { data: cards } = useCards(projectId)
+  const createLink = useCreateCardLink(card.id)
+  const deleteLink = useDeleteCardLink(card.id)
+  const [adding, setAdding] = useState(false)
+  const [type, setType] = useState<LinkType>("relates")
+  const [targetId, setTargetId] = useState("")
+
+  const candidates = (cards ?? []).filter(
+    (c) => c.id !== card.id && c.parent_id !== card.id,
+  )
+
+  const add = async () => {
+    if (!targetId) return
+    await createLink.mutateAsync({ target_id: targetId, link_type: type })
+    setTargetId("")
+    setAdding(false)
+  }
+
+  // Agrupa por rótulo direcional.
+  const grouped: Record<string, IssueLink[]> = {}
+  for (const l of links ?? []) {
+    const label = LINK_LABEL[l.link_type][l.direction]
+    ;(grouped[label] ??= []).push(l)
+  }
+
+  return (
+    <Section title="Vínculos">
+      {Object.keys(grouped).length === 0 && !adding && (
+        <p className="text-sm text-paper-400">Nenhum vínculo.</p>
+      )}
+      <div className="space-y-3">
+        {Object.entries(grouped).map(([label, items]) => (
+          <div key={label}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-paper-400">{label}</p>
+            <ul className="space-y-1">
+              {items.map((l) => (
+                <li key={l.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+                  <Link2 className="size-3.5 shrink-0 text-paper-400" />
+                  <span className="font-mono text-[11px] text-paper-400">{l.other_card?.ref}</span>
+                  <span className="flex-1 truncate text-sm text-ink dark:text-paper">{l.other_card?.title ?? "—"}</span>
+                  {l.other_card && (
+                    <Badge tone={STATUS_TONE[l.other_card.status]}>{STATUS_LABEL[l.other_card.status]}</Badge>
+                  )}
+                  <button onClick={() => deleteLink.mutate(l.id)} className="text-paper-300 hover:text-danger">
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      {adding ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as LinkType)}
+            className="rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          >
+            <option value="relates">Relacionado a</option>
+            <option value="blocks">Bloqueia</option>
+            <option value="duplicates">Duplica</option>
+          </select>
+          <select
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
+            className="min-w-[160px] flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          >
+            <option value="">Selecione o card…</option>
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id}>{c.ref} · {c.title}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={add} loading={createLink.isPending} disabled={!targetId}>Vincular</Button>
+          <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancelar</Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <Plus className="size-4" /> Adicionar vínculo
+        </button>
+      )}
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Versões (fix versions do card) — hit no backend
+// ---------------------------------------------------------------------------
+function Versions({ cardId, projectId }: { cardId: string; projectId: string }) {
+  const { data: cardVersions } = useCardVersions(cardId)
+  const { data: allVersions } = useVersions(projectId)
+  const addVersion = useAddCardVersion(cardId)
+  const removeVersion = useRemoveCardVersion(cardId)
+  const [selectedId, setSelectedId] = useState("")
+
+  const assignedIds = new Set((cardVersions ?? []).map((v) => v.id))
+  const available = (allVersions ?? []).filter((v) => !assignedIds.has(v.id))
+
+  const add = async () => {
+    if (!selectedId) return
+    await addVersion.mutateAsync(selectedId)
+    setSelectedId("")
+  }
+
+  return (
+    <Section title="Versões">
+      {(cardVersions ?? []).length === 0 && (
+        <p className="text-sm text-paper-400">Nenhuma versão atribuída.</p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {(cardVersions ?? []).map((v: Version) => (
+          <span
+            key={v.id}
+            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
+          >
+            {v.name}
+            {v.released && <span className="ml-0.5 text-[9px] text-success-600 font-bold">✓</span>}
+            <button
+              onClick={() => removeVersion.mutate(v.id)}
+              className="ml-0.5 text-paper-300 hover:text-danger"
+            >
+              <X className="size-2.5" />
+            </button>
+          </span>
+        ))}
+      </div>
+      {available.length > 0 && (
+        <div className="mt-2 flex gap-2">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          >
+            <option value="">Selecione versão…</option>
+            {available.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={add} loading={addVersion.isPending} disabled={!selectedId}>
+            Adicionar
+          </Button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Componentes do card — hit no backend
+// ---------------------------------------------------------------------------
+function Components({ cardId, projectId }: { cardId: string; projectId: string }) {
+  const { data: cardComponents } = useCardComponents(cardId)
+  const { data: allComponents } = useComponents(projectId)
+  const addComponent = useAddCardComponent(cardId)
+  const removeComponent = useRemoveCardComponent(cardId)
+  const [selectedId, setSelectedId] = useState("")
+
+  const assignedIds = new Set((cardComponents ?? []).map((c) => c.id))
+  const available = (allComponents ?? []).filter((c) => !assignedIds.has(c.id))
+
+  const add = async () => {
+    if (!selectedId) return
+    await addComponent.mutateAsync(selectedId)
+    setSelectedId("")
+  }
+
+  return (
+    <Section title="Componentes">
+      {(cardComponents ?? []).length === 0 && (
+        <p className="text-sm text-paper-400">Nenhum componente atribuído.</p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {(cardComponents ?? []).map((c: Component) => (
+          <span
+            key={c.id}
+            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
+          >
+            {c.name}
+            <button
+              onClick={() => removeComponent.mutate(c.id)}
+              className="ml-0.5 text-paper-300 hover:text-danger"
+            >
+              <X className="size-2.5" />
+            </button>
+          </span>
+        ))}
+      </div>
+      {available.length > 0 && (
+        <div className="mt-2 flex gap-2">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          >
+            <option value="">Selecione componente…</option>
+            {available.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={add} loading={addComponent.isPending} disabled={!selectedId}>
+            Adicionar
+          </Button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Custom Fields — leitura + upsert por campo, hit no backend
+// ---------------------------------------------------------------------------
+function FieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: CustomField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const str = value == null ? "" : String(value)
+
+  switch (field.field_type) {
+    case "text":
+      return (
+        <input
+          value={str}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => onChange(e.target.value)}
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+        />
+      )
+    case "number":
+      return (
+        <input
+          type="number"
+          value={str}
+          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+        />
+      )
+    case "date":
+      return (
+        <input
+          type="date"
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+        />
+      )
+    case "checkbox":
+      return (
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => onChange(e.target.checked)}
+          className="size-4 cursor-pointer rounded accent-brand-500"
+        />
+      )
+    case "select":
+      return (
+        <select
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+        >
+          <option value="">—</option>
+          {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )
+    case "multiselect": {
+      const selected: string[] = Array.isArray(value) ? (value as string[]) : []
+      return (
+        <div className="flex flex-wrap gap-1">
+          {field.options.map((o) => {
+            const active = selected.includes(o)
+            return (
+              <button
+                key={o}
+                onClick={() => onChange(active ? selected.filter((x) => x !== o) : [...selected, o])}
+                className={cx(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium border transition-colors",
+                  active
+                    ? "border-brand-400 bg-brand-50 text-brand-700"
+                    : "border-paper-300 bg-paper dark:bg-ink-900 text-paper-500 hover:border-paper-400",
+                )}
+              >
+                {o}
+              </button>
+            )
+          })}
+        </div>
+      )
+    }
+    default:
+      return <span className="text-sm text-paper-400">—</span>
+  }
+}
+
+function CustomFields({ cardId, projectId }: { cardId: string; projectId: string }) {
+  const { data: fields } = useCustomFields(projectId)
+  const { data: values } = useFieldValues(cardId)
+  const upsert = useUpsertFieldValue(cardId)
+
+  if (!fields || fields.length === 0) return null
+
+  const valueMap = new Map<string, FieldValue>((values ?? []).map((v) => [v.field_id, v]))
+
+  return (
+    <Section title="Campos personalizados">
+      <div className="space-y-2">
+        {fields.map((f: CustomField) => {
+          const fv = valueMap.get(f.id)
+          const current = fv?.value_json ?? null
+          return (
+            <DetailRow key={f.id} label={f.name}>
+              <FieldInput
+                field={f}
+                value={current}
+                onChange={(v) => upsert.mutate({ fieldId: f.id, value: v })}
+              />
+            </DetailRow>
+          )
+        })}
+      </div>
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Attachments (anexos) — upload multipart, hit no backend
+// ---------------------------------------------------------------------------
+function fmtFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileIcon(mime: string) {
+  if (mime.startsWith("image/")) return <Paperclip className="size-4 text-brand-400" />
+  return <FileText className="size-4 text-paper-400" />
+}
+
+function Attachments({ cardId }: { cardId: string }) {
+  const { data: attachments } = useAttachments(cardId)
+  const upload = useUploadAttachment(cardId)
+  const del = useDeleteAttachment(cardId)
+  const user = useAuthStore((s) => s.user)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await upload.mutateAsync(file)
+    if (inputRef.current) inputRef.current.value = ""
+  }
+
+  return (
+    <Section title={`Anexos${(attachments ?? []).length > 0 ? ` (${attachments!.length})` : ""}`}>
+      {(attachments ?? []).length === 0 && !upload.isPending && (
+        <p className="text-sm text-paper-400">Nenhum anexo.</p>
+      )}
+      <ul className="mb-2 space-y-1.5">
+        {(attachments ?? []).map((a: Attachment) => (
+          <li key={a.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+            {fileIcon(a.mime_type)}
+            <div className="min-w-0 flex-1">
+              {a.url ? (
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate text-sm font-medium text-brand-600 hover:underline"
+                >
+                  {a.filename}
+                </a>
+              ) : (
+                <span className="truncate text-sm font-medium text-ink dark:text-paper">{a.filename}</span>
+              )}
+              <p className="text-[11px] text-paper-400">
+                {fmtFileSize(a.size)} · {fmtDateTime(a.created_at)}
+              </p>
+            </div>
+            {a.author_id === user?.id && (
+              <button
+                onClick={() => del.mutate(a.id)}
+                className="shrink-0 text-paper-300 hover:text-danger"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            )}
+          </li>
+        ))}
+        {upload.isPending && (
+          <li className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5 text-sm text-paper-400">
+            <Loader2 className="size-4 animate-spin" /> Enviando…
+          </li>
+        )}
+      </ul>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFile}
+      />
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={upload.isPending}
+        className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+      >
+        <Paperclip className="size-4" /> Anexar arquivo
+      </button>
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Worklogs (registro de tempo) — hit no backend
+// ---------------------------------------------------------------------------
+function fmtDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+function parseDuration(input: string): number | null {
+  // aceita: "1h30m", "90m", "2h", "3600"
+  const trimmed = input.trim().toLowerCase()
+  const full = trimmed.match(/^(\d+)h\s*(\d+)m$/)
+  if (full) return parseInt(full[1]) * 3600 + parseInt(full[2]) * 60
+  const hoursOnly = trimmed.match(/^(\d+)h$/)
+  if (hoursOnly) return parseInt(hoursOnly[1]) * 3600
+  const minsOnly = trimmed.match(/^(\d+)m$/)
+  if (minsOnly) return parseInt(minsOnly[1]) * 60
+  const secsOnly = trimmed.match(/^\d+$/)
+  if (secsOnly) return parseInt(trimmed)
+  return null
+}
+
+function WorklogSection({ cardId }: { cardId: string }) {
+  const { data: worklogs } = useWorklogs(cardId)
+  const createWorklog = useCreateWorklog(cardId)
+  const deleteWorklog = useDeleteWorklog(cardId)
+  const user = useAuthStore((s) => s.user)
+
+  const [adding, setAdding] = useState(false)
+  const [timeInput, setTimeInput] = useState("")
+  const [comment, setComment] = useState("")
+
+  const total = (worklogs ?? []).reduce((acc, w) => acc + w.time_seconds, 0)
+
+  const save = async () => {
+    const secs = parseDuration(timeInput)
+    if (!secs || secs <= 0) return
+    await createWorklog.mutateAsync({ time_seconds: secs, comment: comment.trim() || undefined })
+    setTimeInput("")
+    setComment("")
+    setAdding(false)
+  }
+
+  return (
+    <Section title={`Registro de tempo${total > 0 ? ` · ${fmtDuration(total)}` : ""}`}>
+      {(worklogs ?? []).length === 0 && !adding && (
+        <p className="text-sm text-paper-400">Nenhum registro.</p>
+      )}
+      {(worklogs ?? []).length > 0 && (
+        <ul className="mb-2 space-y-1.5">
+          {(worklogs ?? []).map((w: Worklog) => (
+            <li key={w.id} className="flex items-start gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+              <Avatar initials={initials(w.author_name)} size="sm" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-ink dark:text-paper">{fmtDuration(w.time_seconds)}</span>
+                  <span className="text-[11px] text-paper-400">por {w.author_name}</span>
+                  <span className="text-[11px] text-paper-400">· {fmtDateTime(w.started_at)}</span>
+                </div>
+                {w.comment && <p className="text-[13px] text-paper-600">{w.comment}</p>}
+              </div>
+              {w.author_id === user?.id && (
+                <button
+                  onClick={() => deleteWorklog.mutate(w.id)}
+                  className="text-paper-300 hover:text-danger"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {adding ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={timeInput}
+              onChange={(e) => setTimeInput(e.target.value)}
+              placeholder="ex: 1h30m, 45m, 2h"
+              className="w-32 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            />
+            <input
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Comentário (opcional)"
+              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save} loading={createWorklog.isPending} disabled={!timeInput.trim()}>
+              Registrar
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setTimeInput(""); setComment("") }}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="mt-1 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <Plus className="size-4" /> Registrar tempo
+        </button>
+      )}
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Labels (chips editáveis no card)
+// ---------------------------------------------------------------------------
+function Labels({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const [input, setInput] = useState("")
+
+  const add = () => {
+    const t = input.trim().toLowerCase()
+    if (!t || value.includes(t)) { setInput(""); return }
+    onChange([...value, t])
+    setInput("")
+  }
+  const remove = (l: string) => onChange(value.filter((x) => x !== l))
+
+  return (
+    <DetailRow label="Labels">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {value.map((l) => (
+          <span key={l} className="flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+            <Tag className="size-2.5" />
+            {l}
+            <button onClick={() => remove(l)} className="text-brand-400 hover:text-brand-700">
+              <X className="size-2.5" />
+            </button>
+          </span>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add() } }}
+          onBlur={add}
+          placeholder="+ label"
+          className="w-20 bg-transparent text-xs text-ink dark:text-paper outline-none placeholder-paper-400"
+        />
+      </div>
+    </DetailRow>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Atividade / comentários (hit no backend)
+// ---------------------------------------------------------------------------
+const FIELD_LABEL: Record<string, string> = {
+  title: "Título",
+  status: "Status",
+  type: "Tipo",
+  priority: "Prioridade",
+  points: "Pontos",
+  assignee_id: "Responsável",
+  reporter_id: "Relator",
+  sprint_id: "Sprint",
+  start_date: "Início",
+  due_date: "Prazo",
+  parent_id: "Card pai",
+  labels: "Labels",
+}
+// Campos cujo valor é um id/uuid — não mostrar o valor cru.
+const OPAQUE_FIELDS = new Set([
+  "assignee_id",
+  "reporter_id",
+  "sprint_id",
+  "parent_id",
+])
+
+function HistoryLine({ h }: { h: CardHistoryEntry }) {
+  const label = FIELD_LABEL[h.field] ?? h.field
+  const opaque = OPAQUE_FIELDS.has(h.field)
+  return (
+    <li className="flex gap-2.5">
+      <Avatar initials={initials(h.author_name)} size="sm" />
+      <div className="min-w-0 flex-1 pt-0.5 text-[13px] text-paper-600">
+        <span className="font-medium text-ink dark:text-paper">{h.author_name || "Alguém"}</span>{" "}
+        alterou <span className="font-medium">{label}</span>
+        {opaque ? (
+          ""
+        ) : (
+          <>
+            {": "}
+            <span className="text-paper-400 line-through">{h.old_value || "—"}</span>{" "}
+            → <span className="text-ink dark:text-paper">{h.new_value || "—"}</span>
+          </>
+        )}
+        <span className="ml-1.5 text-[11px] text-paper-400">{fmtDateTime(h.created_at)}</span>
+      </div>
+    </li>
+  )
+}
+
+function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
+  const user = useAuthStore((s) => s.user)
+  const { data: comments, isLoading } = useComments(cardId)
+  const { data: history } = useCardHistory(cardId)
+  const createComment = useCreateComment(cardId)
+  const [body, setBody] = useState("")
+  // Menções: ids coletados ao escolher um membro no autocomplete @.
+  const [mentionIds, setMentionIds] = useState<string[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  // Filtro + paginação da atividade (evita o card crescer demais com histórico).
+  const [filter, setFilter] = useState<"all" | "comment" | "history">("all")
+  const PAGE = 8
+  const [visible, setVisible] = useState(PAGE)
+
+  // Membros que casam com o texto após "@".
+  const mentionMatches =
+    mentionQuery == null
+      ? []
+      : members
+          .filter((m) => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+          .slice(0, 6)
+
+  const onBodyChange = (value: string) => {
+    setBody(value)
+    // Detecta token de menção logo antes do cursor: "@palavra".
+    const m = value.match(/@([\p{L}\d ]{0,20})$/u)
+    setMentionQuery(m ? m[1] : null)
+  }
+
+  const pickMention = (member: Member) => {
+    // Substitui o "@query" pendente por "@Nome ".
+    const next = body.replace(/@([\p{L}\d ]{0,20})$/u, `@${member.name} `)
+    setBody(next)
+    setMentionQuery(null)
+    setMentionIds((ids) => (ids.includes(member.user_id) ? ids : [...ids, member.user_id]))
+  }
+
+  // Linha do tempo combinada: comentários + histórico, por data.
+  type Item =
+    | { kind: "comment"; at: string; data: NonNullable<typeof comments>[number] }
+    | { kind: "history"; at: string; data: CardHistoryEntry }
+  const timeline: Item[] = [
+    ...(comments ?? []).map((c) => ({ kind: "comment" as const, at: c.created_at, data: c })),
+    ...(history ?? []).map((h) => ({ kind: "history" as const, at: h.created_at, data: h })),
+  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
+  const nComments = comments?.length ?? 0
+  const nHistory = history?.length ?? 0
+  const filtered = timeline.filter((i) => filter === "all" || i.kind === filter)
+  // Mostra as N mais recentes; "ver mais" expande para as antigas (paginação).
+  const hidden = Math.max(0, filtered.length - visible)
+  const displayed = hidden > 0 ? filtered.slice(-visible) : filtered
+
+  const TABS: { id: typeof filter; label: string; count: number }[] = [
+    { id: "all", label: "Tudo", count: timeline.length },
+    { id: "comment", label: "Comentários", count: nComments },
+    { id: "history", label: "Histórico", count: nHistory },
+  ]
+
+  const submit = async () => {
+    const t = body.trim()
+    if (!t) return
+    // Só envia ids cujo nome ainda aparece no corpo final.
+    const mentions = mentionIds.filter((id) => {
+      const member = members.find((m) => m.user_id === id)
+      return member ? t.includes(`@${member.name}`) : false
+    })
+    setBody("")
+    setMentionIds([])
+    setMentionQuery(null)
+    await createComment.mutateAsync({ body: t, mentions })
+  }
+
+  return (
+    <Section title="Atividade">
+      <div className="space-y-3">
+        {/* Caixa de novo comentário */}
+        <div className="flex gap-2.5">
+          <Avatar initials={initials(user?.full_name)} size="sm" />
+            <div className="relative min-w-0 flex-1">
+            <textarea
+              value={body}
+              onChange={(e) => onBodyChange(e.target.value)}
+              placeholder="Adicionar comentário…  (use @ para mencionar)"
+              rows={2}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setMentionQuery(null)
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit()
+              }}
+              className="w-full resize-y rounded-lg border border-paper-300 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-brand-400 placeholder-paper-400 dark:placeholder-paper-500"
+            />
+            {/* Autocomplete de menções */}
+            {mentionMatches.length > 0 && (
+              <ul className="absolute left-0 top-full z-20 mt-1 max-h-52 w-64 overflow-auto rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1 shadow-pop">
+                {mentionMatches.map((m) => (
+                  <li key={m.user_id}>
+                    <button
+                      type="button"
+                      onClick={() => pickMention(m)}
+                      className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink dark:text-paper hover:bg-paper-100 dark:hover:bg-ink-700"
+                    >
+                      <Avatar initials={initials(m.name)} size="sm" />
+                      <span className="truncate">{m.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-1.5 flex items-center gap-2">
+              <Button size="sm" icon={<Send className="size-3.5" />} onClick={submit} loading={createComment.isPending} disabled={!body.trim()}>
+                Comentar
+              </Button>
+              <span className="text-[11px] text-paper-400">⌘/Ctrl + Enter</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtro da atividade (Tudo / Comentários / Histórico) */}
+        {!isLoading && timeline.length > 0 && (
+          <div className="flex items-center gap-1 border-b border-paper-200 dark:border-ink-700 pb-2">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setFilter(t.id)
+                  setVisible(PAGE)
+                }}
+                className={cx(
+                  "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
+                  filter === t.id
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
+                )}
+              >
+                {t.label}
+                <span className="ml-1 text-[10px] text-paper-400">{t.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Linha do tempo (estilo Jira: ícone + tipo) */}
+        {isLoading ? (
+          <ul className="space-y-3" aria-hidden>
+            {[0, 1].map((i) => (
+              <li key={i} className="flex gap-2.5">
+                <Skeleton className="size-7 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : timeline.length === 0 ? (
+          <p className="flex items-center gap-2 py-3 text-sm text-paper-400">
+            <MessageSquare className="size-4" /> Nenhuma atividade ainda.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {hidden > 0 && (
+              <li className="flex justify-center">
+                <button
+                  onClick={() => setVisible((v) => v + PAGE)}
+                  className="rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-1 text-[12px] font-medium text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
+                >
+                  Ver mais antigas ({hidden})
+                </button>
+              </li>
+            )}
+            {displayed.map((item) =>
+              item.kind === "comment" ? (
+                <li key={`c-${item.data.id}`} className="flex gap-2.5">
+                  <Avatar initials={initials(item.data.author_name)} size="sm" />
+                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2">
+                    <div className="mb-0.5 flex items-center gap-2">
+                      <Badge tone="outline" className="rounded-full px-2 py-0.5 text-[10px]">
+                        Comentário
+                      </Badge>
+                      <span className="text-[13px] font-medium text-ink dark:text-paper">{item.data.author_name}</span>
+                      <span className="text-[11px] text-paper-400">{fmtDateTime(item.data.created_at)}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm text-ink dark:text-paper">
+                      <MentionText text={item.data.body} members={members} />
+                    </p>
+                  </div>
+                </li>
+              ) : (
+                <div key={`h-${item.data.id}`} className="flex gap-2.5">
+                  <div className="pt-0.5">
+                    <Avatar initials={initials(item.data.author_name)} size="sm" />
+                  </div>
+                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2">
+                    <div className="mb-0.5 flex items-center gap-2">
+                      <Badge tone="outline" className="rounded-full px-2 py-0.5 text-[10px]">
+                        Alteração
+                      </Badge>
+                      <span className="text-[13px] font-medium text-ink dark:text-paper">{item.data.author_name || "Alguém"}</span>
+                      <span className="text-[11px] text-paper-400">{fmtDateTime(item.data.created_at)}</span>
+                    </div>
+                    <div className="mt-2">
+                      <HistoryLine h={item.data} />
+                    </div>
+                  </div>
+                </div>
+              ),
+            )}
+          </ul>
+        )}
+      </div>
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Auxiliares de UI
+// ---------------------------------------------------------------------------
+// Dropdown de status estilo Jira: lozenge atual + menu de transições coloridas.
+const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"]
+
+function StatusDropdown({
+  value,
+  onChange,
+}: {
+  value: CardStatus
+  onChange: (v: CardStatus) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1 transition-colors hover:border-paper-300 dark:hover:border-ink-600 focus-ring"
+      >
+        <StatusLozenge status={value} />
+        <ChevronDown className="size-3.5 text-paper-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <ul className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1 shadow-pop">
+            {STATUS_ORDER.map((s) => (
+              <li key={s}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    if (s !== value) onChange(s)
+                  }}
+                  className={cx(
+                    "flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-paper-100 dark:hover:bg-ink-700",
+                    s === value && "bg-paper-50 dark:bg-ink-900",
+                  )}
+                >
+                  <StatusLozenge status={s} />
+                  {s === value && <Check className="ml-auto size-3.5 text-brand-500" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Realça @menções de membros conhecidos no corpo do comentário.
+function MentionText({ text, members }: { text: string; members: Member[] }) {
+  if (members.length === 0) return <>{text}</>
+  const names = [...members].sort((a, b) => b.name.length - a.name.length)
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const re = new RegExp(`@(${names.map((m) => esc(m.name)).join("|")})`, "g")
+  const parts = text.split(re)
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <span key={i} className="rounded bg-brand-50 px-1 font-medium text-brand-700">
+            @{part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-paper-500">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[96px_1fr] items-start gap-2 py-1">
+      <span className="pt-1.5 text-[11px] font-medium text-paper-500 leading-tight">{label}</span>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
+function DetailSelect({
+  label,
+  value,
+  onChange,
+  options,
+  renderValue,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  renderValue?: React.ReactNode
+}) {
+  return (
+    <DetailRow label={label}>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-2.5 pr-7 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value} className="text-ink dark:text-paper">
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {renderValue && (
+          <div className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center">{renderValue}</div>
+        )}
+      </div>
+    </DetailRow>
+  )
+}
+
+function PersonSelect({
+  value,
+  members,
+  person,
+  onChange,
+}: {
+  value: string | null
+  members: Member[]
+  person?: Member
+  onChange: (v: string | null) => void
+}) {
+  return (
+    <div className="relative flex items-center gap-2">
+      {person ? (
+        <span
+          className={cx(
+            "grid size-6 place-items-center rounded-full bg-gradient-to-br font-semibold text-white text-[9px] ring-1 ring-inset ring-white/20 shrink-0",
+            avatarGradient(person.name),
+          )}
+        >
+          {initials(person.name)}
+        </span>
+      ) : (
+        <span className="grid size-6 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 shrink-0">
+          ?
+        </span>
+      )}
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+      >
+        <option value="">Ninguém</option>
+        {members.map((m) => (
+          <option key={m.user_id} value={m.user_id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function DateInput({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const selected = value ? new Date(value + "T12:00:00") : null
+
+  return (
+    <div className="relative flex items-center group date-input-wrapper">
+      <Calendar className="pointer-events-none absolute left-3 z-10 size-4 text-paper-400 transition-colors group-hover:text-paper-500 group-focus-within:text-brand-400" />
+      <DatePicker
+        selected={selected}
+        onChange={(date: Date | null) => onChange(date ? date.toISOString().slice(0, 10) : null)}
+        locale="pt-BR"
+        dateFormat="dd/MM/yyyy"
+        placeholderText="dd/mm/aaaa"
+        popperPlacement="bottom-start"
+        withPortal={false}
+        className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-9 pr-3 text-sm text-ink dark:text-paper outline-none transition-colors hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20"
+        isClearable
+        clearButtonTitle="Limpar"
+        wrapperClassName="w-full"
+      />
+    </div>
+  )
+}
+
+function initials(name?: string) {
+  if (!name) return "?"
+  return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
+}
+
+function fmtDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
+}

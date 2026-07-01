@@ -19,6 +19,10 @@ class ProjectRepository(ABC):
     def list_by_workspace(self, *, workspace_id: str) -> list[Project]:
         """Lista projetos de um workspace."""
 
+    @abstractmethod
+    def get(self, *, project_id: str) -> Project | None:
+        """Busca um projeto por id (ou None)."""
+
 
 class WorkspaceAccess(ABC):
     """Porta para verificar acesso do usuário ao workspace (cross-context)."""

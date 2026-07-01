@@ -1,0 +1,61 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
+import * as pokerApi from "./poker.api"
+
+export function useSession(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["poker-session", sessionId],
+    queryFn: () => pokerApi.getSession(sessionId!),
+    enabled: !!sessionId,
+    refetchInterval: 2000, // polling 2s
+  })
+}
+
+export function usePokerCards(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["poker-cards", sessionId],
+    queryFn: () => pokerApi.getPokerCards(sessionId!),
+    enabled: !!sessionId,
+  })
+}
+
+export function useHeartbeat(sessionId: string | null) {
+  useEffect(() => {
+    if (!sessionId) return
+    pokerApi.heartbeat(sessionId)
+    const timer = setInterval(() => pokerApi.heartbeat(sessionId), 10_000)
+    return () => clearInterval(timer)
+  }, [sessionId])
+}
+
+export function useCreateSession(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, name }: { projectId: string; name: string }) =>
+      pokerApi.createSession(workspaceId!, projectId, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-sessions"] }),
+  })
+}
+
+export function useJoinSession(sessionId: string | null) {
+  return useMutation({
+    mutationFn: () => pokerApi.joinSession(sessionId!),
+  })
+}
+
+export function useSubmitVote(sessionId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (value: string) => pokerApi.submitVote(sessionId!, value),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-session", sessionId] }),
+  })
+}
+
+export function useUpdateSession(sessionId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: { status?: string; current_card_id?: string | null; card_ids?: string[] }) =>
+      pokerApi.updateSession(sessionId!, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-session", sessionId] }),
+  })
+}
