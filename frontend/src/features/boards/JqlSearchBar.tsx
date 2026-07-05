@@ -6,6 +6,10 @@ import type { Card } from "@/features/workspace/workspace.types"
 interface JqlSearchBarProps {
   projectId: string | null
   onResults: (cards: Card[] | null) => void
+  // JQL vinda de fora (chips de quick filter). Null limpa a busca.
+  externalJql?: string | null
+  // Notifica o JQL atualmente aplicado (para "salvar filtro").
+  onCommittedChange?: (jql: string) => void
 }
 
 const QUICK_FILTERS = [
@@ -17,7 +21,7 @@ const QUICK_FILTERS = [
   { label: "Bugs", jql: 'type = bug' },
 ]
 
-export function JqlSearchBar({ projectId, onResults }: JqlSearchBarProps) {
+export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedChange }: JqlSearchBarProps) {
   const [raw, setRaw] = useState("")
   const [committed, setCommitted] = useState("")
   const [showQuick, setShowQuick] = useState(false)
@@ -34,6 +38,24 @@ export function JqlSearchBar({ projectId, onResults }: JqlSearchBarProps) {
       onResults(data)
     }
   }, [data, isFetching, committed, onResults])
+
+  useEffect(() => {
+    onCommittedChange?.(committed)
+  }, [committed, onCommittedChange])
+
+  // Chips de quick filter injetam JQL aqui; null/"" limpa.
+  useEffect(() => {
+    if (externalJql === undefined) return
+    if (externalJql === null || externalJql === "") {
+      setRaw("")
+      setCommitted("")
+      onResults(null)
+    } else {
+      setRaw(externalJql)
+      setCommitted(externalJql)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalJql])
 
   function submit(jql: string) {
     setRaw(jql)

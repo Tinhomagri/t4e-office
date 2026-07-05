@@ -39,3 +39,35 @@ class DocumentModel(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+
+class WorkspaceAiConfigModel(models.Model):
+    """Configuração de IA por workspace (provedor + chave cifrada — BYO key)."""
+
+    PROVIDER_CHOICES = [
+        ("anthropic", "Anthropic (Claude)"),
+        ("openai", "OpenAI"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.OneToOneField(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="ai_config"
+    )
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default="anthropic")
+    model = models.CharField(max_length=80, blank=True, default="")
+    # Chave cifrada com Fernet — nunca exposta em texto puro pela API.
+    api_key_encrypted = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    updated_by = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "copilot_ai_config"
+        verbose_name = "Configuração de IA"
+        verbose_name_plural = "Configurações de IA"
+
+    def __str__(self) -> str:
+        return f"{self.provider} @ {self.workspace_id}"

@@ -59,3 +59,52 @@ export function useUpdateSession(sessionId: string | null) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-session", sessionId] }),
   })
 }
+
+// ---- Sala a partir do projeto/board ----
+export function useProjectSessions(projectId: string | null) {
+  return useQuery({
+    queryKey: ["poker-sessions", "project", projectId],
+    queryFn: () => pokerApi.listProjectSessions(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useCreateProjectSession(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input?: { name?: string; card_ids?: string[] }) =>
+      pokerApi.createProjectSession(projectId!, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-sessions", "project", projectId] }),
+  })
+}
+
+export function useRounds(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["poker-rounds", sessionId],
+    queryFn: () => pokerApi.getRounds(sessionId!),
+    enabled: !!sessionId,
+  })
+}
+
+export function usePokerSummary(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["poker-summary", workspaceId],
+    queryFn: () => pokerApi.getWorkspaceSummary(workspaceId!),
+    enabled: !!workspaceId,
+  })
+}
+
+export function useApplyPoints(sessionId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (points: number) => pokerApi.applyPoints(sessionId!, points),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["poker-session", sessionId] })
+      // Sem isso o card aplicado ficava com pontos/estado velhos na barra lateral
+      // até um F5 — a UI parecia travada ("Votando" grudado, pontos sumidos).
+      qc.invalidateQueries({ queryKey: ["poker-cards", sessionId] })
+      qc.invalidateQueries({ queryKey: ["cards"] })
+      qc.invalidateQueries({ queryKey: ["poker-rounds", sessionId] })
+    },
+  })
+}

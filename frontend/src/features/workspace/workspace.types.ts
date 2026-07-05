@@ -39,13 +39,18 @@ export interface Card {
   start_date: string | null
   due_date: string | null
   order: number
+  rank: string
   parent_id: string | null
+  epic_id: string | null
+  epic_color: string
   labels: string[]
   // Contadores para densidade do card (anotados pelo backend).
   comments_count?: number
   attachments_count?: number
   subtasks_count?: number
   subtasks_done?: number
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface Comment {
@@ -76,6 +81,8 @@ export interface Sprint {
   start_date: string | null
   end_date: string | null
   status: SprintStatus
+  started_at?: string | null
+  completed_at?: string | null
 }
 
 export type LinkType = "relates" | "blocks" | "duplicates"
@@ -134,6 +141,8 @@ export interface CreateCardInput {
   start_date?: string | null
   due_date?: string | null
   parent_id?: string | null
+  epic_id?: string | null
+  epic_color?: string
   labels?: string[]
 }
 
@@ -181,6 +190,60 @@ export interface UpdateWorkflowStatusInput {
   category?: WorkflowCategory
   color?: string
   order?: number
+}
+
+export interface SavedFilter {
+  id: string
+  project_id: string
+  owner_id: string
+  name: string
+  jql: string
+  shared: boolean
+}
+
+export interface CreateSavedFilterInput {
+  name: string
+  jql: string
+  shared?: boolean
+}
+
+// Documento colaborativo do projeto (aba Documentos) — persistido no
+// servidor e visível para todo o time (não é mais um protótipo local).
+export interface DocumentSummary {
+  id: string
+  project_id: string
+  title: string
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentDetail extends DocumentSummary {
+  content: string
+}
+
+export interface CreateDocumentInput {
+  title?: string
+  content?: string
+}
+
+export interface UpdateDocumentInput {
+  title?: string
+  content?: string
+}
+
+// Entrada do feed de atividade recente do projeto (aba Resumo, estilo Jira).
+export interface ActivityEntry {
+  id: string
+  card_ref: string
+  card_title: string
+  field: string
+  old_value: string
+  new_value: string
+  author_id: string | null
+  author_name: string
+  created_at: string
 }
 
 export type CustomFieldType = "text" | "number" | "date" | "select" | "multiselect" | "checkbox" | "user"

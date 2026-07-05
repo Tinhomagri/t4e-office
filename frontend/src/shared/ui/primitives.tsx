@@ -212,7 +212,7 @@ export function Modal({
   description?: string
   footer?: ReactNode
   children: ReactNode
-  size?: "md" | "lg"
+  size?: "md" | "lg" | "xl"
 }) {
   if (!open) return null
   return (
@@ -224,7 +224,7 @@ export function Modal({
       <div
         className={cx(
           "relative z-10 max-h-[90vh] w-full animate-scale-in overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-pop",
-          size === "lg" ? "max-w-2xl" : "max-w-md",
+          size === "xl" ? "max-w-4xl" : size === "lg" ? "max-w-2xl" : "max-w-md",
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-paper-200 dark:border-ink-700 px-5 py-4">

@@ -16,7 +16,9 @@ from contexts.projects.interface.api.extra_views import (
     CardComponentView, CardVersionView,
     ComponentDetailView, ComponentListCreateView,
     CustomFieldDetailView, CustomFieldListCreateView,
-    IssueFieldValueView,
+    DocumentDetailView, DocumentListCreateView,
+    IssueFieldValueView, ProjectActivityView,
+    SavedFilterDetailView, SavedFilterListCreateView,
     VersionDetailView, VersionListCreateView,
     WorkflowStatusDetailView, WorkflowStatusListCreateView,
     WorklogDetailView, WorklogListCreateView,
@@ -32,6 +34,13 @@ from contexts.projects.interface.api.automation_views import (
     AutomationRuleListCreateView,
     AutomationRuleRunView,
     AutomationRunLogView,
+)
+from contexts.projects.interface.api.agile_views import (
+    CardChildrenView,
+    CardRankView,
+    EpicListView,
+    SprintCompleteView,
+    SprintStartView,
 )
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
 from contexts.projects.interface.api.reports_views import ProjectReportsView
@@ -71,6 +80,11 @@ urlpatterns = [
         name="sprint-list-create",
     ),
     path("sprints/<uuid:sprint_id>/", SprintDetailView.as_view(), name="sprint-detail"),
+    path("sprints/<uuid:sprint_id>/start/", SprintStartView.as_view(), name="sprint-start"),
+    path("sprints/<uuid:sprint_id>/complete/", SprintCompleteView.as_view(), name="sprint-complete"),
+    path("projects/<uuid:project_id>/epics/", EpicListView.as_view(), name="epic-list"),
+    path("cards/<uuid:card_id>/rank/", CardRankView.as_view(), name="card-rank"),
+    path("cards/<uuid:card_id>/children/", CardChildrenView.as_view(), name="card-children"),
     path("projects/<uuid:project_id>/reports/", ProjectReportsView.as_view(), name="project-reports"),
     path("projects/<uuid:project_id>/my-permissions/", MyProjectPermissionsView.as_view(), name="my-permissions"),
     # Versions
@@ -94,6 +108,14 @@ urlpatterns = [
     # Workflow statuses
     path("projects/<uuid:project_id>/workflow-statuses/", WorkflowStatusListCreateView.as_view(), name="workflow-status-list"),
     path("workflow-statuses/<uuid:status_id>/", WorkflowStatusDetailView.as_view(), name="workflow-status-detail"),
+    # Saved filters (quick filters do board)
+    path("projects/<uuid:project_id>/saved-filters/", SavedFilterListCreateView.as_view(), name="saved-filter-list"),
+    path("saved-filters/<uuid:filter_id>/", SavedFilterDetailView.as_view(), name="saved-filter-detail"),
+    # Documents (aba Documentos)
+    path("projects/<uuid:project_id>/documents/", DocumentListCreateView.as_view(), name="document-list"),
+    path("documents/<uuid:document_id>/", DocumentDetailView.as_view(), name="document-detail"),
+    # Activity feed (aba Resumo)
+    path("projects/<uuid:project_id>/activity/", ProjectActivityView.as_view(), name="project-activity"),
     # Notifications
     path("notifications/", NotificationListView.as_view(), name="notification-list"),
     path("notifications/stream/", NotificationStreamView.as_view(), name="notification-stream"),

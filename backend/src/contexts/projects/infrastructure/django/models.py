@@ -50,6 +50,9 @@ class SprintModel(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="planned")
+    # Timestamps do ciclo de vida (iniciar/concluir sprint, como no Jira)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -130,10 +133,23 @@ class CardModel(models.Model):
         blank=True,
         related_name="subtasks",
     )
+    # Épico ao qual o card pertence (hierarquia Jira: Épico → Story/Task → Subtask).
+    # Sempre aponta para um card com type="epic"; validado na camada de aplicação.
+    epic = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="epic_children",
+    )
+    # Cor do épico (só faz sentido quando type="epic") — paleta Atlassian.
+    epic_color = models.CharField(max_length=7, blank=True, default="")
     labels = models.JSONField(default=list, blank=True)
     start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     order = models.IntegerField(default=0, help_text="Ordem dentro da coluna")
+    # Rank lexicográfico (Lexorank) — ordenação estável no backlog/board sem renumerar.
+    rank = models.CharField(max_length=64, blank=True, default="", db_index=True)
     # Procedência: marca cards criados pela IA do copiloto (Fase 2)
     source = models.CharField(max_length=20, default="manual")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -143,7 +159,7 @@ class CardModel(models.Model):
         db_table = "projects_card"
         verbose_name = "Card"
         verbose_name_plural = "Cards"
-        ordering = ["status", "order", "number"]
+        ordering = ["status", "rank", "order", "number"]
         constraints = [
             models.UniqueConstraint(
                 fields=["project", "number"], name="unique_project_card_number"
@@ -402,6 +418,51 @@ class WorkflowStatusModel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.project.key}/{self.slug}"
+
+
+class SavedFilterModel(models.Model):
+    """Filtro salvo (JQL) por projeto — chips de quick filter estilo Jira."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        ProjectModel, on_delete=models.CASCADE, related_name="saved_filters"
+    )
+    owner_id = models.UUIDField(db_index=True)
+    name = models.CharField(max_length=80)
+    jql = models.TextField()
+    shared = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "projects_saved_filter"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.project.key} / {self.name}"
+
+
+class DocumentModel(models.Model):
+    """Documento colaborativo do projeto (aba Documentos) — conteúdo rich-text
+    em HTML, persistido no servidor e visível para todo o time do projeto
+    (estilo Google Docs / Word: um só documento, compartilhado, não local)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        ProjectModel, on_delete=models.CASCADE, related_name="documents"
+    )
+    title = models.CharField(max_length=200, blank=True, default="Sem título")
+    content = models.TextField(blank=True, default="")
+    created_by = models.UUIDField()
+    updated_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "projects_document"
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"{self.project.key} / {self.title}"
 
 
 class NotificationModel(models.Model):

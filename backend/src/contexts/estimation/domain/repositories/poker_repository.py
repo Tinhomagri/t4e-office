@@ -20,6 +20,9 @@ class PokerSessionRepository(ABC):
     @abstractmethod
     def list_by_workspace(self, workspace_id: str) -> list[PokerSession]: ...
 
+    @abstractmethod
+    def list_by_project(self, project_id: str) -> list[PokerSession]: ...
+
 
 class PokerParticipantRepository(ABC):
     @abstractmethod

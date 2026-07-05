@@ -60,8 +60,13 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "start_date": card.start_date,
         "due_date": card.due_date,
         "order": card.order,
+        "rank": card.rank,
         "parent_id": card.parent_id,
+        "epic_id": card.epic_id,
+        "epic_color": card.epic_color,
         "labels": card.labels,
+        "created_at": card.created_at.isoformat() if card.created_at else None,
+        "updated_at": card.updated_at.isoformat() if card.updated_at else None,
     }
 
 
@@ -141,7 +146,10 @@ class CardListCreateView(APIView):
                     "start_date": cm.start_date,
                     "due_date": cm.due_date,
                     "order": cm.order,
+                    "rank": cm.rank,
                     "parent_id": str(cm.parent_id) if cm.parent_id else None,
+                    "epic_id": str(cm.epic_id) if cm.epic_id else None,
+                    "epic_color": cm.epic_color,
                     "labels": cm.labels or [],
                 })
             return Response(CardSerializer(rows, many=True).data)
@@ -166,6 +174,10 @@ class CardListCreateView(APIView):
         projects, cards, access = _deps()
         use_case = CreateCard(projects, cards, access)
         data = dict(serializer.validated_data)
+        # Épico informado precisa existir, ser do tipo épico e do mesmo projeto.
+        if data.get("epic_id"):
+            from contexts.projects.interface.api.agile_views import assert_valid_epic
+            assert_valid_epic(project_id=str(project_id), epic_id=data["epic_id"])
         # Relator padrão = quem criou (como no Jira), se não informado.
         data.setdefault("reporter_id", str(request.user.id))
         card = use_case.execute(
@@ -197,6 +209,14 @@ class CardDetailView(APIView):
         # Snapshot assignee before update for notification
         old_card = cards.get(card_id=str(card_id))
         old_assignee = str(old_card.assignee_id) if old_card and old_card.assignee_id else None
+
+        # Épico informado precisa existir, ser do tipo épico e do mesmo projeto.
+        if serializer.validated_data.get("epic_id") and old_card is not None:
+            from contexts.projects.interface.api.agile_views import assert_valid_epic
+            assert_valid_epic(
+                project_id=str(old_card.project_id),
+                epic_id=serializer.validated_data["epic_id"],
+            )
 
         use_case = UpdateCard(projects, cards, access, DjangoHistoryRepository())
         card = use_case.execute(

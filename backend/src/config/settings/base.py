@@ -22,6 +22,8 @@ env = environ.Env(
     FRONTEND_URL=(str, "http://localhost:8080"),
     ANTHROPIC_API_KEY=(str, ""),
     ANTHROPIC_MODEL=(str, "claude-opus-4-8"),
+    OPENAI_MODEL=(str, "gpt-4o"),
+    AI_CONFIG_ENC_KEY=(str, ""),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -138,9 +140,13 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 FRONTEND_URL = env("FRONTEND_URL")
 
-# Copiloto IA (Anthropic Claude)
+# Copiloto IA — chaves por workspace (BYO key cifrada); estes são defaults/fallback.
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = env("ANTHROPIC_MODEL")
+OPENAI_MODEL = env("OPENAI_MODEL")
+# Chave Fernet p/ cifrar as API keys de IA por workspace no banco.
+# Reaproveita a GOOGLE_TOKEN_ENC_KEY se AI_CONFIG_ENC_KEY não for definida.
+AI_CONFIG_ENC_KEY = env("AI_CONFIG_ENC_KEY") or env("GOOGLE_TOKEN_ENC_KEY", default="")
 
 # Integração Google (OAuth + Calendar)
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")

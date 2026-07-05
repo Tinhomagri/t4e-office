@@ -65,6 +65,63 @@ export async function analyzeDocument(documentId: string): Promise<Analysis> {
   return data
 }
 
+// ── Integração de IA por workspace ──────────────────────────────────────────
+export type AiProvider = "anthropic" | "openai"
+
+export interface AiConfig {
+  provider: AiProvider
+  model: string
+  is_active: boolean
+  configured: boolean
+  key_hint: string
+  updated_at: string | null
+  can_edit: boolean
+}
+
+export interface AiConfigInput {
+  provider: AiProvider
+  model: string
+  api_key?: string
+  is_active: boolean
+}
+
+export async function getAiConfig(workspaceId: string): Promise<AiConfig> {
+  const { data } = await api.get<AiConfig>("/copilot/ai-config/", {
+    params: { workspace_id: workspaceId },
+  })
+  return data
+}
+
+export async function saveAiConfig(workspaceId: string, input: AiConfigInput): Promise<AiConfig> {
+  const { data } = await api.put<AiConfig>("/copilot/ai-config/", input, {
+    params: { workspace_id: workspaceId },
+  })
+  return data
+}
+
+export async function testAiConfig(workspaceId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data } = await api.post<{ ok: boolean; error?: string }>(
+    "/copilot/ai-config/test/",
+    {},
+    { params: { workspace_id: workspaceId } },
+  )
+  return data
+}
+
+// ── Chat conversacional (balão de IA) ───────────────────────────────────────
+export interface ChatMessage {
+  role: "user" | "assistant"
+  content: string
+}
+
+export async function sendChat(workspaceId: string, messages: ChatMessage[]): Promise<string> {
+  const { data } = await api.post<{ reply: string }>("/copilot/chat/", {
+    workspace_id: workspaceId,
+    messages,
+  })
+  return data.reply
+}
+
 export async function createTasksFromDocument(
   documentId: string,
   projectId: string,

@@ -1,12 +1,14 @@
 import { motion, useInView, useMotionValue, useSpring } from "framer-motion"
-import { CalendarCheck, CircleDot, ExternalLink, Loader2, Sparkles, TrendingDown, Zap } from "lucide-react"
+import { CalendarClock, CalendarCheck, CircleDot, ExternalLink, Eye, Loader2, RefreshCw, Sparkles, TrendingDown, Zap } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { useEffect, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
   Line,
+  LineChart,
+  CartesianGrid,
+  ReferenceArea,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,10 +18,11 @@ import {
 import { useAuthStore } from "@/features/auth/auth.store"
 import {
   useWorkspaceCards,
+  useWorkspaceSprints,
   useWorkspaces,
   type BoardCard,
 } from "@/features/workspace/workspace.hooks"
-import type { CardPriority, CardStatus } from "@/features/workspace/workspace.types"
+import type { CardPriority, CardStatus, Sprint } from "@/features/workspace/workspace.types"
 import { cx } from "@/shared/ui/primitives"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
@@ -46,7 +49,6 @@ const PRIORITY_BAR: Record<CardPriority, string> = {
 }
 
 const ACTIVE: CardStatus[] = ["todo", "doing", "review"]
-const SPRINT_LENGTH_DAYS = 10
 
 const DAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 const MONTH_NAMES = [
@@ -69,10 +71,34 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+function fmtAxisDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00")
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
+}
+
+// Escolhe, entre todas as sprints ativas do workspace, a que tem mais cards
+// atribuídos ao usuário — é essa que faz sentido "queimar" no burndown.
+function pickRelevantSprint(sprints: Sprint[], myCards: BoardCard[]): Sprint | null {
+  const active = sprints.filter((s) => s.status === "active" && s.start_date && s.end_date)
+  if (active.length === 0) return null
+  let best = active[0]
+  let bestCount = -1
+  for (const s of active) {
+    const count = myCards.filter((c) => c.sprint_id === s.id).length
+    if (count > bestCount) {
+      best = s
+      bestCount = count
+    }
+  }
+  return best
+}
+
 export function MyDayPage() {
   const user = useAuthStore((s) => s.user)
   const { activeWorkspaceId } = useWorkspaces()
   const { cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
+  const { sprints, isLoading: sprintsLoading } = useWorkspaceSprints(activeWorkspaceId)
 
   const mine = cards.filter((c) => c.assignee_id === user?.id)
   const myActive = mine.filter((c) => ACTIVE.includes(c.status))
@@ -90,25 +116,48 @@ export function MyDayPage() {
   const review = mine.filter((c) => c.status === "review")
   const done = mine.filter((c) => c.status === "done")
   const points = myActive.reduce((s, c) => s + (c.points ?? 0), 0)
-  const totalPoints = mine.reduce((s, c) => s + (c.points ?? 0), 0)
-  const donePoints = done.reduce((s, c) => s + (c.points ?? 0), 0)
 
-  // Burndown derivado no client: sem histórico real no backend ainda, então
-  // traçamos a linha ideal (queda linear) contra o restante atual mantido plano
-  // até o dia de hoje. Troca por dado real quando existir endpoint de histórico.
+  // Burndown real: escala o eixo X pelas datas de verdade da sprint ativa
+  // (não mais um "D0..D10" arbitrário) e some quando não há sprint ativa —
+  // em vez de desenhar um gráfico com dados inventados.
+  const activeSprint = useMemo(() => pickRelevantSprint(sprints, mine), [sprints, mine])
+
+  const sprintCards = activeSprint ? mine.filter((c) => c.sprint_id === activeSprint.id) : []
+  const sprintTotalPoints = activeSprint
+    ? sprintCards.reduce((s, c) => s + (c.points ?? 0), 0)
+    : 0
+  const sprintDonePoints = activeSprint
+    ? sprintCards.filter((c) => c.status === "done").reduce((s, c) => s + (c.points ?? 0), 0)
+    : 0
+
   const burndownData = useMemo(() => {
-    const remainingToday = Math.max(totalPoints - donePoints, 0)
-    const todayIdx = Math.min(new Date().getDate() % SPRINT_LENGTH_DAYS, SPRINT_LENGTH_DAYS - 1)
-    return Array.from({ length: SPRINT_LENGTH_DAYS + 1 }, (_, day) => {
-      const ideal = Math.max(totalPoints - (totalPoints / SPRINT_LENGTH_DAYS) * day, 0)
-      const real = day <= todayIdx ? remainingToday + ((totalPoints - remainingToday) * (todayIdx - day)) / Math.max(todayIdx, 1) : null
+    if (!activeSprint?.start_date || !activeSprint?.end_date) return []
+    const start = new Date(activeSprint.start_date + "T00:00:00")
+    const end = new Date(activeSprint.end_date + "T00:00:00")
+    const totalDays = Math.max(Math.round((end.getTime() - start.getTime()) / DAY_MS), 1)
+    const todayIdx = Math.min(
+      Math.max(Math.round((Date.now() - start.getTime()) / DAY_MS), 0),
+      totalDays,
+    )
+    const remainingToday = Math.max(sprintTotalPoints - sprintDonePoints, 0)
+
+    return Array.from({ length: totalDays + 1 }, (_, i) => {
+      const date = new Date(start.getTime() + i * DAY_MS)
+      const ideal = Math.max(sprintTotalPoints - (sprintTotalPoints / totalDays) * i, 0)
+      // Sem histórico dia-a-dia real ainda: interpola uma reta do total (dia 0)
+      // até o restante de hoje, só até o índice de hoje — não inventa depois disso.
+      const real =
+        i <= todayIdx
+          ? remainingToday + ((sprintTotalPoints - remainingToday) * (todayIdx - i)) / Math.max(todayIdx, 1)
+          : null
       return {
-        day: `D${day}`,
+        date: date.toISOString().slice(0, 10),
+        isToday: i === todayIdx,
         ideal: Math.round(ideal),
         real: real != null ? Math.round(real) : null,
       }
     })
-  }, [totalPoints, donePoints])
+  }, [activeSprint, sprintTotalPoints, sprintDonePoints])
 
   const firstName = user?.full_name?.split(/\s+/)[0] ?? "você"
   const focusCards = [...inProgress, ...review, ...mine.filter((c) => c.status === "todo")].slice(0, 5)
@@ -143,7 +192,7 @@ export function MyDayPage() {
         )}
       </div>
 
-      {isLoading ? (
+      {isLoading || sprintsLoading ? (
         <div className="grid place-items-center py-20">
           <Loader2 className="size-6 animate-spin text-paper-400" />
         </div>
@@ -157,16 +206,21 @@ export function MyDayPage() {
           {/* Stats */}
           <motion.div variants={itemVariants} className="xl:col-span-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat icon="📅" label="Vencem hoje" value={vencem.length} accent="text-danger" />
-              <Stat icon="🔄" label="Em andamento" value={inProgress.length} />
-              <Stat icon="👀" label="Em revisão" value={review.length} accent="text-amber-500" />
-              <Stat icon="⚡" label="Pontos ativos" value={points} accent="text-brand-500" />
+              <Stat icon={CalendarClock} label="Vencem hoje" value={vencem.length} accent="text-danger" tint="bg-danger/10 text-danger" />
+              <Stat icon={RefreshCw} label="Em andamento" value={inProgress.length} tint="bg-sky-500/10 text-sky-500" />
+              <Stat icon={Eye} label="Em revisão" value={review.length} accent="text-amber-500" tint="bg-amber-500/10 text-amber-500" />
+              <Stat icon={Zap} label="Pontos ativos" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
             </div>
           </motion.div>
 
           {/* Burndown */}
           <motion.div variants={itemVariants} className="xl:col-span-3">
-            <BurndownCard data={burndownData} totalPoints={totalPoints} donePoints={donePoints} />
+            <BurndownCard
+              data={burndownData}
+              totalPoints={sprintTotalPoints}
+              donePoints={sprintDonePoints}
+              sprintName={activeSprint?.name ?? null}
+            />
           </motion.div>
 
           {/* Pulse Intelligence + Resumo */}
@@ -267,20 +321,24 @@ function CountUp({ value }: { value: number }) {
 }
 
 function Stat({
-  icon,
+  icon: Icon,
   label,
   value,
   accent = "text-ink dark:text-paper",
+  tint = "bg-brand-500/10 text-brand-500",
 }: {
-  icon: string
+  icon: LucideIcon
   label: string
   value: number
   accent?: string
+  tint?: string
 }) {
   return (
     <div className="surface lift group relative overflow-hidden p-4 transition-transform hover:-translate-y-0.5">
       <div className="absolute -right-3 -top-3 size-14 rounded-full bg-brand-400/10 blur-xl transition-opacity group-hover:opacity-80" />
-      <span className="relative text-xl">{icon}</span>
+      <span className={cx("relative inline-flex size-9 items-center justify-center rounded-xl", tint)}>
+        <Icon className="size-[18px]" strokeWidth={2} />
+      </span>
       <p className={cx("relative mt-2 text-2xl font-bold tabular leading-none", accent)}>
         <CountUp value={value} />
       </p>
@@ -293,64 +351,104 @@ function BurndownCard({
   data,
   totalPoints,
   donePoints,
+  sprintName,
 }: {
-  data: { day: string; ideal: number; real: number | null }[]
+  data: { date: string; isToday: boolean; ideal: number; real: number | null }[]
   totalPoints: number
   donePoints: number
+  sprintName: string | null
 }) {
   const pct = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0
+  const todayIdx = data.findIndex((d) => d.isToday)
 
   return (
     <div className="surface p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingDown className="size-4 text-brand-500" strokeWidth={2} />
-          <h2 className="text-sm font-semibold text-ink dark:text-paper">Burndown da sprint</h2>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <TrendingDown className="size-4 text-brand-500" strokeWidth={2} />
+            <h2 className="text-sm font-semibold text-ink dark:text-paper">Burndown da sprint</h2>
+          </div>
+          {sprintName && <p className="mt-0.5 truncate text-xs text-paper-400">{sprintName}</p>}
         </div>
-        <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-          {pct}% concluído
-        </span>
+        {data.length > 0 && (
+          <span className="shrink-0 rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+            {pct}% concluído
+          </span>
+        )}
       </div>
-      <div className="h-64 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
-            <defs>
-              <linearGradient id="realGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--chart-brand, #6366f1)" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="var(--chart-brand, #6366f1)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
-            <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
-            <Tooltip
-              contentStyle={{ borderRadius: 12, fontSize: 12, border: "1px solid rgba(0,0,0,0.08)" }}
-              labelStyle={{ fontWeight: 600 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="ideal"
-              stroke="#94a3b8"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              dot={false}
-              name="Ideal"
-              isAnimationActive
-            />
-            <Area
-              type="monotone"
-              dataKey="real"
-              stroke="#6366f1"
-              strokeWidth={2.5}
-              fill="url(#realGradient)"
-              name="Restante"
-              connectNulls
-              isAnimationActive
-              animationDuration={900}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+
+      {data.length === 0 ? (
+        <div className="flex h-64 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-paper-200 dark:border-ink-700 text-center">
+          <TrendingDown className="mb-1 size-6 text-paper-300" />
+          <p className="text-sm font-medium text-paper-500">Nenhuma sprint ativa com datas definidas</p>
+          <p className="text-xs text-paper-400">Inicie uma sprint com início/fim no board para ver o burndown aqui.</p>
+        </div>
+      ) : (
+        <>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
+                {todayIdx >= 0 && (
+                  <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#6366f1" fillOpacity={0.06} />
+                )}
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={fmtAxisDate}
+                  tick={{ fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={24}
+                />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, fontSize: 12, border: "1px solid rgba(0,0,0,0.08)" }}
+                  labelStyle={{ fontWeight: 600 }}
+                  labelFormatter={(v) => fmtAxisDate(String(v))}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="ideal"
+                  stroke="#94a3b8"
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  dot={false}
+                  name="Ideal"
+                  isAnimationActive
+                />
+                <Line
+                  type="monotone"
+                  dataKey="real"
+                  stroke="#6366f1"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  name="Restante"
+                  connectNulls
+                  isAnimationActive
+                  animationDuration={900}
+                />
+                {todayIdx >= 0 && data[todayIdx].real != null && (
+                  <ReferenceDot
+                    x={data[todayIdx].date}
+                    y={data[todayIdx].real as number}
+                    r={4}
+                    fill="#6366f1"
+                    stroke="white"
+                    strokeWidth={2}
+                  />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {donePoints === 0 && (
+            <p className="mt-2 text-center text-[11px] text-paper-400">
+              Nenhum ponto concluído ainda nesta sprint — a linha de restante só começa a cair quando um card for marcado como feito.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }

@@ -44,6 +44,8 @@ class CreateCard:
         due_date=None,
         source: str = "manual",
         parent_id: str | None = None,
+        epic_id: str | None = None,
+        epic_color: str = "",
         labels: list[str] | None = None,
     ) -> Card:
         project = self.project_repository.get(project_id=project_id)
@@ -72,6 +74,8 @@ class CreateCard:
             due_date=due_date,
             source=source,
             parent_id=parent_id,
+            epic_id=epic_id,
+            epic_color=epic_color,
             labels=labels or [],
         )
         return self.card_repository.create(card=card)

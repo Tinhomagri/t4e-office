@@ -1,24 +1,40 @@
-import { Check, FileText, Loader2, Sparkles, Upload } from "lucide-react"
-import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { AlertTriangle, Bot, Check, FileText, KeyRound, Loader2, Lock, Settings2, Sparkles, Upload } from "lucide-react"
+import { useEffect, useState } from "react"
 
-import { PageHeader } from "@/shared/ui/primitives"
+import { Button, PageHeader, cx } from "@/shared/ui/primitives"
 import { useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   analyzeDocument,
   createTasksFromDocument,
+  getAiConfig,
   ingestFile,
   ingestText,
+  saveAiConfig,
+  testAiConfig,
+  type AiConfig,
+  type AiProvider,
   type Analysis,
   type CopilotDocument,
   type DocKind,
   type SuggestedTask,
 } from "./copilot.api"
 
+const PROVIDERS: { value: AiProvider; label: string; defaultModel: string; models: string[] }[] = [
+  { value: "anthropic", label: "Anthropic (Claude)", defaultModel: "claude-opus-4-8", models: ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"] },
+  { value: "openai", label: "OpenAI", defaultModel: "gpt-4o", models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1"] },
+]
+
 type Mode = "text" | "file"
 
 export function CopilotPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const { data: projects } = useProjects(activeWorkspaceId)
+  const { data: aiConfig } = useQuery({
+    queryKey: ["ai-config", activeWorkspaceId],
+    queryFn: () => getAiConfig(activeWorkspaceId!),
+    enabled: !!activeWorkspaceId,
+  })
 
   const [mode, setMode] = useState<Mode>("text")
   const [title, setTitle] = useState("")
@@ -90,7 +106,8 @@ export function CopilotPage() {
     }
   }
 
-  const canAnalyze = mode === "text" ? text.trim().length > 20 : !!file
+  const aiReady = !!aiConfig?.configured && aiConfig.is_active
+  const canAnalyze = (mode === "text" ? text.trim().length > 20 : !!file) && aiReady
 
   if (!activeWorkspaceId)
     return (
@@ -102,6 +119,8 @@ export function CopilotPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Copiloto" subtitle="Leia documentos e transcrições e gere tarefas com IA" />
+
+      {activeWorkspaceId && <AiIntegrationCard workspaceId={activeWorkspaceId} config={aiConfig ?? null} />}
 
       {/* Entrada */}
       <div className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5 space-y-4">
@@ -155,6 +174,11 @@ export function CopilotPage() {
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {busy ?? "Analisar com IA"}
         </button>
+        {!aiReady && (
+          <p className="text-xs text-amber-600">
+            Configure a integração de IA acima para habilitar a análise.
+          </p>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
@@ -246,6 +270,169 @@ export function CopilotPage() {
               </ul>
             </Section>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AiIntegrationCard({ workspaceId, config }: { workspaceId: string; config: AiConfig | null }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [provider, setProvider] = useState<AiProvider>("anthropic")
+  const [model, setModel] = useState("claude-opus-4-8")
+  const [apiKey, setApiKey] = useState("")
+  const [active, setActive] = useState(true)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // Sincroniza o formulário quando a config carrega/atualiza.
+  useEffect(() => {
+    if (!config) return
+    setProvider(config.provider)
+    setModel(config.model)
+    setActive(config.is_active)
+  }, [config])
+
+  const providerMeta = PROVIDERS.find((p) => p.value === provider) ?? PROVIDERS[0]
+  const canEdit = config?.can_edit ?? false
+
+  const save = useMutation({
+    mutationFn: () =>
+      saveAiConfig(workspaceId, {
+        provider,
+        model: model || providerMeta.defaultModel,
+        api_key: apiKey || undefined,
+        is_active: active,
+      }),
+    onSuccess: () => {
+      setApiKey("")
+      setMsg({ ok: true, text: "Configuração salva." })
+      qc.invalidateQueries({ queryKey: ["ai-config", workspaceId] })
+    },
+    onError: (e) => setMsg({ ok: false, text: errMsg(e) }),
+  })
+
+  const test = useMutation({
+    mutationFn: () => testAiConfig(workspaceId),
+    onSuccess: (r) =>
+      setMsg(r.ok ? { ok: true, text: "Conexão com a IA funcionando!" } : { ok: false, text: r.error ?? "Falhou." }),
+    onError: (e) => setMsg({ ok: false, text: errMsg(e) }),
+  })
+
+  const configured = !!config?.configured
+  const activeOk = configured && config?.is_active
+
+  return (
+    <div className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900">
+      {/* Cabeçalho / status */}
+      <div className="flex items-center justify-between gap-3 p-5">
+        <div className="flex items-center gap-3">
+          <span className={cx(
+            "grid size-10 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm",
+            activeOk ? "from-emerald-500 to-teal-600" : "from-violet-500 to-purple-700",
+          )}>
+            <Bot className="size-5" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink dark:text-paper">Integração de IA</h3>
+              <span className={cx(
+                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                activeOk
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+              )}>
+                {activeOk ? "Conectado" : "Não configurado"}
+              </span>
+            </div>
+            <p className="text-xs text-paper-500">
+              {configured
+                ? `${PROVIDERS.find((p) => p.value === config?.provider)?.label} · ${config?.model} · chave ${config?.key_hint}`
+                : "Conecte OpenAI ou Claude com a chave da sua própria conta para este workspace."}
+            </p>
+          </div>
+        </div>
+        {canEdit ? (
+          <Button variant="outline" onClick={() => { setMsg(null); setOpen((v) => !v) }}>
+            <Settings2 className="size-4" /> {open ? "Fechar" : configured ? "Editar" : "Configurar"}
+          </Button>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs text-paper-400">
+            <Lock className="size-3.5" /> Só administradores
+          </span>
+        )}
+      </div>
+
+      {/* Formulário (admins) */}
+      {open && canEdit && (
+        <div className="space-y-4 border-t border-ink/10 p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-paper-500">Provedor</span>
+              <select
+                value={provider}
+                onChange={(e) => { const p = e.target.value as AiProvider; setProvider(p); setModel(PROVIDERS.find((x) => x.value === p)!.defaultModel) }}
+                className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
+              >
+                {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-paper-500">Modelo</span>
+              <select
+                value={providerMeta.models.includes(model) ? model : "__custom__"}
+                onChange={(e) => setModel(e.target.value === "__custom__" ? "" : e.target.value)}
+                className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
+              >
+                {providerMeta.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value="__custom__">Outro (digitar manualmente)…</option>
+              </select>
+              {!providerMeta.models.includes(model) && (
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={providerMeta.defaultModel}
+                  className="mt-2 w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm"
+                />
+              )}
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-paper-500">
+              <KeyRound className="size-3.5" /> Chave de API {configured && "(deixe em branco para manter a atual)"}
+            </span>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={provider === "openai" ? "sk-..." : "sk-ant-..."}
+              autoComplete="off"
+              className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 font-mono text-sm"
+            />
+            <span className="mt-1 block text-[11px] text-paper-400">
+              A chave é cifrada no servidor e nunca é exibida de volta.
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-paper-600">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-4" />
+            Integração ativa
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!configured && !apiKey}>
+              Salvar
+            </Button>
+            <Button variant="outline" onClick={() => test.mutate()} loading={test.isPending} disabled={!configured}>
+              Testar conexão
+            </Button>
+            {msg && (
+              <span className={cx("flex items-center gap-1.5 text-sm", msg.ok ? "text-emerald-600" : "text-red-600")}>
+                {msg.ok ? <Check className="size-4" /> : <AlertTriangle className="size-4" />} {msg.text}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>

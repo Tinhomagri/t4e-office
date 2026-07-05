@@ -1,6 +1,6 @@
 """Entidade de card (tarefa do board) — Python puro."""
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 
 from shared.domain.errors import ValidationError
@@ -59,15 +59,26 @@ class Card:
     start_date: date | None = None
     due_date: date | None = None
     order: int = 0
+    rank: str = ""  # Lexorank — ordenação estável no backlog/board
     source: str = "manual"  # manual | copilot (criado pela IA)
     parent_id: str | None = None  # card pai (subtarefa) — None = card de topo
+    epic_id: str | None = None  # épico ao qual pertence — None = sem épico
+    epic_color: str = ""  # cor do épico (apenas quando type=epic)
     labels: list[str] = field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.title.strip():
             raise ValidationError("Título do card é obrigatório.")
         if self.parent_id is not None and self.parent_id == self.id:
             raise ValidationError("Um card não pode ser subtarefa de si mesmo.")
+        if self.epic_id is not None and self.epic_id == self.id:
+            raise ValidationError("Um épico não pode pertencer a si mesmo.")
+        if self.type == CardType.EPIC and self.epic_id is not None:
+            raise ValidationError("Um épico não pode pertencer a outro épico.")
+        if self.type == CardType.EPIC and self.parent_id is not None:
+            raise ValidationError("Um épico não pode ser subtarefa.")
         if self.points is not None and self.points < 0:
             raise ValidationError("Story points não podem ser negativos.")
         if (

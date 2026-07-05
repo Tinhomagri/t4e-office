@@ -10,3 +10,7 @@ class AiAnalyzer(ABC):
     @abstractmethod
     def analyze(self, *, text: str) -> AnalysisResult:
         """Analisa o texto e retorna resumo, tarefas, decisões e riscos."""
+
+    @abstractmethod
+    def chat(self, *, messages: list[dict]) -> str:
+        """Conversa livre com a IA. `messages` = [{role, content}]; retorna a resposta."""

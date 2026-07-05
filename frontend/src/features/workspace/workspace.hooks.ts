@@ -13,6 +13,7 @@ import type {
   CreateIssueLinkInput,
   CreateSprintInput,
   Role,
+  Sprint,
   UpdateCardInput,
   UpdateSprintInput,
 } from "./workspace.types"
@@ -191,6 +192,32 @@ export function useDeleteCardLink(cardId: string | null) {
   })
 }
 
+// Agrega sprints de TODOS os projetos do workspace (usado pelo burndown real
+// do "Meu Dia" — precisa das datas de início/fim da sprint ativa, não só dos
+// cards). Mesmo padrão de fan-out de useWorkspaceCards.
+export function useWorkspaceSprints(workspaceId: string | null) {
+  const projectsQuery = useProjects(workspaceId)
+  const projects = projectsQuery.data ?? []
+
+  const sprintQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ["sprints", p.id],
+      queryFn: () => wsApi.listSprints(p.id),
+      enabled: !!workspaceId,
+    })),
+  })
+
+  const sprints: Sprint[] = []
+  projects.forEach((_p, i) => {
+    const data = sprintQueries[i]?.data
+    if (data) sprints.push(...data)
+  })
+
+  const isLoading = projectsQuery.isLoading || sprintQueries.some((q) => q.isLoading)
+
+  return { sprints, isLoading }
+}
+
 // ---- Sprints ----
 export function useSprints(projectId: string | null) {
   return useQuery({
@@ -217,6 +244,80 @@ export function useUpdateSprint(projectId: string | null) {
     mutationFn: ({ sprintId, input }: { sprintId: string; input: UpdateSprintInput }) =>
       wsApi.updateSprint(sprintId, input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sprints", projectId] }),
+  })
+}
+
+export function useStartSprint(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      sprintId,
+      input,
+    }: {
+      sprintId: string
+      input?: { start_date?: string; end_date?: string; goal?: string }
+    }) => wsApi.startSprint(sprintId, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sprints", projectId] })
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      toast.success("Sprint iniciada")
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? "Não foi possível iniciar a sprint")
+    },
+  })
+}
+
+export function useCompleteSprint(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sprintId, moveTo }: { sprintId: string; moveTo: string }) =>
+      wsApi.completeSprint(sprintId, moveTo),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["sprints", projectId] })
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      toast.success(
+        `Sprint concluída — ${result.summary.completed_cards} concluídos, ${result.summary.moved_cards} movidos`,
+      )
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? "Não foi possível concluir a sprint")
+    },
+  })
+}
+
+// ---- Épicos ----
+export function useEpics(projectId: string | null) {
+  return useQuery({
+    queryKey: ["epics", projectId],
+    queryFn: () => wsApi.listEpics(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+// ---- Ranking (Lexorank) ----
+export function useRankCard(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      cardId,
+      beforeId,
+      afterId,
+    }: {
+      cardId: string
+      beforeId?: string | null
+      afterId?: string | null
+    }) => wsApi.rankCard(cardId, { before_id: beforeId, after_id: afterId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cards", projectId] }),
+  })
+}
+
+// ---- Hierarquia (filhos de épico/subtarefas) ----
+export function useCardChildren(cardId: string | null) {
+  return useQuery({
+    queryKey: ["card-children", cardId],
+    queryFn: () => wsApi.listCardChildren(cardId!),
+    enabled: !!cardId,
   })
 }
 
@@ -352,6 +453,92 @@ export function useDeleteWorkflowStatus(projectId: string | null) {
   return useMutation({
     mutationFn: (statusId: string) => wsApi.deleteWorkflowStatus(statusId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workflow-statuses", projectId] }),
+  })
+}
+
+// ---- Saved Filters (quick filters do board) ----
+export function useSavedFilters(projectId: string | null) {
+  return useQuery({
+    queryKey: ["saved-filters", projectId],
+    queryFn: () => wsApi.listSavedFilters(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useCreateSavedFilter(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").CreateSavedFilterInput) =>
+      wsApi.createSavedFilter(projectId!, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-filters", projectId] }),
+  })
+}
+
+export function useDeleteSavedFilter(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (filterId: string) => wsApi.deleteSavedFilter(filterId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-filters", projectId] }),
+  })
+}
+
+// ---- Activity feed (aba Resumo) ----
+export function useActivity(projectId: string | null) {
+  return useQuery({
+    queryKey: ["activity", projectId],
+    queryFn: () => wsApi.listActivity(projectId!),
+    enabled: !!projectId,
+    refetchInterval: 15000,
+  })
+}
+
+// ---- Documents (aba Documentos — colaborativo, persistido no servidor) ----
+export function useDocuments(projectId: string | null) {
+  return useQuery({
+    queryKey: ["documents", projectId],
+    queryFn: () => wsApi.listDocuments(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+// Poll leve (estilo Planning Poker) para refletir edições de outros membros
+// do time sem precisar de WebSocket — não é colaboração char-a-char, mas o
+// documento deixa de ser "só seu": todo mundo vê o mesmo conteúdo salvo.
+export function useDocument(documentId: string | null) {
+  return useQuery({
+    queryKey: ["document", documentId],
+    queryFn: () => wsApi.getDocument(documentId!),
+    enabled: !!documentId,
+    refetchInterval: 4000,
+  })
+}
+
+export function useCreateDocument(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").CreateDocumentInput) =>
+      wsApi.createDocument(projectId!, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", projectId] }),
+  })
+}
+
+export function useUpdateDocument(documentId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").UpdateDocumentInput) =>
+      wsApi.updateDocument(documentId!, input),
+    onSuccess: (doc) => {
+      qc.setQueryData(["document", documentId], doc)
+      qc.invalidateQueries({ queryKey: ["documents", doc.project_id] })
+    },
+  })
+}
+
+export function useDeleteDocument(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId: string) => wsApi.deleteDocument(documentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", projectId] }),
   })
 }
 

@@ -26,6 +26,7 @@ import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
 import { useCreateWorkspace, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   Avatar,
@@ -226,20 +227,23 @@ export function AppShell() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="flex-1 overflow-y-auto px-6 py-7 scrollbar-slim dark:bg-ink-950"
+          className={cx(
+            "flex-1 overflow-y-auto scrollbar-slim dark:bg-ink-950",
+            location.pathname.startsWith("/app/poker") ? "p-0" : "px-6 py-7",
+          )}
         >
           <div
             className={cx(
               "w-full",
-              location.pathname !== "/app" &&
-                !location.pathname.startsWith("/app/boards") &&
-                "mx-auto max-w-6xl",
+              location.pathname.startsWith("/app/poker") && "h-full",
             )}
           >
             <Outlet />
           </div>
         </motion.main>
       </div>
+
+      <CopilotChatWidget />
     </div>
   )
 }

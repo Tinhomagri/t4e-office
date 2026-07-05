@@ -14,6 +14,44 @@ export interface PokerSession {
   created_at: string
   participants: PokerParticipant[]
   votes: PokerVote[]
+  // Presentes apenas na listagem (GET /workspaces/<id>/poker/) — contadores
+  // agregados para o resumo/histórico, sem custo de N+1 no card individual.
+  rounds_count?: number
+  participants_count?: number
+  avg_points?: number | null
+}
+
+// Resultado já decidido de uma rodada — o que foi votado em um card
+// específico, preservado mesmo depois de a rodada avançar para o próximo card.
+export interface PokerRoundVote {
+  participant_name: string
+  value: string | null
+}
+
+export interface PokerRound {
+  id: string
+  session_id: string
+  card_id: string
+  card_ref: string
+  card_title: string
+  final_points: number
+  votes: PokerRoundVote[]
+  decided_by_name: string
+  decided_at: string
+}
+
+// Resumo agregado do workspace inteiro (aba "Resumo" do Planning Poker,
+// estilo Jira) — visão geral de tudo que já foi votado, não só uma sessão.
+export interface PokerWorkspaceSummary {
+  sessions_total: number
+  sessions_active: number
+  sessions_today: number
+  rounds_total: number
+  rounds_today: number
+  avg_points: number | null
+  points_distribution: { points: number; count: number }[]
+  top_estimators: { name: string; votes: number }[]
+  recent_rounds: (PokerRound & { session_name: string })[]
 }
 
 export interface PokerParticipant {

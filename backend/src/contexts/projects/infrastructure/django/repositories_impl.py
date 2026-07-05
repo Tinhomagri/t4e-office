@@ -62,9 +62,14 @@ def _card_to_entity(row: CardModel) -> Card:
         start_date=row.start_date,
         due_date=row.due_date,
         order=row.order,
+        rank=row.rank,
         source=row.source,
         parent_id=str(row.parent_id) if row.parent_id else None,
+        epic_id=str(row.epic_id) if row.epic_id else None,
+        epic_color=row.epic_color,
         labels=list(row.labels or []),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -78,6 +83,8 @@ def _sprint_to_entity(row: SprintModel) -> Sprint:
         start_date=row.start_date,
         end_date=row.end_date,
         status=SprintStatus(row.status),
+        started_at=row.started_at,
+        completed_at=row.completed_at,
     )
 
 
@@ -112,6 +119,18 @@ class DjangoCardRepository(CardRepository):
         return (agg["m"] or 0) + 1
 
     def create(self, *, card: Card) -> Card:
+        # Rank no fim da lista do projeto quando não informado (Lexorank).
+        if not card.rank:
+            from contexts.projects.infrastructure.lexorank import rank_between
+
+            last = (
+                CardModel.objects.filter(project_id=card.project_id)
+                .exclude(rank="")
+                .order_by("-rank")
+                .values_list("rank", flat=True)
+                .first()
+            )
+            card.rank = rank_between(last or "", "")
         row = CardModel.objects.create(
             project_id=card.project_id,
             number=card.number,
@@ -127,8 +146,11 @@ class DjangoCardRepository(CardRepository):
             start_date=card.start_date,
             due_date=card.due_date,
             order=card.order,
+            rank=card.rank,
             source=card.source,
             parent_id=card.parent_id,
+            epic_id=card.epic_id,
+            epic_color=card.epic_color,
             labels=card.labels,
         )
         return _card_to_entity(row)
@@ -155,7 +177,10 @@ class DjangoCardRepository(CardRepository):
             start_date=card.start_date,
             due_date=card.due_date,
             order=card.order,
+            rank=card.rank,
             parent_id=card.parent_id,
+            epic_id=card.epic_id,
+            epic_color=card.epic_color,
             labels=card.labels,
         )
         row = CardModel.objects.get(id=card.id)
@@ -191,6 +216,8 @@ class DjangoSprintRepository(SprintRepository):
             start_date=sprint.start_date,
             end_date=sprint.end_date,
             status=sprint.status.value,
+            started_at=sprint.started_at,
+            completed_at=sprint.completed_at,
         )
         row = SprintModel.objects.get(id=sprint.id)
         return _sprint_to_entity(row)
