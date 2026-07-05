@@ -97,6 +97,7 @@ class GoogleCalendarGateway(CalendarGateway):
         for item in result.get("items", []):
             start = item.get("start", {})
             end = item.get("end", {})
+            all_day = "date" in start and "dateTime" not in start
             start_val = start.get("dateTime") or start.get("date")
             end_val = end.get("dateTime") or end.get("date")
             if not start_val or not end_val:
@@ -109,6 +110,7 @@ class GoogleCalendarGateway(CalendarGateway):
                     end=_parse_dt(end_val),
                     meet_link=item.get("hangoutLink"),
                     html_link=item.get("htmlLink", ""),
+                    all_day=all_day,
                     attendees=[
                         a.get("email", "") for a in item.get("attendees", [])
                     ],

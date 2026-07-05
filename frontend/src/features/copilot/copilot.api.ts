@@ -114,12 +114,126 @@ export interface ChatMessage {
   content: string
 }
 
-export async function sendChat(workspaceId: string, messages: ChatMessage[]): Promise<string> {
-  const { data } = await api.post<{ reply: string }>("/copilot/chat/", {
+// Ação de escrita proposta pela IA (preview antes de confirmar).
+export interface PendingAction {
+  action: "create_card" | "update_card" | "create_sprint" | "update_sprint"
+  reason: string
+  project_id?: string
+  card_id?: string
+  title?: string
+  description?: string
+  priority?: CardPriority
+  type?: CardType
+  status?: string
+  points?: number
+  sprint_id?: string
+  sprint_name?: string
+  goal?: string
+  start_date?: string
+  end_date?: string
+}
+
+export interface ChatResult {
+  reply: string
+  pending_actions: PendingAction[]
+}
+
+export async function sendChat(
+  workspaceId: string,
+  messages: ChatMessage[],
+): Promise<ChatResult> {
+  const { data } = await api.post<ChatResult>("/copilot/chat/", {
     workspace_id: workspaceId,
     messages,
   })
-  return data.reply
+  return { reply: data.reply, pending_actions: data.pending_actions ?? [] }
+}
+
+export interface AgentActionResult {
+  ok: boolean
+  action?: string
+  id?: string
+  ref?: string
+  title?: string
+  name?: string
+  error?: string
+}
+
+// Executa as ações propostas após o usuário confirmar.
+export async function executeAgentActions(
+  workspaceId: string,
+  actions: PendingAction[],
+): Promise<AgentActionResult[]> {
+  const { data } = await api.post<{ results: AgentActionResult[] }>(
+    "/copilot/agent/execute/",
+    { workspace_id: workspaceId, actions },
+  )
+  return data.results
+}
+
+// ── Uso e avaliação do Copiloto ─────────────────────────────────────────────
+export interface SeriesPoint {
+  day: string
+  chats: number
+  analyses: number
+  cards: number
+  interactions: number
+}
+
+export interface KindSlice {
+  key: string
+  label: string
+  value: number
+}
+
+export interface CopilotTopUser {
+  id: string
+  name: string
+  count: number
+}
+
+export interface CopilotRecentEvent {
+  kind: string
+  count: number
+  actor: string
+  at: string
+}
+
+export interface CopilotMetrics {
+  period_days: number
+  chats: number
+  documents_analyzed: number
+  cards_created: number
+  interactions: number
+  active_users: number
+  thumbs_up: number
+  thumbs_down: number
+  satisfaction: number | null
+  total_ratings: number
+  trend: {
+    interactions: number | null
+    cards_created: number | null
+    active_users: number | null
+    satisfaction_prev: number | null
+  }
+  series: SeriesPoint[]
+  by_kind: KindSlice[]
+  top_users: CopilotTopUser[]
+  recent: CopilotRecentEvent[]
+}
+
+export async function getCopilotMetrics(workspaceId: string): Promise<CopilotMetrics> {
+  const { data } = await api.get<CopilotMetrics>("/copilot/metrics/", {
+    params: { workspace_id: workspaceId },
+  })
+  return data
+}
+
+export async function sendFeedback(
+  workspaceId: string,
+  rating: "up" | "down",
+): Promise<void> {
+  await api.post("/copilot/feedback/", { workspace_id: workspaceId, rating })
 }
 
 export async function createTasksFromDocument(

@@ -14,6 +14,7 @@ export interface CalendarEvent {
   meet_link: string | null
   html_link: string
   attendees: string[]
+  all_day: boolean
 }
 
 export interface TimeSlot {

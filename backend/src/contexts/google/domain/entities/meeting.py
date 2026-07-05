@@ -33,6 +33,7 @@ class CalendarEvent:
     meet_link: str | None
     html_link: str
     attendees: list[str] = field(default_factory=list)
+    all_day: bool = False
 
 
 @dataclass

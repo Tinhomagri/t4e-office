@@ -51,6 +51,14 @@ class ChatSerializer(serializers.Serializer):
     messages = ChatMessageSerializer(many=True)
 
 
+class AgentExecuteSerializer(serializers.Serializer):
+    """Confirmação: executa as ações que a IA propôs no chat."""
+
+    workspace_id = serializers.CharField()
+    # Cada ação é um dict livre validado pelo dispatcher (schema conhecido).
+    actions = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
 class AiConfigWriteSerializer(serializers.Serializer):
     """Escrita — api_key é opcional (vazio mantém a chave já salva)."""
 

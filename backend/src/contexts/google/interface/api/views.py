@@ -1,4 +1,5 @@
 """Views finas do contexto google — orquestram casos de uso."""
+import logging
 from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
@@ -86,6 +87,7 @@ class GoogleCallbackView(APIView):
                 state_repository=DjangoOAuthStateRepository(),
             ).execute(code=code, state=state)
         except Exception:
+            logging.getLogger(__name__).exception("Falha no callback OAuth do Google")
             return redirect(f"{front}/app/integrations?google=error")
         return redirect(f"{front}/app/integrations?google=connected")
 

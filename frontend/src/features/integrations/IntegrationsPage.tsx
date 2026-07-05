@@ -62,17 +62,24 @@ function AttendeeAvatar({ email, size = "sm" }: { email: string; size?: "xs" | "
   )
 }
 
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, allDay?: boolean): string {
   const d = new Date(iso)
   const now = new Date()
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  // Evento "dia inteiro" chega como UTC-midnight puro (sem hora local de verdade) —
+  // usar getUTC* evita que timezones negativos (ex.: UTC-3) empurrem a data 1 dia p/ trás.
+  const startOfDay = allDay
+    ? (x: Date) => Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate())
+    : (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const diffDays = Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000)
   if (diffDays === 0) return "Hoje"
   if (diffDays === 1) return "Amanhã"
-  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })
+  return allDay
+    ? d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short", timeZone: "UTC" })
+    : d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })
 }
 
-function timeRange(startIso: string, endIso: string): string {
+function timeRange(startIso: string, endIso: string, allDay?: boolean): string {
+  if (allDay) return "Dia inteiro"
   const t = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
   return `${t(startIso)} – ${t(endIso)}`
 }
@@ -118,7 +125,7 @@ export function IntegrationsPage() {
 
   const list = events.data ?? []
   const [next] = list
-  const nextCountdown = next ? countdown(next.start) : null
+  const nextCountdown = next && !next.all_day ? countdown(next.start) : null
 
   return (
     <div className="space-y-6">
@@ -248,7 +255,7 @@ export function IntegrationsPage() {
               </p>
               <h2 className="mt-1 truncate text-xl font-bold text-ink dark:text-paper">{next.title}</h2>
               <p className="mt-1 text-sm text-paper-500">
-                {dayLabel(next.start)} · {timeRange(next.start, next.end)}
+                {dayLabel(next.start, next.all_day)} · {timeRange(next.start, next.end, next.all_day)}
               </p>
               {next.attendees.length > 0 && (
                 <div className="mt-3 flex items-center gap-2">

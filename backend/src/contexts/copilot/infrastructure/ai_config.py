@@ -100,3 +100,19 @@ def build_analyzer_for_workspace(workspace_id: str) -> AiAnalyzer:
 def chat_for_workspace(workspace_id: str, messages: list[dict]) -> str:
     """Conversa livre com a IA configurada do workspace."""
     return build_analyzer_for_workspace(workspace_id).chat(messages=messages)
+
+
+def agent_chat_for_workspace(
+    workspace_id: str, actor_id: str, messages: list[dict]
+) -> dict:
+    """Chat agêntico: a IA lê o board e propõe ações (preview p/ confirmação).
+
+    Retorna {"reply": str, "pending_actions": list[dict]}.
+    """
+    from contexts.copilot.infrastructure.agent.dispatcher import ALL_TOOLS, AgentTools
+
+    analyzer = build_analyzer_for_workspace(workspace_id)
+    tools = AgentTools(workspace_id=workspace_id, actor_id=actor_id)
+    return analyzer.chat_agent(
+        messages=messages, tools=ALL_TOOLS, read_executor=tools.execute_read
+    )
