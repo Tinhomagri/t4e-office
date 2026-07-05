@@ -33,6 +33,8 @@ def _sprint_dict(sprint: Sprint) -> dict:
         "start_date": sprint.start_date,
         "end_date": sprint.end_date,
         "status": sprint.status.value,
+        "started_at": sprint.started_at,
+        "completed_at": sprint.completed_at,
     }
 
 

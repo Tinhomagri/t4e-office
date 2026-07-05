@@ -40,6 +40,8 @@ class CreateCardSerializer(serializers.Serializer):
     start_date = serializers.DateField(required=False, allow_null=True)
     due_date = serializers.DateField(required=False, allow_null=True)
     parent_id = serializers.CharField(required=False, allow_null=True)
+    epic_id = serializers.CharField(required=False, allow_null=True)
+    epic_color = serializers.CharField(required=False, allow_blank=True, max_length=7)
     labels = serializers.ListField(
         child=serializers.CharField(max_length=40), required=False
     )
@@ -61,6 +63,8 @@ class UpdateCardSerializer(serializers.Serializer):
     due_date = serializers.DateField(required=False, allow_null=True)
     order = serializers.IntegerField(required=False)
     parent_id = serializers.CharField(required=False, allow_null=True)
+    epic_id = serializers.CharField(required=False, allow_null=True)
+    epic_color = serializers.CharField(required=False, allow_blank=True, max_length=7)
     labels = serializers.ListField(
         child=serializers.CharField(max_length=40), required=False
     )
@@ -85,13 +89,18 @@ class CardSerializer(serializers.Serializer):
     start_date = serializers.DateField(allow_null=True)
     due_date = serializers.DateField(allow_null=True)
     order = serializers.IntegerField()
+    rank = serializers.CharField(allow_blank=True, default="")
     parent_id = serializers.CharField(allow_null=True)
+    epic_id = serializers.CharField(allow_null=True, default=None)
+    epic_color = serializers.CharField(allow_blank=True, default="")
     labels = serializers.ListField(child=serializers.CharField())
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)
     subtasks_count = serializers.IntegerField(default=0)
     subtasks_done = serializers.IntegerField(default=0)
+    created_at = serializers.DateTimeField(allow_null=True, default=None)
+    updated_at = serializers.DateTimeField(allow_null=True, default=None)
 
 
 class CreateCommentSerializer(serializers.Serializer):
@@ -184,3 +193,5 @@ class SprintSerializer(serializers.Serializer):
     start_date = serializers.DateField(allow_null=True)
     end_date = serializers.DateField(allow_null=True)
     status = serializers.CharField()
+    started_at = serializers.DateTimeField(allow_null=True, default=None)
+    completed_at = serializers.DateTimeField(allow_null=True, default=None)

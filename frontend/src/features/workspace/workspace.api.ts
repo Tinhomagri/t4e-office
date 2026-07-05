@@ -1,6 +1,7 @@
 import { api } from "@/shared/api/client"
 
 import type {
+  ActivityEntry,
   Attachment,
   AutomationRule,
   AutomationRunLog,
@@ -8,9 +9,15 @@ import type {
   Notification,
   CreateAutomationRuleInput,
   CreateCustomFieldInput,
+  CreateDocumentInput,
+  CreateSavedFilterInput,
   CreateWorkflowStatusInput,
   CustomField,
+  DocumentDetail,
+  DocumentSummary,
   FieldValue,
+  SavedFilter,
+  UpdateDocumentInput,
   UpdateWorkflowStatusInput,
   WorkflowStatus,
   CardHistoryEntry,
@@ -178,6 +185,74 @@ export async function updateSprint(
   return data
 }
 
+export async function startSprint(
+  sprintId: string,
+  payload: { start_date?: string; end_date?: string; goal?: string } = {},
+): Promise<Sprint> {
+  const { data } = await api.post<Sprint>(`/sprints/${sprintId}/start/`, payload)
+  return data
+}
+
+export interface SprintCompleteResult extends Sprint {
+  summary: { completed_cards: number; moved_cards: number; moved_to: string }
+}
+
+export async function completeSprint(
+  sprintId: string,
+  moveTo: "backlog" | string = "backlog",
+): Promise<SprintCompleteResult> {
+  const { data } = await api.post<SprintCompleteResult>(`/sprints/${sprintId}/complete/`, {
+    move_to: moveTo,
+  })
+  return data
+}
+
+// ---- Épicos ----
+export interface Epic {
+  id: string
+  ref: string
+  title: string
+  status: string
+  color: string
+  start_date: string | null
+  due_date: string | null
+  children_total: number
+  children_done: number
+  points_total: number
+  points_done: number
+}
+
+export async function listEpics(projectId: string): Promise<Epic[]> {
+  const { data } = await api.get<Epic[]>(`/projects/${projectId}/epics/`)
+  return data
+}
+
+// ---- Ranking (Lexorank) ----
+export async function rankCard(
+  cardId: string,
+  payload: { before_id?: string | null; after_id?: string | null },
+): Promise<{ id: string; rank: string }> {
+  const { data } = await api.post(`/cards/${cardId}/rank/`, payload)
+  return data
+}
+
+// ---- Hierarquia (filhos de épico/subtarefas) ----
+export interface CardChild {
+  id: string
+  ref: string
+  title: string
+  status: string
+  type: string
+  priority: string
+  points: number | null
+  assignee_id: string | null
+}
+
+export async function listCardChildren(cardId: string): Promise<CardChild[]> {
+  const { data } = await api.get<CardChild[]>(`/cards/${cardId}/children/`)
+  return data
+}
+
 // ---- Versions ----
 export async function listVersions(projectId: string): Promise<Version[]> {
   const { data } = await api.get<Version[]>(`/projects/${projectId}/versions/`)
@@ -244,6 +319,52 @@ export async function updateWorkflowStatus(statusId: string, payload: UpdateWork
 
 export async function deleteWorkflowStatus(statusId: string): Promise<void> {
   await api.delete(`/workflow-statuses/${statusId}/`)
+}
+
+// ---- Saved Filters (quick filters do board) ----
+export async function listSavedFilters(projectId: string): Promise<SavedFilter[]> {
+  const { data } = await api.get<SavedFilter[]>(`/projects/${projectId}/saved-filters/`)
+  return data
+}
+
+export async function createSavedFilter(projectId: string, payload: CreateSavedFilterInput): Promise<SavedFilter> {
+  const { data } = await api.post<SavedFilter>(`/projects/${projectId}/saved-filters/`, payload)
+  return data
+}
+
+// ---- Documents (aba Documentos — colaborativo, persistido no servidor) ----
+export async function listDocuments(projectId: string): Promise<DocumentSummary[]> {
+  const { data } = await api.get<DocumentSummary[]>(`/projects/${projectId}/documents/`)
+  return data
+}
+
+export async function getDocument(documentId: string): Promise<DocumentDetail> {
+  const { data } = await api.get<DocumentDetail>(`/documents/${documentId}/`)
+  return data
+}
+
+export async function createDocument(projectId: string, payload: CreateDocumentInput): Promise<DocumentDetail> {
+  const { data } = await api.post<DocumentDetail>(`/projects/${projectId}/documents/`, payload)
+  return data
+}
+
+export async function updateDocument(documentId: string, payload: UpdateDocumentInput): Promise<DocumentDetail> {
+  const { data } = await api.patch<DocumentDetail>(`/documents/${documentId}/`, payload)
+  return data
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  await api.delete(`/documents/${documentId}/`)
+}
+
+export async function deleteSavedFilter(filterId: string): Promise<void> {
+  await api.delete(`/saved-filters/${filterId}/`)
+}
+
+// ---- Activity feed (aba Resumo) ----
+export async function listActivity(projectId: string): Promise<ActivityEntry[]> {
+  const { data } = await api.get<ActivityEntry[]>(`/projects/${projectId}/activity/`)
+  return data
 }
 
 // ---- Custom Fields ----

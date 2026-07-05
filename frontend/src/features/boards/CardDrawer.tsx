@@ -41,6 +41,7 @@ import {
   useDeleteAttachment,
   useDeleteCardLink,
   useDeleteWorklog,
+  useEpics,
   useFieldValues,
   useRemoveCardComponent,
   useRemoveCardVersion,
@@ -202,6 +203,8 @@ export function CardDrawer({
                 </Badge>
               )}
 
+              {draft.epic_id && <EpicBadge projectId={projectId} epicId={draft.epic_id} />}
+
               {savedHint && (
                 <span className="flex items-center gap-1 text-xs font-medium text-success animate-fade-in">
                   ✓ salvo
@@ -352,6 +355,17 @@ export function CardDrawer({
               }}
               options={[{ value: "", label: "Backlog" }, ...sprints.map((s) => ({ value: s.id, label: s.name }))]}
             />
+
+            {draft.type !== "epic" && (
+              <EpicSelect
+                projectId={projectId}
+                value={draft.epic_id}
+                onChange={(v) => {
+                  set("epic_id", v)
+                  persist({ epic_id: v })
+                }}
+              />
+            )}
 
             <DetailRow label="Início">
               <DateInput
@@ -1061,6 +1075,7 @@ const FIELD_LABEL: Record<string, string> = {
   start_date: "Início",
   due_date: "Prazo",
   parent_id: "Card pai",
+  epic_id: "Epic",
   labels: "Labels",
 }
 // Campos cujo valor é um id/uuid — não mostrar o valor cru.
@@ -1069,6 +1084,7 @@ const OPAQUE_FIELDS = new Set([
   "reporter_id",
   "sprint_id",
   "parent_id",
+  "epic_id",
 ])
 
 function HistoryLine({ h }: { h: CardHistoryEntry }) {
@@ -1390,6 +1406,60 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-paper-500">{title}</h3>
       {children}
     </div>
+  )
+}
+
+function EpicBadge({ projectId, epicId }: { projectId: string; epicId: string }) {
+  const { data: epics } = useEpics(projectId)
+  const epic = (epics ?? []).find((e) => e.id === epicId)
+  if (!epic) return null
+  return (
+    <span
+      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
+      style={{ backgroundColor: epic.color }}
+      title={epic.title}
+    >
+      {epic.ref}
+    </span>
+  )
+}
+
+function EpicSelect({
+  projectId,
+  value,
+  onChange,
+}: {
+  projectId: string
+  value: string | null
+  onChange: (v: string | null) => void
+}) {
+  const { data: epics } = useEpics(projectId)
+  const selected = (epics ?? []).find((e) => e.id === value)
+
+  return (
+    <DetailRow label="Epic">
+      <div className="relative">
+        <select
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-2.5 pr-7 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+        >
+          <option value="">Sem épico</option>
+          {(epics ?? []).map((e) => (
+            <option key={e.id} value={e.id}>{e.ref} · {e.title}</option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-paper-400" />
+      </div>
+      {selected && (
+        <span
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
+          style={{ backgroundColor: selected.color }}
+        >
+          {selected.ref}
+        </span>
+      )}
+    </DetailRow>
   )
 }
 

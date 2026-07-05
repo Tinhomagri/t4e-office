@@ -1,5 +1,5 @@
 import { api } from "@/shared/api/client"
-import type { PokerCard, PokerSession } from "./poker.types"
+import type { PokerCard, PokerRound, PokerSession, PokerWorkspaceSummary } from "./poker.types"
 
 export async function listSessions(workspaceId: string): Promise<PokerSession[]> {
   const { data } = await api.get(`/workspaces/${workspaceId}/poker/`)
@@ -45,5 +45,37 @@ export async function updateSession(
 
 export async function getPokerCards(sessionId: string): Promise<PokerCard[]> {
   const { data } = await api.get(`/poker/${sessionId}/cards/`)
+  return data
+}
+
+// ---- Sala a partir do projeto/board ----
+export async function listProjectSessions(projectId: string): Promise<PokerSession[]> {
+  const { data } = await api.get(`/projects/${projectId}/poker/`)
+  return data
+}
+
+export async function createProjectSession(
+  projectId: string,
+  input?: { name?: string; card_ids?: string[] },
+): Promise<PokerSession> {
+  const { data } = await api.post(`/projects/${projectId}/poker/`, {
+    name: input?.name,
+    card_ids: input?.card_ids,
+  })
+  return data
+}
+
+export async function applyPoints(sessionId: string, points: number): Promise<PokerSession> {
+  const { data } = await api.post(`/poker/${sessionId}/apply/`, { points })
+  return data
+}
+
+export async function getRounds(sessionId: string): Promise<PokerRound[]> {
+  const { data } = await api.get(`/poker/${sessionId}/rounds/`)
+  return data
+}
+
+export async function getWorkspaceSummary(workspaceId: string): Promise<PokerWorkspaceSummary> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/poker/summary/`)
   return data
 }

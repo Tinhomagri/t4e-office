@@ -89,6 +89,14 @@ class DjangoPokerSessionRepository(PokerSessionRepository):
             for r in PokerSessionModel.objects.filter(workspace_id=workspace_id)
         ]
 
+    def list_by_project(self, project_id: str) -> list[PokerSession]:
+        return [
+            _session_to_entity(r)
+            for r in PokerSessionModel.objects.filter(project_id=project_id).exclude(
+                status="done"
+            )
+        ]
+
 
 class DjangoPokerParticipantRepository(PokerParticipantRepository):
     def join(self, participant: PokerParticipant) -> PokerParticipant:

@@ -30,6 +30,7 @@ _TRACKED = [
     "start_date",
     "due_date",
     "parent_id",
+    "epic_id",
     "labels",
 ]
 
@@ -48,6 +49,7 @@ def _repr(card: Card) -> dict[str, str]:
         "start_date": "" if card.start_date is None else str(card.start_date),
         "due_date": "" if card.due_date is None else str(card.due_date),
         "parent_id": card.parent_id or "",
+        "epic_id": card.epic_id or "",
         "labels": ", ".join(card.labels),
     }
 
@@ -88,6 +90,8 @@ class UpdateCard:
         due_date=_UNSET,
         order=_UNSET,
         parent_id=_UNSET,
+        epic_id=_UNSET,
+        epic_color=_UNSET,
         labels=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
@@ -129,6 +133,10 @@ class UpdateCard:
             card.order = order
         if parent_id is not _UNSET:
             card.parent_id = parent_id
+        if epic_id is not _UNSET:
+            card.epic_id = epic_id
+        if epic_color is not _UNSET:
+            card.epic_color = epic_color
         if labels is not _UNSET:
             card.labels = labels
 

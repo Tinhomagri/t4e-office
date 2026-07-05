@@ -62,3 +62,12 @@ class DjangoWorkspaceAccess(WorkspaceAccess):
         return MembershipModel.objects.filter(
             workspace_id=workspace_id, user_id=user_id
         ).exists()
+
+    def role(self, *, workspace_id: str, user_id: str) -> str | None:
+        row = MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id=user_id
+        ).values_list("role", flat=True).first()
+        return row
+
+    def is_admin(self, *, workspace_id: str, user_id: str) -> bool:
+        return self.role(workspace_id=workspace_id, user_id=user_id) in ("owner", "admin")

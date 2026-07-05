@@ -1,6 +1,6 @@
 """Entidade de sprint (ciclo de trabalho) — Python puro."""
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 
 from shared.domain.errors import ValidationError
@@ -29,6 +29,8 @@ class Sprint:
     start_date: date | None = None
     end_date: date | None = None
     status: SprintStatus = SprintStatus.PLANNED
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

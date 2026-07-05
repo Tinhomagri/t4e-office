@@ -230,6 +230,103 @@
   color: #3a3a42;
 }
 
+/* ── Editor de documentos (Tiptap) — tipografia do conteúdo ───────────────
+   A folha é sempre branca (papel), como no Word/Google Docs reais — por
+   isso NENHUMA regra aqui usa dark:, mesmo com o app em tema escuro. */
+.prose-doc h1 { @apply mt-6 mb-2 text-2xl font-bold text-ink; }
+.prose-doc h1:first-child { @apply mt-0; }
+.prose-doc h2 { @apply mt-5 mb-2 text-xl font-bold text-ink; }
+.prose-doc h3 { @apply mt-4 mb-1.5 text-base font-semibold text-ink; }
+.prose-doc p { @apply my-2; }
+.prose-doc ul { @apply my-2 list-disc pl-6; }
+.prose-doc ol { @apply my-2 list-decimal pl-6; }
+.prose-doc li { @apply my-0.5; }
+.prose-doc blockquote {
+  @apply my-3 border-l-2 border-brand-300 pl-3 italic text-paper-600;
+}
+.prose-doc hr { @apply my-5 border-paper-200; }
+.prose-doc a { @apply text-brand-600 underline underline-offset-2; }
+.prose-doc code {
+  @apply rounded bg-paper-100 px-1 py-0.5 font-mono text-[0.85em] text-brand-700;
+}
+.prose-doc pre {
+  @apply my-3 overflow-x-auto rounded-xl bg-ink text-paper p-3.5 text-[13px] leading-relaxed;
+}
+.prose-doc pre code { @apply bg-transparent p-0 text-inherit; }
+.prose-doc mark { @apply rounded-sm px-0.5; }
+.prose-doc img { @apply my-3 max-w-full rounded-lg; }
+.prose-doc p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  @apply text-paper-300;
+}
+
+/* Checklist (TaskList/TaskItem) — checkbox nativo alinhado ao texto */
+.prose-doc ul[data-type="taskList"] { @apply my-2 list-none pl-0; }
+.prose-doc ul[data-type="taskList"] li {
+  @apply flex items-start gap-2;
+}
+.prose-doc ul[data-type="taskList"] li > label {
+  @apply mt-1 shrink-0;
+}
+.prose-doc ul[data-type="taskList"] li > div { @apply flex-1; }
+.prose-doc ul[data-type="taskList"] input[type="checkbox"] {
+  @apply size-3.5 accent-brand-500;
+}
+.prose-doc ul[data-type="taskList"] li[data-checked="true"] > div {
+  @apply text-paper-400 line-through;
+}
+
+/* Tabela */
+.prose-doc table {
+  @apply my-3 w-full border-collapse overflow-hidden rounded-lg;
+}
+.prose-doc th, .prose-doc td {
+  @apply border border-paper-200 px-3 py-1.5 text-left text-sm;
+}
+.prose-doc th {
+  @apply bg-paper-100 font-semibold text-paper-600;
+}
+.prose-doc .selectedCell {
+  @apply bg-brand-50;
+}
+
+/* ── Planning Poker — animações da sala ─────────────────────────────────── */
+@keyframes poker-deal {
+  from { opacity: 0; transform: translateY(24px) rotate(4deg) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+@keyframes poker-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes poker-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(108, 92, 240, 0.45); }
+  70% { box-shadow: 0 0 0 12px rgba(108, 92, 240, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(108, 92, 240, 0); }
+}
+@keyframes poker-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes poker-confetti {
+  0% { opacity: 1; transform: translateY(0) rotate(0); }
+  100% { opacity: 0; transform: translateY(-70px) rotate(220deg); }
+}
+@keyframes poker-glow {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+.poker-deal { animation: poker-deal 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.poker-pop { animation: poker-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.poker-pulse { animation: poker-pulse-ring 1.6s ease-out infinite; }
+.poker-float { animation: poker-float 3s ease-in-out infinite; }
+.poker-confetti { animation: poker-confetti 1s ease-out forwards; }
+.poker-glow { animation: poker-glow 3.5s ease-in-out infinite; }
+
 /* Transição suave padrão em controles interativos (microanimação global) */
 @layer base {
   button,

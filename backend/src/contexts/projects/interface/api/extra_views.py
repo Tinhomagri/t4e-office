@@ -15,8 +15,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.projects.infrastructure.django.models import (
-    AttachmentModel, CardComponentModel, CardModel, CardVersionModel,
-    ComponentModel, CustomFieldModel, IssueFieldValueModel, VersionModel, WorkflowStatusModel, WorklogModel,
+    AttachmentModel, CardComponentModel, CardHistoryModel, CardModel,
+    CardVersionModel, ComponentModel, CustomFieldModel, DocumentModel,
+    IssueFieldValueModel, SavedFilterModel, VersionModel, WorkflowStatusModel,
+    WorklogModel,
 )
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.permissions import (
@@ -404,3 +406,155 @@ class WorkflowStatusDetailView(APIView):
         ws = _guard_obj(WorkflowStatusModel, str(status_id), _uid(request), caps.MANAGE_WORKFLOW)
         ws.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── SavedFilters (quick filters do board) ─────────────────────────────────────
+
+def _ser_sf(sf: SavedFilterModel) -> dict:
+    return {
+        "id": str(sf.id), "project_id": str(sf.project_id),
+        "owner_id": str(sf.owner_id), "name": sf.name,
+        "jql": sf.jql, "shared": sf.shared,
+    }
+
+
+class SavedFilterListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        uid = _uid(request)
+        assert_project_member(project_id=str(project_id), user_id=uid)
+        from django.db.models import Q
+        qs = SavedFilterModel.objects.filter(project_id=project_id).filter(
+            Q(shared=True) | Q(owner_id=uid)
+        )
+        return Response([_ser_sf(sf) for sf in qs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        uid = _uid(request)
+        assert_project_member(project_id=str(project_id), user_id=uid)
+        name = (request.data.get("name") or "").strip()
+        jql = (request.data.get("jql") or "").strip()
+        if not name or not jql:
+            return Response({"error": "Nome e JQL são obrigatórios."}, status=status.HTTP_400_BAD_REQUEST)
+        sf = SavedFilterModel.objects.create(
+            project_id=project_id,
+            owner_id=uid,
+            name=name[:80],
+            jql=jql,
+            shared=bool(request.data.get("shared", True)),
+        )
+        return Response(_ser_sf(sf), status=status.HTTP_201_CREATED)
+
+
+class SavedFilterDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, filter_id: str) -> Response:
+        uid = _uid(request)
+        sf = SavedFilterModel.objects.filter(pk=filter_id).first()
+        if sf is None:
+            raise NotFoundError("Filtro não encontrado.")
+        if str(sf.owner_id) != uid:
+            # Não-dono só remove se tiver capacidade de gerenciar o workflow do projeto.
+            assert_project_capability(
+                project_id=str(sf.project_id), user_id=uid, capability=caps.MANAGE_WORKFLOW
+            )
+        sf.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Documents (aba Documentos — colaborativo, persistido no servidor) ────────
+
+def _ser_doc(doc: DocumentModel, *, with_content: bool = True) -> dict:
+    data = {
+        "id": str(doc.id), "project_id": str(doc.project_id),
+        "title": doc.title,
+        "created_by": str(doc.created_by),
+        "updated_by": str(doc.updated_by) if doc.updated_by else None,
+        "created_at": doc.created_at.isoformat(),
+        "updated_at": doc.updated_at.isoformat(),
+    }
+    if with_content:
+        data["content"] = doc.content
+    return data
+
+
+class DocumentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        # Lista não traz o conteúdo inteiro — evita payload pesado na sidebar.
+        docs = DocumentModel.objects.filter(project_id=project_id)
+        return Response([_ser_doc(d, with_content=False) for d in docs])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        uid = _uid(request)
+        assert_project_capability(
+            project_id=str(project_id), user_id=uid, capability=caps.CREATE_ISSUE
+        )
+        doc = DocumentModel.objects.create(
+            project_id=project_id,
+            title=request.data.get("title") or "Sem título",
+            content=request.data.get("content", ""),
+            created_by=uid,
+            updated_by=uid,
+        )
+        return Response(_ser_doc(doc), status=status.HTTP_201_CREATED)
+
+
+class DocumentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, document_id: str) -> Response:
+        uid = _uid(request)
+        doc = DocumentModel.objects.filter(pk=document_id).first()
+        if doc is None:
+            raise NotFoundError("Documento não encontrado.")
+        assert_project_member(project_id=str(doc.project_id), user_id=uid)
+        return Response(_ser_doc(doc))
+
+    def patch(self, request: Request, document_id: str) -> Response:
+        doc = _guard_obj(DocumentModel, str(document_id), _uid(request), caps.CREATE_ISSUE)
+        for f in ("title", "content"):
+            if f in request.data:
+                setattr(doc, f, request.data[f])
+        doc.updated_by = _uid(request)
+        doc.save()
+        return Response(_ser_doc(doc))
+
+    def delete(self, request: Request, document_id: str) -> Response:
+        doc = _guard_obj(DocumentModel, str(document_id), _uid(request), caps.CREATE_ISSUE)
+        doc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Activity feed (aba Resumo, estilo Jira) ─────────────────────────────────
+
+class ProjectActivityView(APIView):
+    """Últimas mudanças de campo em cards do projeto — feed da aba Resumo."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        rows = (
+            CardHistoryModel.objects.filter(card__project_id=project_id)
+            .select_related("author", "card", "card__project")
+            .order_by("-created_at")[:30]
+        )
+        return Response([
+            {
+                "id": str(h.id),
+                "card_ref": f"{h.card.project.key}-{h.card.number}",
+                "card_title": h.card.title,
+                "field": h.field,
+                "old_value": h.old_value,
+                "new_value": h.new_value,
+                "author_id": str(h.author_id) if h.author_id else None,
+                "author_name": h.author.full_name if h.author_id else "Sistema",
+                "created_at": h.created_at.isoformat(),
+            }
+            for h in rows
+        ])

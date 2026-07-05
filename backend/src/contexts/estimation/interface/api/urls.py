@@ -1,12 +1,16 @@
 from django.urls import path
 
 from contexts.estimation.interface.api.views import (
+    PokerApplyPointsView,
     PokerCardsView,
     PokerHeartbeatView,
     PokerJoinView,
+    PokerRoundListView,
     PokerSessionDetailView,
     PokerSessionListCreateView,
     PokerVoteView,
+    PokerWorkspaceSummaryView,
+    ProjectPokerListCreateView,
 )
 
 urlpatterns = [
@@ -14,6 +18,21 @@ urlpatterns = [
         "workspaces/<str:workspace_id>/poker/",
         PokerSessionListCreateView.as_view(),
         name="poker-list-create",
+    ),
+    path(
+        "workspaces/<str:workspace_id>/poker/summary/",
+        PokerWorkspaceSummaryView.as_view(),
+        name="poker-summary",
+    ),
+    path(
+        "projects/<str:project_id>/poker/",
+        ProjectPokerListCreateView.as_view(),
+        name="project-poker-list-create",
+    ),
+    path(
+        "poker/<str:session_id>/apply/",
+        PokerApplyPointsView.as_view(),
+        name="poker-apply",
     ),
     path(
         "poker/<str:session_id>/",
@@ -39,5 +58,10 @@ urlpatterns = [
         "poker/<str:session_id>/cards/",
         PokerCardsView.as_view(),
         name="poker-cards",
+    ),
+    path(
+        "poker/<str:session_id>/rounds/",
+        PokerRoundListView.as_view(),
+        name="poker-rounds",
     ),
 ]

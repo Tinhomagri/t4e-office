@@ -12,7 +12,7 @@ from contexts.copilot.application.use_cases.create_tasks_from_analysis import (
 )
 from contexts.copilot.application.use_cases.ingest_document import IngestDocument
 from contexts.copilot.domain.entities.document import Document
-from contexts.copilot.infrastructure.anthropic_analyzer import AnthropicAnalyzer
+from contexts.copilot.infrastructure import ai_config
 from contexts.copilot.infrastructure.django.repositories_impl import (
     DjangoDocumentRepository,
     DjangoWorkspaceAccess,
@@ -20,11 +20,14 @@ from contexts.copilot.infrastructure.django.repositories_impl import (
 from contexts.copilot.infrastructure.task_creator_impl import ProjectsTaskCreator
 from contexts.copilot.infrastructure.text_extractors import DefaultTextExtractor
 from contexts.copilot.interface.api.serializers import (
+    AiConfigSerializer,
+    AiConfigWriteSerializer,
     AnalysisSerializer,
+    ChatSerializer,
     CreateTasksSerializer,
     DocumentSerializer,
 )
-from shared.domain.errors import ValidationError
+from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
 
 def _doc_dict(doc: Document) -> dict:
@@ -102,11 +105,13 @@ class DocumentAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, document_id: str) -> Response:
-        use_case = AnalyzeDocument(
-            DjangoDocumentRepository(),
-            AnthropicAnalyzer(),
-            DjangoWorkspaceAccess(),
-        )
+        repo = DjangoDocumentRepository()
+        doc = repo.get(document_id=str(document_id))
+        if doc is None:
+            raise NotFoundError("Documento não encontrado.")
+        # Constrói o analisador a partir da config de IA do workspace do documento.
+        analyzer = ai_config.build_analyzer_for_workspace(doc.workspace_id)
+        use_case = AnalyzeDocument(repo, analyzer, DjangoWorkspaceAccess())
         result = use_case.execute(
             document_id=str(document_id), actor_id=str(request.user.id)
         )
@@ -131,3 +136,95 @@ class DocumentCreateTasksView(APIView):
             {"created": [{"id": c.id, "ref": c.ref, "title": c.title} for c in created]},
             status=status.HTTP_201_CREATED,
         )
+
+
+def _require_workspace_id(request: Request) -> str:
+    workspace_id = request.query_params.get("workspace_id") or request.data.get("workspace_id")
+    if not workspace_id:
+        raise ValidationError("Informe workspace_id.")
+    return str(workspace_id)
+
+
+class AiConfigView(APIView):
+    """Configuração de IA por workspace: GET (membros) / PUT (admin/owner).
+
+    /api/copilot/ai-config/?workspace_id=...
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = _require_workspace_id(request)
+        access = DjangoWorkspaceAccess()
+        if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+        cfg = ai_config.get_config(workspace_id)
+        data = ai_config.config_public_dict(cfg)
+        data["can_edit"] = access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id))
+        return Response(AiConfigSerializer(data).data | {"can_edit": data["can_edit"]})
+
+    def put(self, request: Request) -> Response:
+        workspace_id = _require_workspace_id(request)
+        access = DjangoWorkspaceAccess()
+        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError(
+                "Apenas administradores do workspace podem configurar a IA."
+            )
+        serializer = AiConfigWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        v = serializer.validated_data
+        cfg = ai_config.save_config(
+            workspace_id=workspace_id,
+            provider=v["provider"],
+            model=v["model"],
+            api_key=v["api_key"],
+            is_active=v["is_active"],
+            updated_by_id=str(request.user.id),
+        )
+        data = ai_config.config_public_dict(cfg)
+        data["can_edit"] = True
+        return Response(AiConfigSerializer(data).data | {"can_edit": True})
+
+
+class CopilotChatView(APIView):
+    """Chat conversacional com a IA do workspace: POST /api/copilot/chat/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = ChatSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        workspace_id = str(serializer.validated_data["workspace_id"])
+        access = DjangoWorkspaceAccess()
+        if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+        messages = [dict(m) for m in serializer.validated_data["messages"]]
+        reply = ai_config.chat_for_workspace(workspace_id, messages)
+        return Response({"reply": reply})
+
+
+class AiConfigTestView(APIView):
+    """Valida a chave configurada com uma chamada mínima: POST .../ai-config/test/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        workspace_id = _require_workspace_id(request)
+        access = DjangoWorkspaceAccess()
+        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError(
+                "Apenas administradores do workspace podem testar a IA."
+            )
+        analyzer = ai_config.build_analyzer_for_workspace(workspace_id)
+        try:
+            analyzer.analyze(
+                text="Reunião de teste: validar a conexão com a IA. Ação: confirmar integração."
+            )
+        except ValidationError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — devolve erro do provedor de forma amigável
+            return Response(
+                {"ok": False, "error": f"Falha ao conectar com o provedor: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"ok": True})

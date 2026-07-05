@@ -18,14 +18,17 @@ import {
   Play,
   Plus,
   Square,
+  Target,
   Zap,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import {
+  useCompleteSprint,
   useCreateSprint,
+  useEpics,
+  useStartSprint,
   useUpdateCard,
-  useUpdateSprint,
 } from "@/features/workspace/workspace.hooks"
 import type {
   Card,
@@ -81,13 +84,17 @@ export function BacklogView({
   onOpen: (c: Card) => void
 }) {
   const updateCard = useUpdateCard(projectId)
-  const updateSprint = useUpdateSprint(projectId)
+  const startSprint = useStartSprint(projectId)
+  const completeSprint = useCompleteSprint(projectId)
   const createSprint = useCreateSprint(projectId)
+  const { data: epics } = useEpics(projectId)
 
   const [activeId, setActiveId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [newGoal, setNewGoal] = useState("")
+  const [completingSprint, setCompletingSprint] = useState<Sprint | null>(null)
+  const [epicFilter, setEpicFilter] = useState<string | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -99,7 +106,8 @@ export function BacklogView({
     [sprints],
   )
 
-  const backlogCards = cards.filter((c) => !c.sprint_id)
+  const visibleCards = epicFilter ? cards.filter((c) => c.epic_id === epicFilter) : cards
+  const backlogCards = visibleCards.filter((c) => !c.sprint_id)
   const activeCard = cards.find((c) => c.id === activeId) ?? null
 
   function onDragStart(e: DragStartEvent) { setActiveId(String(e.active.id)) }
@@ -121,86 +129,224 @@ export function BacklogView({
   }
 
   const totalBacklogPts = sumPoints(backlogCards)
-  const totalCards = cards.length
+  const totalCards = visibleCards.length
 
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <div className="space-y-4">
-        {/* Header bar */}
-        <div className="flex items-center justify-between rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-4 py-3 shadow-card">
-          <div>
-            <h3 className="text-sm font-bold text-ink dark:text-paper">Backlog &amp; Sprints</h3>
-            <p className="text-xs text-paper-400">
-              {totalCards} cards · {totalBacklogPts} pts no backlog · Arraste para mover entre sprints
-            </p>
+      <div className="flex gap-4">
+        <div className="min-w-0 flex-1 space-y-4">
+          {/* Header bar */}
+          <div className="flex items-center justify-between rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-4 py-3 shadow-card">
+            <div>
+              <h3 className="text-sm font-bold text-ink dark:text-paper">Backlog &amp; Sprints</h3>
+              <p className="text-xs text-paper-400">
+                {totalCards} cards · {totalBacklogPts} pts no backlog · Arraste para mover entre sprints
+                {epicFilter && " · filtrado por épico"}
+              </p>
+            </div>
+            <button
+              onClick={() => setCreating((v) => !v)}
+              className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-sm font-semibold text-white shadow-brand-glow transition-all hover:bg-brand-600 active:scale-95"
+            >
+              <Plus className="size-4" /> Nova sprint
+            </button>
           </div>
-          <button
-            onClick={() => setCreating((v) => !v)}
-            className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-sm font-semibold text-white shadow-brand-glow transition-all hover:bg-brand-600 active:scale-95"
-          >
-            <Plus className="size-4" /> Nova sprint
-          </button>
-        </div>
 
-        {/* Create form */}
-        {creating && (
-          <div className="rounded-2xl border border-brand-200 bg-brand-50/40 p-4 animate-fade-up">
-            <p className="mb-3 text-sm font-semibold text-brand-700">Nova sprint</p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Nome (ex.: Sprint 1)"
-                onKeyDown={(e) => e.key === "Enter" && submitSprint()}
-                className="flex-1 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
-              />
-              <input
-                value={newGoal}
-                onChange={(e) => setNewGoal(e.target.value)}
-                placeholder="Meta (opcional)"
-                className="flex-1 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={submitSprint}
-                  disabled={!newName.trim() || createSprint.isPending}
-                  className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-                >
-                  Criar
-                </button>
-                <button
-                  onClick={() => setCreating(false)}
-                  className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-4 py-2 text-sm font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800"
-                >
-                  Cancelar
-                </button>
+          {/* Create form */}
+          {creating && (
+            <div className="rounded-2xl border border-brand-200 bg-brand-50/40 p-4 animate-fade-up">
+              <p className="mb-3 text-sm font-semibold text-brand-700">Nova sprint</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Nome (ex.: Sprint 1)"
+                  onKeyDown={(e) => e.key === "Enter" && submitSprint()}
+                  className="flex-1 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
+                />
+                <input
+                  value={newGoal}
+                  onChange={(e) => setNewGoal(e.target.value)}
+                  placeholder="Meta (opcional)"
+                  className="flex-1 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={submitSprint}
+                    disabled={!newName.trim() || createSprint.isPending}
+                    className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+                  >
+                    Criar
+                  </button>
+                  <button
+                    onClick={() => setCreating(false)}
+                    className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-4 py-2 text-sm font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Sprints */}
-        {openSprints.map((s) => (
-          <SprintSection
-            key={s.id}
-            sprint={s}
-            cards={cards.filter((c) => c.sprint_id === s.id)}
-            members={members}
-            onOpen={onOpen}
-            onStart={() => updateSprint.mutate({ sprintId: s.id, input: { status: "active" } })}
-            onClose={() => updateSprint.mutate({ sprintId: s.id, input: { status: "closed" } })}
-          />
-        ))}
+          {/* Sprints */}
+          {openSprints.map((s) => (
+            <SprintSection
+              key={s.id}
+              sprint={s}
+              cards={visibleCards.filter((c) => c.sprint_id === s.id)}
+              members={members}
+              onOpen={onOpen}
+              onStart={() => startSprint.mutate({ sprintId: s.id })}
+              onClose={() => setCompletingSprint(s)}
+              starting={startSprint.isPending}
+            />
+          ))}
 
-        {/* Backlog */}
-        <BacklogSection cards={backlogCards} members={members} onOpen={onOpen} />
+          {/* Backlog */}
+          <BacklogSection cards={backlogCards} members={members} onOpen={onOpen} />
+        </div>
+
+        {/* Painel de épicos */}
+        <EpicPanel
+          epics={epics ?? []}
+          activeId={epicFilter}
+          onFilter={(id) => setEpicFilter((cur) => (cur === id ? null : id))}
+        />
       </div>
 
       <DragOverlay>
         {activeCard ? <CardRow card={activeCard} members={members} overlay /> : null}
       </DragOverlay>
+
+      {completingSprint && (
+        <CompleteSprintModal
+          sprint={completingSprint}
+          openSprints={openSprints.filter((s) => s.id !== completingSprint.id)}
+          isPending={completeSprint.isPending}
+          onCancel={() => setCompletingSprint(null)}
+          onConfirm={(moveTo) => {
+            completeSprint.mutate(
+              { sprintId: completingSprint.id, moveTo },
+              { onSuccess: () => setCompletingSprint(null) },
+            )
+          }}
+        />
+      )}
     </DndContext>
+  )
+}
+
+// ─── Painel de épicos ──────────────────────────────────────────────────────────
+
+function EpicPanel({
+  epics,
+  activeId,
+  onFilter,
+}: {
+  epics: import("@/features/workspace/workspace.api").Epic[]
+  activeId: string | null
+  onFilter: (id: string) => void
+}) {
+  return (
+    <aside className="hidden w-64 shrink-0 rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-card lg:block">
+      <div className="flex items-center gap-2 border-b border-paper-100 dark:border-ink-800 px-4 py-3">
+        <Target className="size-4 text-paper-400" />
+        <span className="text-sm font-bold text-ink dark:text-paper">Épicos</span>
+        <span className="text-xs text-paper-400">({epics.length})</span>
+      </div>
+      <div className="max-h-[600px] space-y-1 overflow-y-auto p-2">
+        {epics.length === 0 && (
+          <p className="px-2 py-4 text-center text-xs text-paper-400">
+            Crie um card do tipo Épico para organizar o backlog.
+          </p>
+        )}
+        {epics.map((e) => {
+          const pct = e.children_total > 0 ? Math.round((e.children_done / e.children_total) * 100) : 0
+          const active = activeId === e.id
+          return (
+            <button
+              key={e.id}
+              onClick={() => onFilter(e.id)}
+              className={cx(
+                "w-full rounded-xl border px-3 py-2 text-left transition-all",
+                active
+                  ? "border-brand-400 bg-brand-50/50 dark:bg-brand-900/20"
+                  : "border-transparent hover:border-paper-200 dark:hover:border-ink-700 hover:bg-paper-50 dark:hover:bg-ink-800",
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: e.color }} />
+                <span className="truncate text-xs font-semibold text-ink dark:text-paper">{e.title}</span>
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${pct}%`, backgroundColor: e.color }}
+                  />
+                </div>
+                <span className="text-[10px] font-medium tabular text-paper-400">
+                  {e.children_done}/{e.children_total}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </aside>
+  )
+}
+
+// ─── Modal de conclusão de sprint ──────────────────────────────────────────────
+
+function CompleteSprintModal({
+  sprint,
+  openSprints,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  sprint: Sprint
+  openSprints: Sprint[]
+  isPending: boolean
+  onCancel: () => void
+  onConfirm: (moveTo: string) => void
+}) {
+  const [moveTo, setMoveTo] = useState("backlog")
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink-950/60 backdrop-blur-sm p-4" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="w-full max-w-md rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-5 shadow-xl animate-fade-up">
+        <h3 className="text-sm font-bold text-ink dark:text-paper">Concluir "{sprint.name}"</h3>
+        <p className="mt-1 text-xs text-paper-400">
+          Cards não concluídos precisam de um destino.
+        </p>
+        <label className="mt-4 block text-xs font-semibold text-paper-500">Mover cards abertos para</label>
+        <select
+          value={moveTo}
+          onChange={(e) => setMoveTo(e.target.value)}
+          className="mt-1.5 w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+        >
+          <option value="backlog">Backlog do projeto</option>
+          {openSprints.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="rounded-lg border border-paper-200 dark:border-ink-700 px-4 py-2 text-sm font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirm(moveTo)}
+            disabled={isPending}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            Concluir sprint
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -213,6 +359,7 @@ function SprintSection({
   onOpen,
   onStart,
   onClose,
+  starting = false,
 }: {
   sprint: Sprint
   cards: Card[]
@@ -220,6 +367,7 @@ function SprintSection({
   onOpen: (c: Card) => void
   onStart: () => void
   onClose: () => void
+  starting?: boolean
 }) {
   const [open, setOpen] = useState(true)
   const { setNodeRef, isOver } = useDroppable({ id: sprint.id })
@@ -287,7 +435,9 @@ function SprintSection({
           {sprint.status === "planned" && (
             <button
               onClick={onStart}
-              className="flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+              disabled={starting || cards.length === 0}
+              title={cards.length === 0 ? "Adicione cards antes de iniciar" : undefined}
+              className="flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40"
             >
               <Play className="size-3.5" /> Iniciar
             </button>
