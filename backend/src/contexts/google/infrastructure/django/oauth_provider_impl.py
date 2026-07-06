@@ -8,6 +8,9 @@ os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 import requests
 from django.conf import settings
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 
 from contexts.google.domain.ports.oauth_provider import (
@@ -16,9 +19,6 @@ from contexts.google.domain.ports.oauth_provider import (
     OAuthRevokedError,
     OAuthTokens,
 )
-from google.auth.exceptions import RefreshError
-from google.auth.transport.requests import Request as GoogleRequest
-from google.oauth2.credentials import Credentials
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",

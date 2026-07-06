@@ -10,7 +10,6 @@ from contexts.identity.infrastructure.django.models import (
 from contexts.projects.infrastructure.django.models import CardModel, ProjectModel, SprintModel
 from contexts.projects.infrastructure.lexorank import initial_rank_sequence, rank_between
 
-
 # ── Lexorank puro ─────────────────────────────────────────────────────────────
 
 def test_rank_between_extremos():

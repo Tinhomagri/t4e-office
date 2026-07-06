@@ -2,6 +2,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -10,7 +11,6 @@ from contexts.google.domain.ports.calendar_gateway import (
     CalendarError,
     CalendarGateway,
 )
-from google.oauth2.credentials import Credentials
 
 
 def _parse_dt(value: str) -> datetime:

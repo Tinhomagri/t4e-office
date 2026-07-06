@@ -13,8 +13,8 @@ class VerifyEmail:
 
         try:
             obj = EmailVerificationToken.objects.select_related("user").get(token=token)
-        except EmailVerificationToken.DoesNotExist:
-            raise NotFoundError("Token inválido.")
+        except EmailVerificationToken.DoesNotExist as exc:
+            raise NotFoundError("Token inválido.") from exc
 
         if obj.is_expired:
             raise ValidationError("Token expirado. Solicite um novo email de verificação.")

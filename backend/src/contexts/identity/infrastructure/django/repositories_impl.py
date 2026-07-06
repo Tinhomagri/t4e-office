@@ -7,8 +7,8 @@ from contexts.identity.domain.repositories.invitation_repository import (
 )
 from contexts.identity.domain.repositories.user_repository import UserRepository
 from contexts.identity.domain.repositories.workspace_repository import (
-    MemberView,
     MembershipRepository,
+    MemberView,
     WorkspaceRepository,
 )
 from contexts.identity.domain.value_objects.email import Email
