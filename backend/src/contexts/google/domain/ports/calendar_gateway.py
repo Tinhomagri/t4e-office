@@ -28,9 +28,17 @@ class CalendarGateway(ABC):
 
     @abstractmethod
     def list_upcoming(
-        self, *, access_token: str, max_results: int = 10
+        self,
+        *,
+        access_token: str,
+        max_results: int = 10,
+        time_min: datetime | None = None,
+        time_max: datetime | None = None,
     ) -> list[CalendarEvent]:
-        """Lista os próximos eventos da agenda primária."""
+        """Lista eventos da agenda primária no período [time_min, time_max].
+
+        Sem período informado, lista os próximos `max_results` a partir de agora.
+        """
 
     @abstractmethod
     def get_busy_intervals(

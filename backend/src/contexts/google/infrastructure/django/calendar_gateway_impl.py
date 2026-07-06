@@ -74,22 +74,27 @@ class GoogleCalendarGateway(CalendarGateway):
         )
 
     def list_upcoming(
-        self, *, access_token: str, max_results: int = 10
+        self,
+        *,
+        access_token: str,
+        max_results: int = 10,
+        time_min: datetime | None = None,
+        time_max: datetime | None = None,
     ) -> list[CalendarEvent]:
-        now = datetime.now(UTC).isoformat()
+        params: dict = {
+            "calendarId": "primary",
+            "timeMin": (time_min or datetime.now(UTC)).isoformat(),
+            "singleEvents": True,
+            "orderBy": "startTime",
+        }
+        if time_max is not None:
+            params["timeMax"] = time_max.isoformat()
+        else:
+            params["maxResults"] = max_results
+
         try:
             service = self._service(access_token)
-            result = (
-                service.events()
-                .list(
-                    calendarId="primary",
-                    timeMin=now,
-                    maxResults=max_results,
-                    singleEvents=True,
-                    orderBy="startTime",
-                )
-                .execute()
-            )
+            result = service.events().list(**params).execute()
         except HttpError as exc:
             raise CalendarError(f"Erro ao listar eventos: {exc}") from exc
 

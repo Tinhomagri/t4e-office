@@ -10,7 +10,17 @@ export function useGoogleStatus() {
 export function useUpcomingEvents(enabled: boolean) {
   return useQuery({
     queryKey: ["google", "events"],
-    queryFn: gApi.listUpcomingEvents,
+    queryFn: () => gApi.listUpcomingEvents(),
+    enabled,
+  })
+}
+
+export function useWeekEvents(enabled: boolean, weekStart: Date) {
+  const timeMin = weekStart.toISOString()
+  const timeMax = new Date(weekStart.getTime() + 7 * 86_400_000).toISOString()
+  return useQuery({
+    queryKey: ["google", "events", "week", timeMin],
+    queryFn: () => gApi.listUpcomingEvents({ timeMin, timeMax }),
     enabled,
   })
 }

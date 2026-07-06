@@ -103,7 +103,7 @@ class FakeCalendarGateway(CalendarGateway):
             html_link="https://calendar.google.com/evt-1",
         )
 
-    def list_upcoming(self, *, access_token, max_results=10):
+    def list_upcoming(self, *, access_token, max_results=10, time_min=None, time_max=None):
         return self.events
 
     def get_busy_intervals(self, *, access_token, time_min, time_max, emails):

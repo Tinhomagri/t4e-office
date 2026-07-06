@@ -30,6 +30,7 @@ import {
   useGoogleStatus,
   useUpcomingEvents,
 } from "./integrations.hooks"
+import { WeekAgenda } from "./WeekAgenda"
 
 // Avatar com gradiente determinístico por e-mail — mesma técnica usada em
 // Boards/Poker, reimplementada aqui pra manter a feature autocontida.
@@ -294,72 +295,13 @@ export function IntegrationsPage() {
         </section>
       )}
 
-      {/* A agenda em si — o Google Calendar de verdade, embutido */}
-      {connected && status.data?.google_email && (
-        <EmbeddedGoogleCalendar email={status.data.google_email} />
-      )}
+      {/* A agenda em si — grade própria (não o embed do Google: aquele é um
+          iframe cross-origin e nunca deixa a gente colocar o link do Meet
+          no popup de clique). Dados vindos da nossa API, que já traz meet_link. */}
+      {connected && <WeekAgenda />}
 
       <ScheduleMeetingModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
     </div>
-  )
-}
-
-// Embed real do Google Calendar (iframe oficial do Google). Só renderiza
-// eventos se a agenda estiver marcada como pública/compartilhada nas
-// configurações do Google — não há como contornar isso via iframe, então
-// deixamos o passo a passo sempre visível (colapsado) logo abaixo.
-function EmbeddedGoogleCalendar({ email }: { email: string }) {
-  const [showHelp, setShowHelp] = useState(false)
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(email)}&ctz=${encodeURIComponent(tz)}&mode=WEEK&showTitle=0&showPrint=0&showTabs=0&showCalendars=0`
-
-  return (
-    <section className="overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-card">
-      <div className="flex items-center justify-between gap-3 border-b border-paper-100 dark:border-ink-800 px-5 py-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink dark:text-paper">
-          <CalendarClock className="size-4" /> Sua agenda do Google
-        </h3>
-        <button
-          onClick={() => setShowHelp((v) => !v)}
-          className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
-        >
-          {showHelp ? "Ocultar" : "Não está vendo sua agenda aqui?"}
-        </button>
-      </div>
-
-      {showHelp && (
-        <div className="space-y-2 border-b border-paper-100 dark:border-ink-800 bg-paper-50 dark:bg-ink-800/60 px-5 py-4 text-sm text-paper-600 dark:text-paper-400">
-          <p>
-            O Google só permite mostrar uma agenda dentro de outro site (como o Pulse) se ela estiver
-            configurada como pública. Pra habilitar:
-          </p>
-          <ol className="list-decimal space-y-1 pl-5">
-            <li>Abra as configurações da sua agenda no Google Calendar.</li>
-            <li>Em "Acesso de compartilhamento", marque "Disponibilizar publicamente".</li>
-            <li>Marque "Ver todos os detalhes do evento" e salve.</li>
-          </ol>
-          <a
-            href="https://calendar.google.com/calendar/r/settings"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-brand-600 hover:underline dark:text-brand-400"
-          >
-            Abrir configurações do Google Calendar <ExternalLink className="size-3.5" />
-          </a>
-          <p className="text-xs text-paper-400">
-            Isso torna a agenda visível publicamente na web para quem tiver o link — se preferir não
-            expor, você pode continuar usando a lista de próximos eventos e o botão "Agendar reunião" normalmente.
-          </p>
-        </div>
-      )}
-
-      <iframe
-        title="Google Calendar"
-        src={src}
-        className="h-[640px] w-full border-0"
-        loading="lazy"
-      />
-    </section>
   )
 }
 

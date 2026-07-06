@@ -22,6 +22,8 @@ const HANDHELD_ANIMS: Record<string, string[] | "ALL"> = {
 
 function px(ctx: Ctx, x: number, y: number, c: string) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1) }
 function rect(ctx: Ctx, x: number, y: number, w: number, h: number, c: string) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h) }
+// Recorta 1px — usado pra arredondar cantos (silhueta estilo Stardew, sem blocão).
+function clearPx(ctx: Ctx, x: number, y: number) { ctx.clearRect(x, y, 1, 1) }
 function shade(hex: string, amt: number) {
   const n = parseInt(hex.slice(1), 16)
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
@@ -68,11 +70,12 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
   const showHandItem = handName !== "Mochila" && handShows(handName)
 
   ctx.globalAlpha = 0.18
-  rect(ctx, 10 + leanLegs, 30, 12, 2, "#000")
+  rect(ctx, 11 + leanLegs, 30, 10, 1, "#000") // sombra elíptica, não bloco
+  rect(ctx, 12 + leanLegs, 31, 8, 1, "#000")
   ctx.globalAlpha = 1
 
   if (showMochila) {
-    const mTop = 15 + by, mx = cx + leanTorso
+    const mTop = 13 + by, mx = cx + leanTorso
     const bagC = "#3a6ea5", bagD = shade(bagC, -30), bagL = shade(bagC, 25)
     if (dir === "up") {
       rect(ctx, mx - 4, mTop, 8, 8, bagC); rect(ctx, mx - 4, mTop, 8, 1, bagL)
@@ -88,7 +91,7 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
   const squashDrop = squash < 0 ? -squash : 0
   const stretchUp = squash > 0 ? squash : 0
   const bodyShift = squashDrop - stretchUp
-  const legTop = 22 + by
+  const legTop = 21 + by // corpo ~60% do sprite, cabeça pequena como na referência
   const legW = female ? 2 : 3
   const legSpread = female ? 1 : 2
   const drawShoe = (sx: number, sy: number, w: number) => {
@@ -100,8 +103,8 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
   }
   const drawLeg = (baseX: number, lift: number, slide: number) => {
     const lx = cx + baseX + leanLegs + (slide || 0)
-    let len = 4 - lift + bodyShift
-    if (len < 1) len = 1; if (len > 6) len = 6
+    let len = 7 - lift + bodyShift // perna longa: proporção da referência
+    if (len < 1) len = 1; if (len > 7) len = 7
     // Âncora no quadril: o passo encurta a perna pela base (pé sobe), sem abrir
     // buraco entre o torso e a coxa — antes top descia e a coxa sumia.
     const top2 = legTop
@@ -119,13 +122,13 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
   drawLeg(-legSpread - legW + 1, liftL, footL)
   drawLeg(legSpread - 1, liftR, footR)
 
-  const tTop = 15 + by + bodyShift
+  const tTop = 13 + by + bodyShift
   const tx = cx + leanTorso
   drawTorso(ctx, tx, tTop, top, shirt, shirtD, shirtL, skin)
 
   // Coordenadas da cabeça calculadas antes dos braços: drawArm precisa delas para
   // posicionar a mão erguida ao lado do rosto.
-  const hy = 5 + by + bodyShift + headBob
+  const hy = 4 + by + bodyShift + headBob // cabelo compacto: figura sobe 1 linha
   const hx = cx + leanHead
 
   const aL = num(pose, "armL"), aR = num(pose, "armR")
@@ -142,12 +145,12 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
     const c = side < 0 ? sleeveCD : sleeveC
     if (off > -3) {
       const ax = side < 0 ? tx - armReach : tx + armReach - 2
-      rect(ctx, ax, armTop + off, 2, sleeveLong ? 4 : 2, c)
-      if (!sleeveLong) rect(ctx, ax, armTop + 2 + off, 2, 2, skin)
-      rect(ctx, ax, armTop + 4 + off, 2, 1, skin)
-      return { hx: ax, hy: armTop + 4 + off }
+      rect(ctx, ax, armTop + off, 2, sleeveLong ? 5 : 2, c)
+      if (!sleeveLong) rect(ctx, ax, armTop + 2 + off, 2, 3, skin)
+      rect(ctx, ax, armTop + 5 + off, 2, 1, skin)
+      return { hx: ax, hy: armTop + 5 + off }
     }
-    const ax = side < 0 ? hx - 7 : hx + 6
+    const ax = side < 0 ? hx - 6 : hx + 5 // fora da cabeça (8px + cabelo)
     const handY = armTop + off // off negativo → mão acima do ombro (comprimento natural)
     rect(ctx, ax, handY, 2, Math.max(2, armTop - handY), c) // braço do ombro à mão
     rect(ctx, ax, handY, 2, 1, skin) // mão no topo
@@ -161,12 +164,18 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
     rect(ctx, handL.hx, handL.hy - 1, 2, 1, "#2b2b35"); px(ctx, handL.hx, handL.hy - 1, "#39d98a")
   }
 
-  rect(ctx, hx - 5, hy, 10, 10, skin)
-  rect(ctx, hx - 5, hy, 2, 10, skinD)
-  rect(ctx, hx - 5, hy, 10, 1, skinL)
-  if (dir === "down" || dir === "up") { px(ctx, hx - 6, hy + 5, skin); px(ctx, hx + 5, hy + 5, skin) }
-  else if (dir === "right") px(ctx, hx - 6, hy + 5, skin)
-  else px(ctx, hx + 5, hy + 5, skin)
+  // Cabeça 8×9 — não mais larga que o tronco: mata o "cabeçudo" de vez.
+  rect(ctx, hx - 4, hy, 8, 9, skin)
+  rect(ctx, hx - 4, hy + 1, 1, 7, skinD)
+  rect(ctx, hx + 3, hy + 1, 1, 7, shade(skin, -14))
+  rect(ctx, hx - 3, hy, 6, 1, skinL)
+  rect(ctx, hx - 2, hy + 8, 5, 1, shade(skin, -16)) // sombra do queixo
+  clearPx(ctx, hx - 4, hy); clearPx(ctx, hx + 3, hy)
+  clearPx(ctx, hx - 4, hy + 8); clearPx(ctx, hx + 3, hy + 8)
+  px(ctx, hx - 3, hy + 8, shade(skin, -20)); px(ctx, hx + 2, hy + 8, shade(skin, -20))
+  if (dir === "down" || dir === "up") { px(ctx, hx - 5, hy + 4, skin); px(ctx, hx + 4, hy + 4, skin) }
+  else if (dir === "right") px(ctx, hx - 5, hy + 4, skin)
+  else px(ctx, hx + 4, hy + 4, skin)
 
   drawFace(ctx, hx, hy, dir, female, skinD, pose.face as string | undefined)
   drawHair(ctx, hx, hy + hairDrag, dir, hair, hairD, hairL, female, s.hairStyle)
@@ -180,32 +189,36 @@ export function drawChibi(ctx: Ctx, s: AvatarConfig, dir: Direction, pose: Pose,
 function drawTorso(ctx: Ctx, tx: number, tTop: number, top: string, shirt: string, shirtD: string, shirtL: string, skin: string) {
   const body = (w: number) => {
     const x = tx - Math.floor(w / 2)
-    rect(ctx, x, tTop, w, 7, shirt); rect(ctx, x, tTop, 2, 7, shirtD); rect(ctx, x, tTop, w, 1, shirtL)
+    rect(ctx, x, tTop, w, 8, shirt); rect(ctx, x, tTop, 2, 8, shirtD); rect(ctx, x, tTop, w, 1, shirtL)
+    // Ombros arredondados — canto reto denuncia o "quadrado".
+    clearPx(ctx, x, tTop); clearPx(ctx, x + w - 1, tTop)
+    px(ctx, x + 1, tTop, shirtD); px(ctx, x + w - 2, tTop, shade(shirt, -12))
+    rect(ctx, x + w - 1, tTop + 1, 1, 7, shade(shirt, -14)) // contorno direito
     return x
   }
   if (top === "Vestido") {
     rect(ctx, tx - 3, tTop, 6, 5, shirt); rect(ctx, tx - 3, tTop, 2, 5, shirtD); rect(ctx, tx - 3, tTop, 6, 1, shirtL)
-    rect(ctx, tx - 4, tTop + 5, 8, 2, shirt); rect(ctx, tx - 5, tTop + 7, 10, 1, shirt)
-    rect(ctx, tx - 5, tTop + 7, 10, 1, shirtD); rect(ctx, tx - 4, tTop + 5, 1, 3, shirtD); return
+    rect(ctx, tx - 4, tTop + 5, 8, 2, shirt); rect(ctx, tx - 5, tTop + 7, 10, 2, shirt)
+    rect(ctx, tx - 5, tTop + 8, 10, 1, shirtD); rect(ctx, tx - 4, tTop + 5, 1, 3, shirtD); return
   }
   if (top === "Regata") {
     const x = body(8); rect(ctx, x, tTop, 2, 2, skin); rect(ctx, x + 6, tTop, 2, 2, skin); rect(ctx, tx - 1, tTop, 2, 2, skin); return
   }
   if (top === "Social" || top === "Polo") {
-    const x = body(8); rect(ctx, tx, tTop, 1, 6, shirtD)
+    const x = body(8); rect(ctx, tx, tTop, 1, 7, shirtD)
     rect(ctx, x + 1, tTop, 1, 2, shirtL); rect(ctx, x + 6, tTop, 1, 2, shirtL)
     if (top === "Polo") { px(ctx, tx, tTop + 1, "#fff"); px(ctx, tx, tTop + 3, "#fff") } return
   }
   if (top === "Jaleco") {
-    body(8); rect(ctx, tx - 4, tTop, 8, 7, "#f4f4f8"); rect(ctx, tx - 4, tTop, 8, 1, "#ffffff")
-    rect(ctx, tx - 1, tTop, 2, 7, shirt); rect(ctx, tx - 4, tTop, 1, 7, "#d8d8e0"); px(ctx, tx - 3, tTop + 4, "#0a84ff"); return
+    body(8); rect(ctx, tx - 4, tTop, 8, 8, "#f4f4f8"); rect(ctx, tx - 4, tTop, 8, 1, "#ffffff")
+    rect(ctx, tx - 1, tTop, 2, 8, shirt); rect(ctx, tx - 4, tTop, 1, 8, "#d8d8e0"); px(ctx, tx - 3, tTop + 4, "#0a84ff"); return
   }
   if (top === "Terno") {
-    body(8); rect(ctx, tx - 4, tTop, 8, 7, "#2b2f3a"); rect(ctx, tx - 1, tTop, 2, 7, "#f0f0f0")
-    rect(ctx, tx, tTop + 1, 1, 4, shirt); rect(ctx, tx - 4, tTop, 2, 7, "#1e2230"); return
+    body(8); rect(ctx, tx - 4, tTop, 8, 8, "#2b2f3a"); rect(ctx, tx - 1, tTop, 2, 8, "#f0f0f0")
+    rect(ctx, tx, tTop + 1, 1, 4, shirt); rect(ctx, tx - 4, tTop, 2, 8, "#1e2230"); return
   }
   if (top === "Moletom" || top === "Hoodie") {
-    const x = body(9); rect(ctx, x, tTop + 5, 9, 2, shirtD)
+    const x = body(9); rect(ctx, x, tTop + 6, 9, 2, shirtD)
     if (top === "Hoodie") rect(ctx, tx - 3, tTop - 1, 6, 1, shirtD)
     rect(ctx, tx - 1, tTop + 1, 1, 3, shirtL); px(ctx, tx - 1, tTop + 4, "#fff"); px(ctx, tx + 1, tTop + 4, "#fff"); return
   }
@@ -251,12 +264,17 @@ function drawFx(ctx: Ctx, fx: string, hx: number, hy: number, tx: number, tTop: 
 }
 
 function drawFace(ctx: Ctx, hx: number, hy: number, dir: Direction, female: boolean, skinD: string, face?: string) {
+  hy -= 1 // cabeça 9 de altura: rosto inteiro sobe 1 linha
   const eyeC = "#2a2230", white = "#fff", blush = "#ffb0b0"
+  const iris = "#3b7bd4", irisD = "#27508f" // olho grande com íris — marca do estilo Stardew
   const lip = female ? "#c25b6b" : skinD
   if (dir === "up") return
   const eyesNormal = (lx: number, rx: number) => {
-    rect(ctx, lx, hy + 5, 2, 2, white); px(ctx, lx, hy + 6, eyeC); rect(ctx, rx, hy + 5, 2, 2, white); px(ctx, rx + 1, hy + 6, eyeC)
-    if (female) { px(ctx, lx, hy + 4, eyeC); px(ctx, rx + 1, hy + 4, eyeC) }
+    px(ctx, lx, hy + 4, eyeC); px(ctx, lx + 1, hy + 4, eyeC) // cílio
+    px(ctx, rx, hy + 4, eyeC); px(ctx, rx + 1, hy + 4, eyeC)
+    rect(ctx, lx, hy + 5, 2, 2, white); rect(ctx, rx, hy + 5, 2, 2, white)
+    px(ctx, lx + 1, hy + 5, iris); px(ctx, lx + 1, hy + 6, irisD) // íris olhando ao centro
+    px(ctx, rx, hy + 5, iris); px(ctx, rx, hy + 6, irisD)
   }
   const eyesHappy = (lx: number, rx: number) => { px(ctx, lx, hy + 6, eyeC); px(ctx, lx + 1, hy + 5, eyeC); px(ctx, rx + 1, hy + 6, eyeC); px(ctx, rx, hy + 5, eyeC) }
   const eyesAngry = (lx: number, rx: number) => {
@@ -269,7 +287,7 @@ function drawFace(ctx: Ctx, hx: number, hy: number, dir: Direction, female: bool
   }
   const eyesSleep = (lx: number, rx: number) => { rect(ctx, lx, hy + 6, 2, 1, eyeC); rect(ctx, rx, hy + 6, 2, 1, eyeC) }
   if (dir === "down") {
-    const lx = hx - 3, rx = hx + 1
+    const lx = hx - 3, rx = hx + 1 // cabeça 8: olhos com 1px de margem
     if (face === "happy") { eyesHappy(lx, rx); rect(ctx, hx - 1, hy + 8, 2, 1, lip); px(ctx, hx - 2, hy + 8, lip); px(ctx, hx + 1, hy + 8, lip) }
     else if (face === "angry") { eyesAngry(lx, rx); rect(ctx, hx - 1, hy + 8, 2, 1, "#a33") }
     else if (face === "ko") { eyesKO(lx, rx); rect(ctx, hx - 1, hy + 8, 2, 1, "#a33") }
@@ -280,65 +298,103 @@ function drawFace(ctx: Ctx, hx: number, hy: number, dir: Direction, female: bool
     if (face === "ko") { px(ctx, hx - 3, hy + 5, eyeC); px(ctx, hx - 2, hy + 6, eyeC); px(ctx, hx - 2, hy + 5, eyeC); px(ctx, hx - 3, hy + 6, eyeC) }
     else if (face === "angry") { rect(ctx, hx - 3, hy + 5, 2, 2, white); px(ctx, hx - 3, hy + 6, eyeC); px(ctx, hx - 3, hy + 4, eyeC) }
     else if (face === "sleep") rect(ctx, hx - 3, hy + 6, 2, 1, eyeC)
-    else { rect(ctx, hx - 3, hy + 5, 2, 2, white); px(ctx, hx - 3, hy + 6, eyeC); if (female) px(ctx, hx - 3, hy + 4, eyeC) }
+    else {
+      rect(ctx, hx - 3, hy + 4, 2, 1, eyeC) // cílio
+      rect(ctx, hx - 3, hy + 5, 2, 2, white)
+      px(ctx, hx - 3, hy + 5, iris); px(ctx, hx - 3, hy + 6, irisD)
+    }
     px(ctx, hx - 4, hy + 7, blush); px(ctx, hx - 3, hy + 8, lip)
   } else {
     if (face === "ko") { px(ctx, hx + 1, hy + 5, eyeC); px(ctx, hx + 2, hy + 6, eyeC); px(ctx, hx + 2, hy + 5, eyeC); px(ctx, hx + 1, hy + 6, eyeC) }
     else if (face === "angry") { rect(ctx, hx + 1, hy + 5, 2, 2, white); px(ctx, hx + 2, hy + 6, eyeC); px(ctx, hx + 2, hy + 4, eyeC) }
     else if (face === "sleep") rect(ctx, hx + 1, hy + 6, 2, 1, eyeC)
-    else { rect(ctx, hx + 1, hy + 5, 2, 2, white); px(ctx, hx + 2, hy + 6, eyeC); if (female) px(ctx, hx + 2, hy + 4, eyeC) }
+    else {
+      rect(ctx, hx + 1, hy + 4, 2, 1, eyeC) // cílio
+      rect(ctx, hx + 1, hy + 5, 2, 2, white)
+      px(ctx, hx + 2, hy + 5, iris); px(ctx, hx + 2, hy + 6, irisD)
+    }
     px(ctx, hx + 3, hy + 7, blush); px(ctx, hx + 2, hy + 8, lip)
   }
 }
 
 function drawHair(ctx: Ctx, hx: number, hy: number, dir: Direction, hair: string, hairD: string, hairL: string, female: boolean, st: number) {
   const back = dir === "up"
-  const cap = () => { rect(ctx, hx - 5, hy - 1, 10, 3, hair); rect(ctx, hx - 5, hy - 1, 10, 1, hairL); rect(ctx, hx - 5, hy + 2, 1, 1, hairD); rect(ctx, hx + 4, hy + 2, 1, 1, hairD) }
-  const franja = () => { if (back) return; rect(ctx, hx - 5, hy + 1, 2, 1, hair); rect(ctx, hx + 3, hy + 1, 2, 1, hair) }
+  const D = shade(hair, -18)
+  // Massa de cabelo estilo Stardew: 14px de largura (envolve a cabeça de 12),
+  // coroa alta, brilho em mechas e franja irregular sobre a testa.
+  const cap = () => {
+    // Cabelo "veste" a cabeça (estilo Stardew): só 2px acima da testa, o resto
+    // sobrepõe o topo do crânio — nada de pilha alta que deixa cabeçudo.
+    rect(ctx, hx - 3, hy - 2, 6, 1, hair) // coroa curta
+    rect(ctx, hx - 5, hy - 1, 10, 3, hair) // massa hy-1..hy+1 (1px além da cabeça)
+    clearPx(ctx, hx - 5, hy - 1); clearPx(ctx, hx + 4, hy - 1) // silhueta redonda
+    rect(ctx, hx - 2, hy - 2, 3, 1, hairL) // brilho da coroa
+    px(ctx, hx - 3, hy - 1, hairL); px(ctx, hx + 1, hy - 1, hairL) // mechas
+    rect(ctx, hx - 5, hy, 1, 2, hairD) // sombra lateral esq
+    rect(ctx, hx + 4, hy, 1, 2, hairD)
+    rect(ctx, hx - 4, hy + 1, 8, 1, D) // peso na borda inferior
+  }
+  const franja = () => {
+    if (back) return
+    // Dentes irregulares da franja caindo sobre a testa.
+    rect(ctx, hx - 4, hy + 2, 2, 1, hair)
+    rect(ctx, hx - 1, hy + 2, 2, 1, hair)
+    rect(ctx, hx + 2, hy + 2, 2, 1, hair)
+    px(ctx, hx - 4, hy + 3, D); px(ctx, hx + 3, hy + 3, D) // costeletas
+  }
   const sideHair = (len: number) => {
-    if (dir !== "right") { rect(ctx, hx - 6, hy + 1, 1, len, hair); rect(ctx, hx - 6, hy + 1, 1, 1, hairL) }
-    if (dir !== "left") { rect(ctx, hx + 5, hy + 1, 1, len, hair); rect(ctx, hx + 5, hy + 1, 1, 1, hairL) }
+    if (dir !== "right") { rect(ctx, hx - 5, hy + 2, 1, len, hair); rect(ctx, hx - 5, hy + 2, 1, 1, hairL) }
+    if (dir !== "left") { rect(ctx, hx + 4, hy + 2, 1, len, hair); rect(ctx, hx + 4, hy + 2, 1, 1, hairL) }
   }
   switch (st) {
-    case 0: cap(); franja(); if (back) rect(ctx, hx - 5, hy + 2, 10, 4, hair); break
-    case 1: cap(); franja(); sideHair(female ? 8 : 6); if (back) { rect(ctx, hx - 5, hy + 2, 10, 7, hair); rect(ctx, hx - 5, hy + 2, 1, 7, hairD) } break
-    case 2: cap(); rect(ctx, hx - 2, hy - 3, 2, 2, hair); rect(ctx, hx + 1, hy - 4, 2, 3, hair); rect(ctx, hx + 1, hy - 4, 1, 3, hairL); if (!back) franja(); sideHair(female ? 7 : 3); if (back) rect(ctx, hx - 5, hy + 2, 10, 5, hair); break
+    case 0: cap(); franja(); if (back) rect(ctx, hx - 4, hy + 2, 8, 4, hair); break
+    case 1: cap(); franja(); sideHair(female ? 8 : 6); if (back) { rect(ctx, hx - 4, hy + 2, 8, 7, hair); rect(ctx, hx - 4, hy + 2, 1, 7, hairD) } break
+    case 2: cap(); rect(ctx, hx - 2, hy - 3, 2, 1, hair); rect(ctx, hx + 1, hy - 4, 2, 2, hair); rect(ctx, hx + 1, hy - 4, 1, 2, hairL); if (!back) franja(); sideHair(female ? 7 : 3); if (back) rect(ctx, hx - 4, hy + 2, 8, 5, hair); break
     case 3:
       cap(); franja()
-      if (dir === "down" || dir === "up") { rect(ctx, hx + 5, hy - 1, 2, 9, hair); rect(ctx, hx + 5, hy - 1, 1, 9, hairL) }
-      else if (dir === "left") { rect(ctx, hx + 5, hy, 3, 8, hair); rect(ctx, hx + 5, hy, 1, 8, hairD) }
-      else { rect(ctx, hx - 8, hy, 3, 8, hair); rect(ctx, hx - 8, hy, 1, 8, hairL) }
+      if (dir === "down" || dir === "up") { rect(ctx, hx + 4, hy - 1, 2, 9, hair); rect(ctx, hx + 4, hy - 1, 1, 9, hairL) }
+      else if (dir === "left") { rect(ctx, hx + 4, hy, 3, 8, hair); rect(ctx, hx + 4, hy, 1, 8, hairD) }
+      else { rect(ctx, hx - 7, hy, 3, 8, hair); rect(ctx, hx - 7, hy, 1, 8, hairL) }
       if (female) sideHair(5); break
-    case 4: cap(); rect(ctx, hx - 2, hy - 4, 4, 3, hair); rect(ctx, hx - 2, hy - 4, 4, 1, hairL); px(ctx, hx - 3, hy - 3, hair); px(ctx, hx + 2, hy - 3, hair); if (!back) franja(); sideHair(female ? 6 : 3); if (back) rect(ctx, hx - 5, hy + 2, 10, 5, hair); break
-    case 5: rect(ctx, hx - 4, hy - 1, 8, 1, hair); px(ctx, hx - 5, hy, hair); px(ctx, hx + 4, hy, hair); if (back) rect(ctx, hx - 4, hy, 8, 3, hair); break
-    case 6: rect(ctx, hx - 1, hy - 4, 3, 6, hair); rect(ctx, hx - 1, hy - 4, 1, 6, hairL); rect(ctx, hx - 5, hy + 1, 2, 2, shade(hair, -10)); rect(ctx, hx + 3, hy + 1, 2, 2, shade(hair, -10)); if (back) rect(ctx, hx - 1, hy, 3, 5, hair); break
-    case 7:
-      rect(ctx, hx - 6, hy - 2, 12, 5, hair); rect(ctx, hx - 6, hy - 2, 12, 1, hairL)
-      px(ctx, hx - 6, hy - 3, hair); px(ctx, hx + 5, hy - 3, hair); px(ctx, hx, hy - 3, hair)
-      rect(ctx, hx - 6, hy + 1, 1, 3, hair); rect(ctx, hx + 5, hy + 1, 1, 3, hair)
-      px(ctx, hx - 3, hy - 1, hairD); px(ctx, hx + 2, hy - 1, hairD); px(ctx, hx, hy, hairD)
-      if (back) rect(ctx, hx - 6, hy + 1, 12, 5, hair); break
+    case 4: cap(); rect(ctx, hx - 2, hy - 4, 4, 2, hair); rect(ctx, hx - 2, hy - 4, 4, 1, hairL); px(ctx, hx - 3, hy - 3, hair); px(ctx, hx + 2, hy - 3, hair); if (!back) franja(); sideHair(female ? 6 : 3); if (back) rect(ctx, hx - 4, hy + 2, 8, 5, hair); break
+    case 5: rect(ctx, hx - 3, hy - 1, 6, 1, hair); px(ctx, hx - 4, hy, hair); px(ctx, hx + 3, hy, hair); if (back) rect(ctx, hx - 3, hy, 6, 3, hair); break
+    case 6: // moicano: crista curta e cheia, não antena
+      rect(ctx, hx - 2, hy - 3, 4, 5, hair); rect(ctx, hx - 1, hy - 4, 2, 1, hair)
+      rect(ctx, hx - 2, hy - 3, 1, 5, hairL)
+      rect(ctx, hx - 4, hy + 1, 2, 2, shade(hair, -10)); rect(ctx, hx + 2, hy + 1, 2, 2, shade(hair, -10))
+      if (back) rect(ctx, hx - 2, hy, 4, 5, hair); break
+    case 7: // cacheado — massa volumosa com "bumps"
+      rect(ctx, hx - 4, hy - 3, 8, 1, hair)
+      rect(ctx, hx - 5, hy - 2, 10, 5, hair) // hy-2..hy+2
+      clearPx(ctx, hx - 5, hy - 2); clearPx(ctx, hx + 4, hy - 2)
+      px(ctx, hx - 3, hy - 4, hair); px(ctx, hx, hy - 4, hair); px(ctx, hx + 2, hy - 4, hair) // cachos no topo
+      rect(ctx, hx - 2, hy - 3, 4, 1, hairL)
+      px(ctx, hx - 3, hy - 2, hairD); px(ctx, hx + 2, hy - 2, hairD); px(ctx, hx, hy, hairD); px(ctx, hx - 4, hy - 1, hairD); px(ctx, hx + 3, hy - 1, hairD)
+      rect(ctx, hx - 5, hy + 3, 1, 3, hair); rect(ctx, hx + 4, hy + 3, 1, 3, hair)
+      rect(ctx, hx - 4, hy + 2, 8, 1, D)
+      if (back) rect(ctx, hx - 4, hy + 2, 8, 5, hair); break
     case 8:
       cap(); franja()
-      if (dir !== "right") { rect(ctx, hx - 6, hy + 1, 1, 8, hair); rect(ctx, hx - 6, hy + 1, 1, 1, hairL); px(ctx, hx - 5, hy + 8, hair) }
-      if (dir !== "left") { rect(ctx, hx + 5, hy + 1, 1, 8, hair); rect(ctx, hx + 5, hy + 1, 1, 1, hairL); px(ctx, hx + 4, hy + 8, hair) }
-      if (back) { rect(ctx, hx - 5, hy + 2, 10, 8, hair); rect(ctx, hx - 5, hy + 2, 1, 8, hairD); rect(ctx, hx, hy + 2, 1, 8, hairD); rect(ctx, hx - 5, hy + 2, 10, 1, hairL) }
+      if (dir !== "right") { rect(ctx, hx - 5, hy + 2, 1, 8, hair); rect(ctx, hx - 5, hy + 2, 1, 1, hairL); px(ctx, hx - 4, hy + 9, hair) }
+      if (dir !== "left") { rect(ctx, hx + 4, hy + 2, 1, 8, hair); rect(ctx, hx + 4, hy + 2, 1, 1, hairL); px(ctx, hx + 3, hy + 9, hair) }
+      if (back) { rect(ctx, hx - 4, hy + 2, 8, 8, hair); rect(ctx, hx - 4, hy + 2, 1, 8, hairD); rect(ctx, hx, hy + 2, 1, 8, hairD); rect(ctx, hx - 4, hy + 2, 8, 1, hairL) }
       break
     case 9:
       cap(); franja()
       if (dir === "down" || dir === "up") {
-        rect(ctx, hx - 8, hy, 2, 6, hair); rect(ctx, hx - 8, hy, 1, 6, hairL); rect(ctx, hx + 6, hy, 2, 6, hair); rect(ctx, hx + 6, hy, 1, 6, hairL)
-        px(ctx, hx - 7, hy - 1, "#ff6fa5"); px(ctx, hx + 7, hy - 1, "#ff6fa5")
-      } else if (dir === "left") { rect(ctx, hx + 5, hy, 2, 6, hair); px(ctx, hx - 6, hy, hair) }
-      else { rect(ctx, hx - 7, hy, 2, 6, hair); px(ctx, hx + 5, hy, hair) }
+        rect(ctx, hx - 7, hy, 2, 6, hair); rect(ctx, hx - 7, hy, 1, 6, hairL); rect(ctx, hx + 5, hy, 2, 6, hair); rect(ctx, hx + 5, hy, 1, 6, hairL)
+        px(ctx, hx - 6, hy - 1, "#ff6fa5"); px(ctx, hx + 6, hy - 1, "#ff6fa5")
+      } else if (dir === "left") { rect(ctx, hx + 4, hy, 2, 6, hair); px(ctx, hx - 5, hy, hair) }
+      else { rect(ctx, hx - 6, hy, 2, 6, hair); px(ctx, hx + 4, hy, hair) }
       break
     case 10:
-      rect(ctx, hx - 5, hy - 1, 10, 2, hair); rect(ctx, hx - 5, hy - 1, 10, 1, hairL); rect(ctx, hx - 5, hy + 1, 10, 1, shade(hair, -15))
-      if (!back) rect(ctx, hx - 2, hy + 1, 5, 1, hair); if (back) rect(ctx, hx - 5, hy + 1, 10, 2, shade(hair, -15)); break
+      rect(ctx, hx - 4, hy - 1, 8, 2, hair); rect(ctx, hx - 4, hy - 1, 8, 1, hairL); rect(ctx, hx - 4, hy + 1, 8, 1, shade(hair, -15))
+      clearPx(ctx, hx - 4, hy - 1); clearPx(ctx, hx + 3, hy - 1)
+      if (!back) rect(ctx, hx - 2, hy + 1, 4, 1, hair); if (back) rect(ctx, hx - 4, hy + 1, 8, 2, shade(hair, -15)); break
     case 11:
       cap()
-      if (!back) { rect(ctx, hx - 5, hy + 1, 10, 1, hair); rect(ctx, hx - 5, hy + 1, 10, 1, hairD); px(ctx, hx - 5, hy + 2, hair); px(ctx, hx + 4, hy + 2, hair) }
-      sideHair(female ? 7 : 4); if (back) rect(ctx, hx - 5, hy + 2, 10, 6, hair); break
+      if (!back) { rect(ctx, hx - 4, hy + 2, 8, 1, hair); rect(ctx, hx - 4, hy + 3, 8, 1, D); px(ctx, hx - 4, hy + 4, hair); px(ctx, hx + 3, hy + 4, hair) }
+      sideHair(female ? 7 : 4); if (back) rect(ctx, hx - 4, hy + 2, 8, 6, hair); break
   }
 }
 
@@ -346,42 +402,49 @@ function drawAccessory(ctx: Ctx, hx: number, hy: number, dir: Direction, acc: nu
   if (acc === 1 && dir !== "up") { // óculos: só laterais nas linhas dos olhos (lente transparente, nada na testa)
     const rim = "#4b5563" // cinza fino — não funde com cabelo/olhos escuros
     if (dir === "down") {
-      // olho esq cols hx-3..hx-2 entre laterais hx-4/hx-1; olho dir cols hx+1..hx+2 entre hx/hx+3
-      rect(ctx, hx - 4, hy + 5, 1, 2, rim); rect(ctx, hx - 1, hy + 5, 1, 2, rim) // lente esq
-      rect(ctx, hx, hy + 5, 1, 2, rim); rect(ctx, hx + 3, hy + 5, 1, 2, rim) // lente dir (ponte em hx-1|hx)
-      px(ctx, hx - 5, hy + 5, rim); px(ctx, hx + 4, hy + 5, rim) // hastes às orelhas
+      // olho esq cols hx-3..hx-2; olho dir cols hx+1..hx+2 (linha dos olhos hy+4)
+      rect(ctx, hx - 4, hy + 4, 1, 2, rim); rect(ctx, hx - 1, hy + 4, 1, 2, rim) // lente esq
+      rect(ctx, hx, hy + 4, 1, 2, rim); rect(ctx, hx + 3, hy + 4, 1, 2, rim) // lente dir
+      px(ctx, hx - 5, hy + 4, rim); px(ctx, hx + 4, hy + 4, rim) // hastes às orelhas
     } else if (dir === "left") {
-      rect(ctx, hx - 4, hy + 5, 1, 2, rim); rect(ctx, hx - 1, hy + 5, 1, 2, rim); px(ctx, hx - 5, hy + 5, rim)
+      rect(ctx, hx - 4, hy + 4, 1, 2, rim); rect(ctx, hx - 1, hy + 4, 1, 2, rim); px(ctx, hx - 5, hy + 4, rim)
     } else {
-      rect(ctx, hx, hy + 5, 1, 2, rim); rect(ctx, hx + 3, hy + 5, 1, 2, rim); px(ctx, hx + 4, hy + 5, rim)
+      rect(ctx, hx, hy + 4, 1, 2, rim); rect(ctx, hx + 3, hy + 4, 1, 2, rim); px(ctx, hx + 4, hy + 4, rim)
     }
   }
   if (acc === 2) {
-    rect(ctx, hx - 5, hy - 1, 10, 2, "#d94f4f"); rect(ctx, hx - 5, hy - 1, 10, 1, "#ff7a7a")
-    if (dir === "down") rect(ctx, hx - 5, hy + 1, 10, 1, "#b03a3a")
-    else if (dir === "left") rect(ctx, hx - 8, hy + 1, 3, 1, "#b03a3a")
-    else if (dir === "right") rect(ctx, hx + 5, hy + 1, 3, 1, "#b03a3a")
+    rect(ctx, hx - 4, hy - 4, 8, 2, "#d94f4f") // copa sobre a coroa do cabelo
+    rect(ctx, hx - 5, hy - 2, 10, 2, "#d94f4f"); rect(ctx, hx - 4, hy - 4, 8, 1, "#ff7a7a")
+    clearPx(ctx, hx - 5, hy - 2); clearPx(ctx, hx + 4, hy - 2)
+    if (dir === "down") rect(ctx, hx - 4, hy, 8, 1, "#b03a3a")
+    else if (dir === "left") rect(ctx, hx - 8, hy, 4, 1, "#b03a3a")
+    else if (dir === "right") rect(ctx, hx + 4, hy, 4, 1, "#b03a3a")
   }
-  if (acc === 3 && dir !== "up") { // brinco logo abaixo da orelha (orelha em hy+5)
-    if (dir !== "right") px(ctx, hx - 6, hy + 6, "#ffd24d")
-    if (dir !== "left") px(ctx, hx + 5, hy + 6, "#ffd24d")
+  if (acc === 3 && dir !== "up") { // brinco logo abaixo da orelha (orelha em hy+4)
+    if (dir !== "right") px(ctx, hx - 5, hy + 5, "#ffd24d")
+    if (dir !== "left") px(ctx, hx + 4, hy + 5, "#ffd24d")
   }
   if (acc === 4) {
     const c = "#222", pad = "#5b7fd9"
-    rect(ctx, hx - 5, hy - 2, 10, 1, c); rect(ctx, hx - 5, hy - 2, 1, 2, c); rect(ctx, hx + 4, hy - 2, 1, 2, c)
-    if (dir === "down" || dir === "up") { rect(ctx, hx - 6, hy + 4, 2, 3, c); rect(ctx, hx + 4, hy + 4, 2, 3, c); px(ctx, hx - 5, hy + 5, pad); px(ctx, hx + 4, hy + 5, pad) }
-    else if (dir === "left") { rect(ctx, hx + 3, hy + 4, 2, 3, c); px(ctx, hx + 3, hy + 5, pad); rect(ctx, hx - 5, hy + 5, 1, 2, c); px(ctx, hx - 5, hy + 7, pad) }
-    else { rect(ctx, hx - 5, hy + 4, 2, 3, c); px(ctx, hx - 4, hy + 5, pad); rect(ctx, hx + 4, hy + 5, 1, 2, c); px(ctx, hx + 4, hy + 7, pad) }
+    rect(ctx, hx - 3, hy - 3, 6, 1, c); rect(ctx, hx - 5, hy - 2, 2, 1, c); rect(ctx, hx + 3, hy - 2, 2, 1, c) // arco por cima do cabelo
+    if (dir === "down" || dir === "up") { rect(ctx, hx - 5, hy + 3, 2, 3, c); rect(ctx, hx + 3, hy + 3, 2, 3, c); px(ctx, hx - 4, hy + 4, pad); px(ctx, hx + 3, hy + 4, pad) }
+    else if (dir === "left") { rect(ctx, hx + 2, hy + 3, 2, 3, c); px(ctx, hx + 2, hy + 4, pad); rect(ctx, hx - 4, hy + 4, 1, 2, c); px(ctx, hx - 4, hy + 6, pad) }
+    else { rect(ctx, hx - 4, hy + 3, 2, 3, c); px(ctx, hx - 3, hy + 4, pad); rect(ctx, hx + 3, hy + 4, 1, 2, c); px(ctx, hx + 3, hy + 6, pad) }
   }
   if (acc === 5 && dir !== "up") { const cy = hy + 12; rect(ctx, hx - 1, cy, 3, 4, "#f0f0f0"); rect(ctx, hx - 1, cy, 3, 1, "#0a84ff"); px(ctx, hx, cy + 2, "#9aa0aa"); px(ctx, hx, hy + 10, "#888") }
   if (acc === 7 && dir !== "up") { // óculos VR: visor sobre os olhos + alça lateral
-    rect(ctx, hx - 5, hy + 4, 10, 4, "#15151f"); rect(ctx, hx - 5, hy + 4, 10, 1, "#3a3a55")
-    rect(ctx, hx - 6, hy + 5, 1, 2, "#2b2b35"); rect(ctx, hx + 5, hy + 5, 1, 2, "#2b2b35") // alça
-    if (dir === "down") { px(ctx, hx - 3, hy + 6, "#7c6cff"); px(ctx, hx + 2, hy + 6, "#7c6cff") }
-    else if (dir === "left") px(ctx, hx - 3, hy + 6, "#7c6cff")
-    else px(ctx, hx + 2, hy + 6, "#7c6cff")
+    rect(ctx, hx - 4, hy + 3, 8, 4, "#15151f"); rect(ctx, hx - 4, hy + 3, 8, 1, "#3a3a55")
+    rect(ctx, hx - 5, hy + 4, 1, 2, "#2b2b35"); rect(ctx, hx + 4, hy + 4, 1, 2, "#2b2b35") // alça
+    if (dir === "down") { px(ctx, hx - 3, hy + 5, "#7c6cff"); px(ctx, hx + 2, hy + 5, "#7c6cff") }
+    else if (dir === "left") px(ctx, hx - 3, hy + 5, "#7c6cff")
+    else px(ctx, hx + 2, hy + 5, "#7c6cff")
   }
-  if (acc === 8) { rect(ctx, hx - 5, hy - 2, 10, 4, "#39435e"); rect(ctx, hx - 5, hy - 2, 10, 1, "#4d5a7a"); rect(ctx, hx - 5, hy + 1, 10, 1, "#2b3346"); px(ctx, hx, hy - 3, "#39435e") }
+  if (acc === 8) {
+    rect(ctx, hx - 4, hy - 4, 8, 2, "#39435e") // gorro cobre a coroa
+    rect(ctx, hx - 5, hy - 2, 10, 3, "#39435e"); rect(ctx, hx - 4, hy - 4, 8, 1, "#4d5a7a")
+    clearPx(ctx, hx - 5, hy - 2); clearPx(ctx, hx + 4, hy - 2)
+    rect(ctx, hx - 5, hy + 1, 10, 1, "#2b3346")
+  }
 }
 
 const T = Math.PI * 2
@@ -430,6 +493,31 @@ export function poseFor(anim: string, f: number): Pose {
   return { body: 0 }
 }
 
+// Contorno estilo Stardew: pinta 1px escuro em todo pixel transparente vizinho
+// da silhueta (4-conexo). Ignora a sombra do chão (alpha baixo) para não
+// contorná-la junto. Roda por frame, depois do desenho.
+const OUTLINE = { r: 31, g: 22, b: 38 } // #1f1626 — ameixa escura, não preto puro
+function outlineFrame(ctx: Ctx, ox: number, oy: number) {
+  const img = ctx.getImageData(ox, oy, FW, FH)
+  const d = img.data
+  const solid = (i: number) => d[i + 3] > 200
+  const marks: number[] = []
+  for (let y = 0; y < FH; y++) {
+    for (let x = 0; x < FW; x++) {
+      const i = (y * FW + x) * 4
+      if (d[i + 3] !== 0) continue
+      if (
+        (x > 0 && solid(i - 4)) ||
+        (x < FW - 1 && solid(i + 4)) ||
+        (y > 0 && solid(i - FW * 4)) ||
+        (y < FH - 1 && solid(i + FW * 4))
+      ) marks.push(i)
+    }
+  }
+  for (const i of marks) { d[i] = OUTLINE.r; d[i + 1] = OUTLINE.g; d[i + 2] = OUTLINE.b; d[i + 3] = 255 }
+  ctx.putImageData(img, ox, oy)
+}
+
 // Constrói o spritesheet completo num canvas offscreen + mapa de frames.
 export interface AvatarSheet { canvas: HTMLCanvasElement; frames: Record<string, { x: number; y: number }[]>; cols: number; rows: number; W: number; H: number }
 
@@ -447,7 +535,13 @@ export function buildAvatarSheet(config: AvatarConfig): AvatarSheet {
     const key = `${dir}_${anim}`; frames[key] = []
     for (let f = 0; f < ANIMS[anim]; f++) {
       const ox = f * FW, oy = row * FH
-      ctx.save(); ctx.translate(ox, oy); drawChibi(ctx, config, dir, poseFor(anim, f), anim); ctx.restore()
+      // Clip por célula: cabelo alto (coroa/coque) em poses de pulo não pode
+      // vazar pro frame vizinho do spritesheet.
+      ctx.save(); ctx.translate(ox, oy)
+      ctx.beginPath(); ctx.rect(0, 0, FW, FH); ctx.clip()
+      drawChibi(ctx, config, dir, poseFor(anim, f), anim)
+      ctx.restore()
+      outlineFrame(ctx, ox, oy)
       frames[key].push({ x: ox, y: oy })
     }
     row++

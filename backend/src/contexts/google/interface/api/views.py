@@ -54,6 +54,19 @@ def _credentials_use_case() -> GetValidCredentials:
     )
 
 
+def _parse_query_dt(value: str | None) -> datetime | None:
+    """Parseia um datetime ISO vindo de query param. None se ausente/inválido."""
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        dt = datetime.fromisoformat(value)
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
 class GoogleAuthUrlView(APIView):
     """Gera a URL de consentimento Google."""
 
@@ -160,11 +173,18 @@ class UpcomingEventsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
+        time_min = _parse_query_dt(request.query_params.get("time_min"))
+        time_max = _parse_query_dt(request.query_params.get("time_max"))
         try:
             events = ListUpcomingEvents(
                 calendar_gateway=GoogleCalendarGateway(),
                 get_valid_credentials=_credentials_use_case(),
-            ).execute(user_id=str(request.user.id), max_results=10)
+            ).execute(
+                user_id=str(request.user.id),
+                max_results=10,
+                time_min=time_min,
+                time_max=time_max,
+            )
         except CalendarError:
             return Response(
                 {"error": "Falha ao falar com o Google Agenda. Tente novamente."},

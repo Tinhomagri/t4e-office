@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { ResumoView } from "./views/ResumoView"
 import { ListaView } from "./views/ListaView"
@@ -92,15 +92,34 @@ export function BoardsPage() {
 
 function BoardsInner({ workspaceId }: { workspaceId: string }) {
   const { data: projects, isLoading } = useProjects(workspaceId)
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [projectId, setProjectIdState] = useState<string | null>(
+    searchParams.get("project"),
+  )
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [pokerModalOpen, setPokerModalOpen] = useState(false)
-  const [activeView, setActiveView] = useState<ProjectView>("quadro")
+  const [activeView, setActiveView] = useState<ProjectView>(
+    (searchParams.get("view") as ProjectView | null) ?? "quadro",
+  )
+
+  const setProjectId = (id: string | null) => {
+    setProjectIdState(id)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (id) next.set("project", id)
+        else next.delete("project")
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   useEffect(() => {
-    if (projects && projects.length > 0 && !projects.some((p) => p.id === projectId)) {
-      setProjectId(projects[0].id)
-    }
+    if (!projects || projects.length === 0) return
+    if (projectId && projects.some((p) => p.id === projectId)) return
+    setProjectId(projects[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, projectId])
 
   if (isLoading) return <CenterSpinner />
