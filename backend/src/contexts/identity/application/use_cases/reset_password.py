@@ -10,8 +10,8 @@ class ResetPassword:
 
         try:
             obj = PasswordResetToken.objects.select_related("user").get(token=token)
-        except PasswordResetToken.DoesNotExist:
-            raise NotFoundError("Token inválido.")
+        except PasswordResetToken.DoesNotExist as exc:
+            raise NotFoundError("Token inválido.") from exc
 
         if obj.is_expired:
             raise ValidationError("Token expirado. Solicite um novo link.")

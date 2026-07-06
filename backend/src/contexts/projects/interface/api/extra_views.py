@@ -6,18 +6,27 @@ Leituras exigem apenas BROWSE (ser membro). Detail views resolvem o projeto a
 partir do próprio objeto.
 """
 import uuid
+
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.projects.infrastructure.django.models import (
-    AttachmentModel, CardComponentModel, CardHistoryModel, CardModel,
-    CardVersionModel, ComponentModel, CustomFieldModel, DocumentModel,
-    IssueFieldValueModel, SavedFilterModel, VersionModel, WorkflowStatusModel,
+    AttachmentModel,
+    CardComponentModel,
+    CardHistoryModel,
+    CardVersionModel,
+    ComponentModel,
+    CustomFieldModel,
+    DocumentModel,
+    IssueFieldValueModel,
+    SavedFilterModel,
+    VersionModel,
+    WorkflowStatusModel,
     WorklogModel,
 )
 from contexts.projects.interface.api import capabilities as caps

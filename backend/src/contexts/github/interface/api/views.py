@@ -151,12 +151,12 @@ class ProjectRepoLinkView(APIView):
             {
                 "repos": [
                     {
-                        "id": str(l.id),
-                        "full_name": l.full_name,
-                        "default_branch": l.default_branch,
-                        "webhook_active": l.webhook_id is not None,
+                        "id": str(link.id),
+                        "full_name": link.full_name,
+                        "default_branch": link.default_branch,
+                        "webhook_active": link.webhook_id is not None,
                     }
-                    for l in links
+                    for link in links
                 ]
             }
         )
@@ -169,10 +169,10 @@ class ProjectRepoLinkView(APIView):
         client = _client_for(str(request.user.id))
         try:
             repo = client.get_repo(full_name)
-        except Exception:  # noqa: BLE001 — 404/403: repo inexistente ou sem acesso
+        except Exception as exc:  # noqa: BLE001 — 404/403: repo inexistente ou sem acesso
             raise ValidationError(
                 f"Repositório '{full_name}' não encontrado ou sem acesso com sua conta."
-            )
+            ) from exc
 
         webhook_secret = secrets.token_hex(20)
         webhook_id = None
@@ -234,17 +234,17 @@ class ProjectDevMetricsView(APIView):
 
         recent_prs = [
             {
-                "id": str(l.id),
-                "title": l.title,
-                "url": l.url,
-                "state": l.state,
-                "number": l.number,
-                "branch": l.branch,
-                "author_login": l.author_login,
-                "author_avatar": l.author_avatar,
-                "updated_at": l.updated_at.isoformat(),
+                "id": str(link.id),
+                "title": link.title,
+                "url": link.url,
+                "state": link.state,
+                "number": link.number,
+                "branch": link.branch,
+                "author_login": link.author_login,
+                "author_avatar": link.author_avatar,
+                "updated_at": link.updated_at.isoformat(),
             }
-            for l in prs.order_by("-updated_at")[:15]
+            for link in prs.order_by("-updated_at")[:15]
         ]
 
         return Response(
@@ -291,18 +291,18 @@ class CardDevLinksView(APIView):
                 "repo_connected": has_repo,
                 "links": [
                     {
-                        "id": str(l.id),
-                        "kind": l.kind,
-                        "title": l.title,
-                        "url": l.url,
-                        "state": l.state,
-                        "branch": l.branch,
-                        "number": l.number,
-                        "author_login": l.author_login,
-                        "author_avatar": l.author_avatar,
-                        "updated_at": l.updated_at.isoformat(),
+                        "id": str(link.id),
+                        "kind": link.kind,
+                        "title": link.title,
+                        "url": link.url,
+                        "state": link.state,
+                        "branch": link.branch,
+                        "number": link.number,
+                        "author_login": link.author_login,
+                        "author_avatar": link.author_avatar,
+                        "updated_at": link.updated_at.isoformat(),
                     }
-                    for l in links
+                    for link in links
                 ],
             }
         )
@@ -330,16 +330,16 @@ class CardCreateBranchView(APIView):
         )
         try:
             sha = client.branch_sha(repo.full_name, base)
-        except Exception:  # noqa: BLE001 — 404: branch-base não existe / repo vazio
+        except Exception as exc:  # noqa: BLE001 — 404: branch-base não existe / repo vazio
             raise ValidationError(
                 f"Branch base '{base}' não encontrada no {repo.full_name} "
                 "(repositório vazio ou branch padrão diferente)."
-            )
+            ) from exc
         try:
             client.create_branch(repo.full_name, new_branch, sha)
         except Exception as exc:  # noqa: BLE001 — 422: branch já existe
             msg = "já existe" if "422" in str(exc) else str(exc)
-            raise ValidationError(f"Não foi possível criar a branch '{new_branch}': {msg}")
+            raise ValidationError(f"Não foi possível criar a branch '{new_branch}': {msg}") from exc
 
         url = f"https://github.com/{repo.full_name}/tree/{new_branch}"
         linking.upsert_link(

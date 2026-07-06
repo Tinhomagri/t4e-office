@@ -5,7 +5,7 @@ Executa todas as regras de automação cron cujo next_run_at <= now.
 Deve ser chamado pelo cron do sistema (ex: a cada 15 minutos):
     */15 * * * * /app/venv/bin/python manage.py run_automations
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from django.core.management.base import BaseCommand
 
@@ -29,7 +29,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         rule_id = options.get("rule_id")
         dry_run = options.get("dry_run")
 

@@ -2,13 +2,13 @@
 import pytest
 from rest_framework.test import APIClient
 
+from contexts.copilot.infrastructure.agent.dispatcher import AgentTools
 from contexts.identity.infrastructure.django.models import (
     MembershipModel,
     UserModel,
     WorkspaceModel,
 )
 from contexts.projects.infrastructure.django.models import CardModel, ProjectModel
-from contexts.copilot.infrastructure.agent.dispatcher import AgentTools
 
 
 @pytest.fixture

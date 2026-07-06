@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from django.http import StreamingHttpResponse
 from rest_framework import status
@@ -22,6 +22,8 @@ from rest_framework.renderers import BaseRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from contexts.projects.infrastructure.django.models import NotificationModel
 
 
 class EventStreamRenderer(BaseRenderer):
@@ -38,8 +40,6 @@ class EventStreamRenderer(BaseRenderer):
         import json
 
         return json.dumps(data)
-
-from contexts.projects.infrastructure.django.models import NotificationModel
 
 
 # ── helper ───────────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def _sse_event(data: dict) -> str:
 
 def _stream_notifications(user_id: str):
     """Generator: polls DB for new notifications and yields SSE events."""
-    last_seen: datetime = datetime.now(tz=timezone.utc)
+    last_seen: datetime = datetime.now(tz=UTC)
 
     # Send a heartbeat immediately to confirm connection
     yield ": heartbeat\n\n"

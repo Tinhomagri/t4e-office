@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from datetime import date
 
+from contexts.copilot.infrastructure.django.repositories_impl import (
+    DjangoDocumentRepository,
+)
 from contexts.projects.application.use_cases.create_card import CreateCard
 from contexts.projects.application.use_cases.create_sprint import CreateSprint
 from contexts.projects.application.use_cases.list_cards import ListCards
@@ -30,9 +33,6 @@ from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoProjectRepository,
     DjangoSprintRepository,
     DjangoWorkspaceAccess,
-)
-from contexts.copilot.infrastructure.django.repositories_impl import (
-    DjangoDocumentRepository,
 )
 from shared.domain.errors import ValidationError
 

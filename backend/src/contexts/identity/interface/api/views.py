@@ -10,12 +10,12 @@ from rest_framework.views import APIView
 from contexts.identity.application.use_cases.create_workspace import CreateWorkspace
 from contexts.identity.application.use_cases.list_workspaces import ListWorkspaces
 from contexts.identity.application.use_cases.register_user import RegisterUser
+from contexts.identity.application.use_cases.request_password_reset import RequestPasswordReset
+from contexts.identity.application.use_cases.reset_password import ResetPassword
 from contexts.identity.application.use_cases.send_verification_email import (
     SendVerificationEmail,
 )
 from contexts.identity.application.use_cases.verify_email import VerifyEmail
-from contexts.identity.application.use_cases.request_password_reset import RequestPasswordReset
-from contexts.identity.application.use_cases.reset_password import ResetPassword
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoMembershipRepository,

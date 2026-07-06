@@ -1,33 +1,12 @@
 """Rotas do contexto projects."""
 from django.urls import path
 
-from contexts.projects.interface.api.card_views import (
-    CardCommentView,
-    CardDetailView,
-    CardHistoryView,
-    CardListCreateView,
-)
-from contexts.projects.interface.api.link_views import (
-    CardLinkListCreateView,
-    IssueLinkDetailView,
-)
-from contexts.projects.interface.api.extra_views import (
-    AttachmentDetailView, AttachmentListCreateView,
-    CardComponentView, CardVersionView,
-    ComponentDetailView, ComponentListCreateView,
-    CustomFieldDetailView, CustomFieldListCreateView,
-    DocumentDetailView, DocumentListCreateView,
-    IssueFieldValueView, ProjectActivityView,
-    SavedFilterDetailView, SavedFilterListCreateView,
-    VersionDetailView, VersionListCreateView,
-    WorkflowStatusDetailView, WorkflowStatusListCreateView,
-    WorklogDetailView, WorklogListCreateView,
-)
-from contexts.projects.interface.api.notification_views import (
-    NotificationDetailView,
-    NotificationListView,
-    NotificationReadAllView,
-    NotificationStreamView,
+from contexts.projects.interface.api.agile_views import (
+    CardChildrenView,
+    CardRankView,
+    EpicListView,
+    SprintCompleteView,
+    SprintStartView,
 )
 from contexts.projects.interface.api.automation_views import (
     AutomationRuleDetailView,
@@ -35,12 +14,43 @@ from contexts.projects.interface.api.automation_views import (
     AutomationRuleRunView,
     AutomationRunLogView,
 )
-from contexts.projects.interface.api.agile_views import (
-    CardChildrenView,
-    CardRankView,
-    EpicListView,
-    SprintCompleteView,
-    SprintStartView,
+from contexts.projects.interface.api.card_views import (
+    CardCommentView,
+    CardDetailView,
+    CardHistoryView,
+    CardListCreateView,
+)
+from contexts.projects.interface.api.extra_views import (
+    AttachmentDetailView,
+    AttachmentListCreateView,
+    CardComponentView,
+    CardVersionView,
+    ComponentDetailView,
+    ComponentListCreateView,
+    CustomFieldDetailView,
+    CustomFieldListCreateView,
+    DocumentDetailView,
+    DocumentListCreateView,
+    IssueFieldValueView,
+    ProjectActivityView,
+    SavedFilterDetailView,
+    SavedFilterListCreateView,
+    VersionDetailView,
+    VersionListCreateView,
+    WorkflowStatusDetailView,
+    WorkflowStatusListCreateView,
+    WorklogDetailView,
+    WorklogListCreateView,
+)
+from contexts.projects.interface.api.link_views import (
+    CardLinkListCreateView,
+    IssueLinkDetailView,
+)
+from contexts.projects.interface.api.notification_views import (
+    NotificationDetailView,
+    NotificationListView,
+    NotificationReadAllView,
+    NotificationStreamView,
 )
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
 from contexts.projects.interface.api.reports_views import ProjectReportsView

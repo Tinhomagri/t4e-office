@@ -1,7 +1,7 @@
 """Caso de uso: listar membros de um workspace."""
 from contexts.identity.domain.repositories.workspace_repository import (
-    MemberView,
     MembershipRepository,
+    MemberView,
 )
 from shared.domain.errors import PermissionDeniedError
 

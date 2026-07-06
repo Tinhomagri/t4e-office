@@ -1,5 +1,4 @@
 """CRUD de regras de automação + trigger manual."""
-from datetime import datetime, timezone
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -8,11 +7,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.projects.infrastructure.django.models import (
-    AutomationRunLogModel,
     AutomationRuleModel,
+    AutomationRunLogModel,
 )
-from contexts.projects.interface.api.automation_engine import compute_next_run, run_rule
 from contexts.projects.interface.api import capabilities as caps
+from contexts.projects.interface.api.automation_engine import compute_next_run, run_rule
 from contexts.projects.interface.api.permissions import (
     assert_project_capability,
     assert_project_member,
