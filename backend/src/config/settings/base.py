@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "contexts.copilot",
     "contexts.estimation",
     "contexts.google",
+    "contexts.github",
 ]
 
 MIDDLEWARE = [
@@ -158,6 +159,19 @@ GOOGLE_OAUTH_REDIRECT_URI = env(
 # Chave Fernet p/ cifrar tokens Google no banco — gere com:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 GOOGLE_TOKEN_ENC_KEY = env("GOOGLE_TOKEN_ENC_KEY", default="")
+
+# Integração GitHub (OAuth Web Application Flow + webhooks)
+GITHUB_OAUTH_CLIENT_ID = env("GITHUB_OAUTH_CLIENT_ID", default="")
+GITHUB_OAUTH_CLIENT_SECRET = env("GITHUB_OAUTH_CLIENT_SECRET", default="")
+GITHUB_OAUTH_REDIRECT_URI = env(
+    "GITHUB_OAUTH_REDIRECT_URI",
+    default="http://localhost:8000/api/github/oauth/callback/",
+)
+# URL pública que o GitHub chama nos eventos (webhook). Em dev, use um túnel
+# (ngrok/cloudflared). Vazio = vínculo funciona, mas sem eventos em tempo real.
+GITHUB_WEBHOOK_CALLBACK_URL = env("GITHUB_WEBHOOK_CALLBACK_URL", default="")
+# Chave Fernet p/ cifrar o token OAuth do GitHub (reaproveita a do Google se vazia).
+GITHUB_TOKEN_ENC_KEY = env("GITHUB_TOKEN_ENC_KEY", default="")
 
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

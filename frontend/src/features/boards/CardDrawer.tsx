@@ -21,6 +21,7 @@ import { ptBR } from "date-fns/locale"
 
 registerLocale("pt-BR", ptBR)
 
+import { GithubDevPanel } from "@/features/github/GithubDevPanel"
 import { useAuthStore } from "@/features/auth/auth.store"
 import {
   useAddCardComponent,
@@ -263,6 +264,8 @@ export function CardDrawer({
             <Attachments cardId={card.id} />
 
             <CustomFields cardId={card.id} projectId={projectId} />
+
+            <GithubDevPanel cardId={card.id} projectId={projectId} />
 
             <Activity cardId={card.id} members={members} />
           </div>
