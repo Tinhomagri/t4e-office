@@ -1,83 +1,48 @@
-import { Building2, Loader2 } from "lucide-react"
+import { AlertTriangle, Building2, CheckCircle2, Layers, Loader2, Sparkles, Target } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import {
-  useWorkspaceCards,
-  useWorkspaces,
-  type BoardCard,
-} from "@/features/workspace/workspace.hooks"
-import type { Project } from "@/features/workspace/workspace.types"
+import { useWorkspaceCards, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { Badge, PageHeader, cx } from "@/shared/ui/primitives"
-
-type Health = "on-track" | "at-risk" | "off-track"
-
-interface ProjectHealth {
-  project: Project
-  total: number
-  done: number
-  pointsTotal: number
-  pointsDone: number
-  reviewAging: number // cards parados em revisão
-  progress: number // 0..1 por pontos (cai p/ contagem se não houver pontos)
-  health: Health
-}
-
-const HEALTH_LABEL: Record<Health, string> = {
-  "on-track": "No prazo",
-  "at-risk": "Em risco",
-  "off-track": "Atrasado",
-}
-const HEALTH_TONE: Record<Health, "success" | "warning" | "danger"> = {
-  "on-track": "success",
-  "at-risk": "warning",
-  "off-track": "danger",
-}
-const HEALTH_BAR: Record<Health, string> = {
-  "on-track": "bg-success",
-  "at-risk": "bg-warning",
-  "off-track": "bg-danger",
-}
-
-function computeHealth(project: Project, cards: BoardCard[]): ProjectHealth {
-  const total = cards.length
-  const done = cards.filter((c) => c.status === "done").length
-  const pointsTotal = cards.reduce((s, c) => s + (c.points ?? 0), 0)
-  const pointsDone = cards
-    .filter((c) => c.status === "done")
-    .reduce((s, c) => s + (c.points ?? 0), 0)
-  const reviewAging = cards.filter((c) => c.status === "review").length
-  const progress = pointsTotal > 0 ? pointsDone / pointsTotal : total > 0 ? done / total : 0
-
-  // Heurística de saúde a partir de dados reais (sem velocity histórica ainda).
-  let health: Health = "on-track"
-  if (total === 0) health = "on-track"
-  else if (reviewAging >= 3 || progress < 0.3) health = "off-track"
-  else if (reviewAging >= 1 || progress < 0.6) health = "at-risk"
-
-  return { project, total, done, pointsTotal, pointsDone, reviewAging, progress, health }
-}
+import {
+  HEALTH_BAR,
+  HEALTH_LABEL,
+  HEALTH_RANK,
+  HEALTH_RING,
+  HEALTH_TONE,
+  computeHealth,
+  type ProjectHealth,
+} from "./portfolio.shared"
 
 export function PortfolioPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const { projects, cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
 
-  const rows = projects.map((p) =>
-    computeHealth(p, cards.filter((c) => c.project_id === p.id)),
-  )
+  const rows = projects
+    .map((p) => computeHealth(p, cards.filter((c) => c.project_id === p.id)))
+    .sort((a, b) => HEALTH_RANK[a.health] - HEALTH_RANK[b.health] || b.total - a.total)
   const atRisk = rows.filter((r) => r.health !== "on-track").length
+  const pointsDone = rows.reduce((s, r) => s + r.pointsDone, 0)
+  const pointsTotal = rows.reduce((s, r) => s + r.pointsTotal, 0)
+  const overallPct = pointsTotal > 0 ? Math.round((pointsDone / pointsTotal) * 100) : 0
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow={
-          <>
-            <Building2 className="size-4 text-brand-500" />
-            <span>Portfólio</span>
-          </>
-        }
-        title="Saúde dos projetos"
-        subtitle="Visão de alto nível calculada a partir dos cards reais de cada projeto."
-      />
+      <div className="surface relative overflow-hidden p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,theme(colors.brand.500/12%),transparent_60%)]"
+        />
+        <PageHeader
+          eyebrow={
+            <>
+              <Building2 className="size-4 text-brand-500" />
+              <span>Portfólio</span>
+            </>
+          }
+          title="Saúde dos projetos"
+          subtitle="Visão de alto nível calculada a partir dos cards reais de cada projeto."
+        />
+      </div>
 
       {isLoading ? (
         <div className="grid place-items-center py-20">
@@ -88,16 +53,30 @@ export function PortfolioPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="Projetos" value={rows.length} />
-            <Stat label="Em risco / atrasados" value={atRisk} />
-            <Stat label="Cards no portfólio" value={cards.length} />
+            <Stat icon={Layers} tone="brand" label="Projetos" value={rows.length} />
             <Stat
-              label="Pontos concluídos"
-              value={rows.reduce((s, r) => s + r.pointsDone, 0)}
+              icon={AlertTriangle}
+              tone="warning"
+              label="Em risco / atrasados"
+              value={atRisk}
             />
+            <Stat icon={Sparkles} tone="ink" label="Cards no portfólio" value={cards.length} />
+            <Stat icon={Target} tone="success" label="Progresso geral" value={`${overallPct}%`} />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink dark:text-paper">
+              Projetos ({rows.length})
+            </h2>
+            {atRisk > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-warning">
+                <AlertTriangle className="size-3.5" />
+                {atRisk} precisam de atenção
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {rows.map((r) => (
               <ProjectCard key={r.project.id} row={r} />
             ))}
@@ -112,19 +91,27 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
   const pct = Math.round(row.progress * 100)
   return (
     <Link
-      to="/app/boards"
-      className="surface group block p-5 transition-shadow hover:shadow-panel"
+      to={`/app/portfolio/${row.project.id}`}
+      className={cx(
+        "surface group relative block overflow-hidden p-5 ring-1 ring-transparent transition-all hover:-translate-y-0.5 hover:shadow-panel",
+        HEALTH_RING[row.health],
+      )}
     >
+      <div
+        aria-hidden
+        className={cx("absolute inset-x-0 top-0 h-1", HEALTH_BAR[row.health])}
+      />
+
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-ink-600 to-ink-900 text-[11px] font-bold text-paper">
-              {row.project.key.slice(0, 2)}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink dark:text-paper">{row.project.name}</p>
-              <p className="font-mono text-[11px] text-paper-400">{row.project.key}</p>
-            </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-ink-600 to-ink-900 text-xs font-bold text-paper shadow-sm">
+            {row.project.key.slice(0, 2)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-ink dark:text-paper">
+              {row.project.name}
+            </p>
+            <p className="font-mono text-[11px] text-paper-400">{row.project.key}</p>
           </div>
         </div>
         <Badge tone={HEALTH_TONE[row.health]}>{HEALTH_LABEL[row.health]}</Badge>
@@ -145,12 +132,13 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
         <Mini label="Cards" value={row.total} />
-        <Mini label="Concluídos" value={row.done} />
+        <Mini label="Concluídos" value={row.done} icon={CheckCircle2} />
         <Mini label="Em revisão" value={row.reviewAging} warn={row.reviewAging >= 3} />
       </div>
 
       {row.reviewAging >= 3 && (
-        <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+        <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+          <AlertTriangle className="size-3.5 shrink-0" />
           Gargalo: {row.reviewAging} cards parados em revisão.
         </p>
       )}
@@ -158,20 +146,60 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
   )
 }
 
-function Mini({ label, value, warn = false }: { label: string; value: number; warn?: boolean }) {
+function Mini({
+  label,
+  value,
+  warn = false,
+  icon: Icon,
+}: {
+  label: string
+  value: number
+  warn?: boolean
+  icon?: typeof CheckCircle2
+}) {
   return (
     <div className="rounded-lg bg-paper-50 dark:bg-ink-900 py-2">
-      <p className={cx("text-lg font-bold tabular", warn ? "text-warning" : "text-ink dark:text-paper")}>{value}</p>
+      <p
+        className={cx(
+          "flex items-center justify-center gap-1 text-lg font-bold tabular",
+          warn ? "text-warning" : "text-ink dark:text-paper",
+        )}
+      >
+        {Icon && <Icon className="size-3.5" />}
+        {value}
+      </p>
       <p className="text-[11px] text-paper-500">{label}</p>
     </div>
   )
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+const STAT_TONE = {
+  brand: "bg-brand-500/10 text-brand-500",
+  warning: "bg-warning/10 text-warning",
+  success: "bg-success/10 text-success",
+  ink: "bg-ink-500/10 text-ink dark:text-paper",
+} as const
+
+function Stat({
+  icon: Icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: typeof Layers
+  tone: keyof typeof STAT_TONE
+  label: string
+  value: number | string
+}) {
   return (
-    <div className="surface p-4">
-      <p className="text-[26px] font-bold leading-none text-ink dark:text-paper tabular">{value}</p>
-      <p className="mt-2 text-[13px] font-medium text-ink dark:text-paper">{label}</p>
+    <div className="surface flex items-center gap-3 p-4">
+      <span className={cx("grid size-9 shrink-0 place-items-center rounded-lg", STAT_TONE[tone])}>
+        <Icon className="size-4.5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[22px] font-bold leading-none text-ink dark:text-paper tabular">{value}</p>
+        <p className="mt-1 truncate text-[12px] font-medium text-paper-500">{label}</p>
+      </div>
     </div>
   )
 }

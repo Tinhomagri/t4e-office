@@ -26,8 +26,13 @@ export async function disconnectGoogle(): Promise<void> {
 
 // ---- Agenda / reuniões ----
 
-export async function listUpcomingEvents(): Promise<CalendarEvent[]> {
-  const { data } = await api.get<CalendarEvent[]>("/google/events/upcoming/")
+export async function listUpcomingEvents(range?: {
+  timeMin: string
+  timeMax: string
+}): Promise<CalendarEvent[]> {
+  const { data } = await api.get<CalendarEvent[]>("/google/events/upcoming/", {
+    params: range ? { time_min: range.timeMin, time_max: range.timeMax } : undefined,
+  })
   return data
 }
 

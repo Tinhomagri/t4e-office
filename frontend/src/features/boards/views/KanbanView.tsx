@@ -10,8 +10,10 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  useDndContext,
 } from "@dnd-kit/core"
 import { useQueryClient } from "@tanstack/react-query"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   ArrowLeft,
   ArrowRight,
@@ -1014,9 +1016,11 @@ function Column({
 
       {/* Card list */}
       <div className="flex min-h-[60px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
-        {cards.map((card) => (
-          <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
-        ))}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {cards.map((card) => (
+            <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
+          ))}
+        </AnimatePresence>
         {cards.length === 0 && !isOver && (
           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
             <div className="mb-2 grid size-10 place-items-center rounded-full bg-paper-200 dark:bg-ink-800">
@@ -1258,16 +1262,28 @@ function DraggableCard({
   onDone?: (cardId: string) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
+  // Enquanto QUALQUER card está sendo arrastado, desligamos a animação de layout:
+  // ela reflui os vizinhos a cada frame do ponteiro (e quando o indicador de drop
+  // aparece), o que causava o "tremido". No drop, `active` volta a null e a
+  // animação religa, fazendo o card deslizar suavemente para a nova coluna.
+  const { active } = useDndContext()
+  const dragActive = active != null
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      layout={dragActive ? false : "position"}
+      layoutId={card.id}
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.6 }}
       onClick={() => onOpen(card)}
-      className={cx("cursor-grab active:cursor-grabbing", isDragging && "opacity-40")}
+      className="cursor-grab active:cursor-grabbing"
     >
       <CardCell card={card} members={members} onDone={onDone} />
-    </div>
+    </motion.div>
   )
 }
 

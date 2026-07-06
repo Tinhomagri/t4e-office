@@ -54,6 +54,7 @@ class CalendarEventSerializer(serializers.Serializer):
     meet_link = serializers.CharField(allow_null=True)
     html_link = serializers.CharField()
     attendees = serializers.ListField(child=serializers.CharField())
+    all_day = serializers.BooleanField()
 
 
 class TimeSlotSerializer(serializers.Serializer):

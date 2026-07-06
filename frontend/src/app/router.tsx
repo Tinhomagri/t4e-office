@@ -14,6 +14,7 @@ import { MyDayPage } from "@/features/today/MyDayPage"
 import { OfficePage } from "@/features/office/OfficePage"
 import { PokerPage } from "@/features/poker/PokerPage"
 import { PortfolioPage } from "@/features/portfolio/PortfolioPage"
+import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage"
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
       { path: "poker/:sessionId", element: <PokerPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
+      { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
       { path: "office", element: <OfficePage /> },
       { path: "integrations", element: <IntegrationsPage /> },
       { path: "avatar", element: <AvatarLabPage /> },

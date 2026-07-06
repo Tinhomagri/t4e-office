@@ -49,7 +49,7 @@ api.interceptors.response.use(
     const status = error.response?.status
     const isRefreshCall = original?.url?.includes("/auth/refresh/")
 
-    if (status === 401 && original && !original._retry && !isRefreshCall) {
+    if ((status === 401 || status === 403) && original && !original._retry && !isRefreshCall) {
       original._retry = true
       // Compartilha um único refresh entre requisições concorrentes.
       if (!refreshing) refreshing = refreshAccessToken().finally(() => (refreshing = null))

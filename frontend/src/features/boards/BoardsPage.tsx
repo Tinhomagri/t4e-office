@@ -5,6 +5,7 @@ import {
   FileText,
   FolderPlus,
   GanttChartSquare,
+  GitBranch,
   Layers,
   LayoutList,
   ListChecks,
@@ -15,7 +16,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { ResumoView } from "./views/ResumoView"
 import { ListaView } from "./views/ListaView"
@@ -26,6 +27,7 @@ import { DocumentosView } from "./views/DocumentosView"
 import { BacklogView } from "./views/BacklogView"
 import { AutomacoesView } from "./views/AutomacoesView"
 import { KanbanView } from "./views/KanbanView"
+import { DevelopmentView } from "@/features/github/DevelopmentView"
 
 import {
   Button,
@@ -61,7 +63,7 @@ import type {
 } from "@/features/workspace/workspace.types"
 import { useCreateProjectSession, useProjectSessions } from "@/features/poker/poker.hooks"
 
-type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "metas" | "documentos" | "automacoes"
+type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
 
 const PROJECT_VIEWS: { id: ProjectView; label: string; icon: React.ReactNode }[] = [
   { id: "resumo", label: "Resumo", icon: <SquareKanban className="size-3.5" /> },
@@ -71,6 +73,7 @@ const PROJECT_VIEWS: { id: ProjectView; label: string; icon: React.ReactNode }[]
   { id: "cronograma", label: "Cronograma", icon: <GanttChartSquare className="size-3.5" /> },
   { id: "calendario", label: "Calendário", icon: <CalendarDays className="size-3.5" /> },
   { id: "metas", label: "Metas", icon: <Target className="size-3.5" /> },
+  { id: "desenvolvimento", label: "Desenvolvimento", icon: <GitBranch className="size-3.5" /> },
   { id: "documentos", label: "Documentos", icon: <FileText className="size-3.5" /> },
   { id: "automacoes", label: "Automações", icon: <Zap className="size-3.5" /> },
 ]
@@ -89,15 +92,34 @@ export function BoardsPage() {
 
 function BoardsInner({ workspaceId }: { workspaceId: string }) {
   const { data: projects, isLoading } = useProjects(workspaceId)
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [projectId, setProjectIdState] = useState<string | null>(
+    searchParams.get("project"),
+  )
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [pokerModalOpen, setPokerModalOpen] = useState(false)
-  const [activeView, setActiveView] = useState<ProjectView>("quadro")
+  const [activeView, setActiveView] = useState<ProjectView>(
+    (searchParams.get("view") as ProjectView | null) ?? "quadro",
+  )
+
+  const setProjectId = (id: string | null) => {
+    setProjectIdState(id)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (id) next.set("project", id)
+        else next.delete("project")
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   useEffect(() => {
-    if (projects && projects.length > 0 && !projects.some((p) => p.id === projectId)) {
-      setProjectId(projects[0].id)
-    }
+    if (!projects || projects.length === 0) return
+    if (projectId && projects.some((p) => p.id === projectId)) return
+    setProjectId(projects[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, projectId])
 
   if (isLoading) return <CenterSpinner />
@@ -273,6 +295,15 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   }
   if (view === "automacoes") {
     return <AutomacoesView projectId={projectId} />
+  }
+  if (view === "desenvolvimento") {
+    return (
+      <div className="flex flex-col gap-3">
+        <ViewToolbar projectKey={project.key} view={view} count={allCards.length} onNewCard={openNewCard} />
+        <DevelopmentView projectId={projectId} />
+        {sharedModals}
+      </div>
+    )
   }
 
   let inner: React.ReactNode

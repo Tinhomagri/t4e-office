@@ -74,22 +74,27 @@ class GoogleCalendarGateway(CalendarGateway):
         )
 
     def list_upcoming(
-        self, *, access_token: str, max_results: int = 10
+        self,
+        *,
+        access_token: str,
+        max_results: int = 10,
+        time_min: datetime | None = None,
+        time_max: datetime | None = None,
     ) -> list[CalendarEvent]:
-        now = datetime.now(UTC).isoformat()
+        params: dict = {
+            "calendarId": "primary",
+            "timeMin": (time_min or datetime.now(UTC)).isoformat(),
+            "singleEvents": True,
+            "orderBy": "startTime",
+        }
+        if time_max is not None:
+            params["timeMax"] = time_max.isoformat()
+        else:
+            params["maxResults"] = max_results
+
         try:
             service = self._service(access_token)
-            result = (
-                service.events()
-                .list(
-                    calendarId="primary",
-                    timeMin=now,
-                    maxResults=max_results,
-                    singleEvents=True,
-                    orderBy="startTime",
-                )
-                .execute()
-            )
+            result = service.events().list(**params).execute()
         except HttpError as exc:
             raise CalendarError(f"Erro ao listar eventos: {exc}") from exc
 
@@ -97,6 +102,7 @@ class GoogleCalendarGateway(CalendarGateway):
         for item in result.get("items", []):
             start = item.get("start", {})
             end = item.get("end", {})
+            all_day = "date" in start and "dateTime" not in start
             start_val = start.get("dateTime") or start.get("date")
             end_val = end.get("dateTime") or end.get("date")
             if not start_val or not end_val:
@@ -109,6 +115,7 @@ class GoogleCalendarGateway(CalendarGateway):
                     end=_parse_dt(end_val),
                     meet_link=item.get("hangoutLink"),
                     html_link=item.get("htmlLink", ""),
+                    all_day=all_day,
                     attendees=[
                         a.get("email", "") for a in item.get("attendees", [])
                     ],

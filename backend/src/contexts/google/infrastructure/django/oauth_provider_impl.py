@@ -1,5 +1,10 @@
 """Implementação do OAuthProvider usando google-auth-oauthlib."""
+import os
 from datetime import UTC, datetime
+
+# Google devolve escopos abreviados (ex.: "email" em vez da URL completa),
+# oauthlib rejeita isso como "Scope has changed" sem essa flag.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 import requests
 from django.conf import settings
@@ -48,7 +53,13 @@ class GoogleOAuthProvider(OAuthProvider):
     """Fluxo OAuth web do Google."""
 
     def _flow(self) -> Flow:
-        flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
+        # PKCE off: authorization e callback usam instâncias de Flow separadas
+        # (processos/requests distintos), então o code_verifier gerado na primeira
+        # nunca chega na segunda ("Missing code verifier"). Confidential client
+        # (tem client_secret) não precisa de PKCE.
+        flow = Flow.from_client_config(
+            _client_config(), scopes=SCOPES, autogenerate_code_verifier=False
+        )
         flow.redirect_uri = settings.GOOGLE_OAUTH_REDIRECT_URI
         return flow
 

@@ -41,6 +41,44 @@ class DocumentModel(models.Model):
         return self.title
 
 
+class CopilotEventModel(models.Model):
+    """Evento de uso do Copiloto por workspace — base de métricas e avaliação.
+
+    `kind` classifica a interação; `rating` só é preenchido em eventos de
+    feedback (👍 = 1, 👎 = -1). `count` guarda quantidades (ex.: cards criados).
+    """
+
+    KIND_CHOICES = [
+        ("chat", "Mensagem no chat"),
+        ("analyze", "Documento analisado"),
+        ("cards", "Cards criados pela IA"),
+        ("agent_execute", "Ações do agente executadas"),
+        ("rating", "Avaliação da resposta"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="copilot_events"
+    )
+    actor = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    rating = models.SmallIntegerField(null=True, blank=True)  # 1 / -1
+    count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "copilot_event"
+        verbose_name = "Evento do Copiloto"
+        verbose_name_plural = "Eventos do Copiloto"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["workspace", "kind", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.kind} @ {self.workspace_id}"
+
+
 class WorkspaceAiConfigModel(models.Model):
     """Configuração de IA por workspace (provedor + chave cifrada — BYO key)."""
 
