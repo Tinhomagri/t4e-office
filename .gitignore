@@ -3,3 +3,36 @@
 
 # Sistema
 .DS_Store
+Thumbs.db
+
+# Segredos — nunca commitar credenciais
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Banco local
+*.sqlite3
+
+# Node / frontend
+node_modules/
+dist/
+coverage/
+*.log
+
+# Editores
+.idea/
+.vscode/
+*.swp
