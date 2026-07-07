@@ -1,10 +1,9 @@
 """Views da Planning Poker API."""
-import uuid
 
 from django.db.models import Avg
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
-from rest_framework import serializers, status
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -16,15 +15,15 @@ from contexts.estimation.domain.entities.poker_session import (
     PokerVote,
     SessionStatus,
 )
-from contexts.estimation.infrastructure.django.repositories_impl import (
-    DjangoPokerParticipantRepository,
-    DjangoPokerSessionRepository,
-    DjangoPokerVoteRepository,
-)
 from contexts.estimation.infrastructure.django.models import (
     PokerParticipantModel,
     PokerRoundModel,
     PokerSessionModel,
+)
+from contexts.estimation.infrastructure.django.repositories_impl import (
+    DjangoPokerParticipantRepository,
+    DjangoPokerSessionRepository,
+    DjangoPokerVoteRepository,
 )
 from contexts.identity.infrastructure.django.models import WorkspaceModel
 from contexts.projects.infrastructure.django.models import CardModel

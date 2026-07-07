@@ -229,8 +229,8 @@ class CardRankView(APIView):
         next_rank = _rank_of(request.data.get("after_id"))
         try:
             card.rank = rank_between(prev_rank, next_rank)
-        except ValueError:
-            raise ValidationError("Posição inválida: vizinhos fora de ordem.")
+        except ValueError as exc:
+            raise ValidationError("Posição inválida: vizinhos fora de ordem.") from exc
         card.save(update_fields=["rank"])
         return Response({"id": str(card.id), "rank": card.rank})
 

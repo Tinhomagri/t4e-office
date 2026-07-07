@@ -1,4 +1,4 @@
-# T4E Office (Pulse)
+# T4E Office
 
 Sistema de gerenciamento de projetos estilo Jira/Linear — **T4E Dev Challenge 2026**.
 Kanban customizável, sprints, cards com histórico, dashboard de métricas, notificações

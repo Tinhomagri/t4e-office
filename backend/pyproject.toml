@@ -41,9 +41,25 @@ dev = [
 line-length = 100
 target-version = "py311"
 src = ["src"]
+# Migrations são geradas pelo Django — não lintar estilo de código gerado.
+extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
+ignore = [
+    # `str, Enum` é padrão deliberado (enum serializável em JSON) — não migrar p/ StrEnum.
+    "UP042",
+    # __str__ opcional em models auxiliares (M2M/log/token) que nunca aparecem sozinhos no admin.
+    "DJ008",
+    # Comprimento de linha: URLconf e choices densos ficam mais legíveis em uma linha.
+    "E501",
+    # PokerVote.value usa null=True de propósito: None = "ainda não votou" (≠ string vazia).
+    "DJ001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Testes podem ter linhas longas em fixtures/asserts.
+"*/tests/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

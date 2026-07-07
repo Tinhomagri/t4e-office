@@ -6,11 +6,13 @@ sobre os CardModels do projeto.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
 
+if TYPE_CHECKING:
+    from contexts.projects.infrastructure.django.models import AutomationRunLogModel
 
 # ── schedule → next_run_at ──────────────────────────────────────────────────
 
@@ -22,7 +24,7 @@ SCHEDULE_DELTAS: dict[str, timedelta] = {
 }
 
 def compute_next_run(schedule: str, from_: datetime | None = None) -> datetime:
-    from_ = from_ or datetime.now(tz=timezone.utc)
+    from_ = from_ or datetime.now(tz=UTC)
     delta = SCHEDULE_DELTAS.get(schedule, timedelta(hours=24))
     return from_ + delta
 
@@ -49,7 +51,7 @@ def _build_condition_q(conditions: list[dict]) -> Q:
                 continue
         elif field == "due":
             if value == "overdue":
-                q &= Q(due_date__lt=datetime.now(tz=timezone.utc).date(), due_date__isnull=False)
+                q &= Q(due_date__lt=datetime.now(tz=UTC).date(), due_date__isnull=False)
                 continue
             db = "due_date"
         elif field == "label":
@@ -112,7 +114,7 @@ def _apply_action(card_qs, action_type: str, action_config: dict[str, Any]) -> i
 
 # ── main entry ──────────────────────────────────────────────────────────────
 
-def run_rule(rule, triggered_by: str = "cron") -> "AutomationRunLogModel":  # type: ignore[name-defined]
+def run_rule(rule, triggered_by: str = "cron") -> AutomationRunLogModel:  # type: ignore[name-defined]
     from contexts.projects.infrastructure.django.models import (
         AutomationRunLogModel,
         CardModel,
@@ -127,7 +129,7 @@ def run_rule(rule, triggered_by: str = "cron") -> "AutomationRunLogModel":  # ty
     except Exception as exc:  # noqa: BLE001
         error = str(exc)
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     rule.last_run_at = now
     rule.run_count += 1
     if rule.trigger_type == "cron":
@@ -137,8 +139,8 @@ def run_rule(rule, triggered_by: str = "cron") -> "AutomationRunLogModel":  # ty
 
     # Notify project members (project owner via workspace members) about automation run
     try:
-        from contexts.projects.interface.api.notification_views import notify
         from contexts.identity.infrastructure.django.models import MembershipModel
+        from contexts.projects.interface.api.notification_views import notify
         member_ids = MembershipModel.objects.filter(
             workspace_id=rule.project.workspace_id
         ).values_list("user_id", flat=True)

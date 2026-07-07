@@ -15,6 +15,7 @@ from contexts.projects.application.use_cases.update_card import UpdateCard
 from contexts.projects.domain.entities.card import Card
 from contexts.projects.domain.entities.comment import CardComment
 from contexts.projects.domain.entities.history import CardHistoryEntry
+from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoCardRepository,
     DjangoCommentRepository,
@@ -22,15 +23,14 @@ from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoProjectRepository,
     DjangoWorkspaceAccess,
 )
-from contexts.projects.interface.api.jql import parse_jql
 from contexts.projects.interface.api import capabilities as caps
+from contexts.projects.interface.api.jql import parse_jql
+from contexts.projects.interface.api.notification_views import notify
 from contexts.projects.interface.api.permissions import (
     assert_card_capability,
     assert_project_capability,
     assert_project_member,
 )
-from contexts.projects.interface.api.notification_views import notify
-from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.interface.api.serializers import (
     CardHistorySerializer,
     CardSerializer,

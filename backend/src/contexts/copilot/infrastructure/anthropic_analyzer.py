@@ -8,6 +8,7 @@ from contexts.copilot.domain.ports.ai_analyzer import AiAnalyzer
 from contexts.copilot.infrastructure import ai_prompt as _prompt
 from shared.domain.errors import ValidationError
 
+
 class AnthropicAnalyzer(AiAnalyzer):
     """Analisa texto com Claude e retorna a síntese estruturada."""
 

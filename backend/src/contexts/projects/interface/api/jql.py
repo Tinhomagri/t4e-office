@@ -19,7 +19,6 @@ from typing import Any
 
 from django.db.models import Q
 
-
 _CLAUSE_RE = re.compile(
     r"""
     (?P<field>\w+)          # field name
