@@ -72,3 +72,24 @@ class AcceptInvitationSerializer(serializers.Serializer):
     """Payload de aceite de convite."""
 
     token = serializers.CharField()
+
+
+class UpdateMemberRoleSerializer(serializers.Serializer):
+    """Payload de alteração de papel de membro.
+
+    Owner não pode ser atribuído via PATCH — é papel de criação de workspace.
+    """
+
+    role = serializers.ChoiceField(choices=["admin", "member"])
+
+
+class AuditLogSerializer(serializers.Serializer):
+    """Representação pública de uma entrada do audit log."""
+
+    id = serializers.CharField()
+    actor_id = serializers.CharField()
+    target_user_id = serializers.CharField()
+    action = serializers.CharField()
+    old_role = serializers.CharField()
+    new_role = serializers.CharField()
+    created_at = serializers.DateTimeField()

@@ -8,9 +8,12 @@ from rest_framework.views import APIView
 from contexts.identity.application.use_cases.accept_invitation import AcceptInvitation
 from contexts.identity.application.use_cases.list_invitations import ListInvitations
 from contexts.identity.application.use_cases.list_members import ListMembers
+from contexts.identity.application.use_cases.remove_member import RemoveMember
 from contexts.identity.application.use_cases.revoke_invitation import RevokeInvitation
 from contexts.identity.application.use_cases.send_invitation import SendInvitation
+from contexts.identity.application.use_cases.update_member_role import UpdateMemberRole
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
+from contexts.identity.infrastructure.django.models import RoleAuditLog, WorkspaceModel
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoInvitationRepository,
     DjangoMembershipRepository,
@@ -21,7 +24,9 @@ from contexts.identity.interface.api.serializers import (
     CreateInvitationSerializer,
     InvitationSerializer,
     MemberSerializer,
+    UpdateMemberRoleSerializer,
 )
+from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 
 def _invitation_dict(inv) -> dict:
@@ -50,6 +55,96 @@ class MembersView(APIView):
             many=True,
         ).data
         return Response(data)
+
+
+class MemberDetailView(APIView):
+    """Alterar papel / remover membro: PATCH|DELETE /api/auth/workspaces/<id>/members/<user_id>/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, workspace_id: str, user_id: str) -> Response:
+        serializer = UpdateMemberRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_role = serializer.validated_data["role"]
+
+        repo = DjangoMembershipRepository()
+
+        # Captura papel atual para o audit log
+        from contexts.identity.domain.repositories.workspace_repository import MemberView
+        old_role_obj = repo.role_of(workspace_id=str(workspace_id), user_id=str(user_id))
+        old_role_str = old_role_obj.value if old_role_obj else ""
+
+        UpdateMemberRole(repo).execute(
+            workspace_id=str(workspace_id),
+            actor_id=str(request.user.id),
+            target_user_id=str(user_id),
+            new_role=new_role,
+        )
+
+        # Audit trail
+        RoleAuditLog.objects.create(
+            workspace_id=str(workspace_id),
+            actor_id=str(request.user.id),
+            target_user_id=str(user_id),
+            action="role_changed",
+            old_role=old_role_str,
+            new_role=new_role,
+        )
+
+        return Response({"user_id": str(user_id), "role": new_role})
+
+    def delete(self, request: Request, workspace_id: str, user_id: str) -> Response:
+        repo = DjangoMembershipRepository()
+
+        # Captura papel atual para o audit log
+        old_role_obj = repo.role_of(workspace_id=str(workspace_id), user_id=str(user_id))
+        old_role_str = old_role_obj.value if old_role_obj else ""
+
+        RemoveMember(repo).execute(
+            workspace_id=str(workspace_id),
+            actor_id=str(request.user.id),
+            target_user_id=str(user_id),
+        )
+
+        # Audit trail
+        RoleAuditLog.objects.create(
+            workspace_id=str(workspace_id),
+            actor_id=str(request.user.id),
+            target_user_id=str(user_id),
+            action="member_removed",
+            old_role=old_role_str,
+            new_role="",
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AuditLogView(APIView):
+    """Lista o log de auditoria: GET /api/auth/workspaces/<id>/audit-log/.
+
+    Apenas owner/admin podem consultar.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, workspace_id: str) -> Response:
+        repo = DjangoMembershipRepository()
+        actor_role = repo.role_of(
+            workspace_id=str(workspace_id), user_id=str(request.user.id)
+        )
+        if actor_role is None or not actor_role.can_manage_members:
+            raise PermissionDeniedError("Apenas owner ou admin podem ver o audit log.")
+
+        logs = RoleAuditLog.objects.filter(workspace_id=str(workspace_id)).values(
+            "id",
+            "actor_id",
+            "target_user_id",
+            "action",
+            "old_role",
+            "new_role",
+            "created_at",
+        )
+        return Response(list(logs))
 
 
 class InvitationListCreateView(APIView):

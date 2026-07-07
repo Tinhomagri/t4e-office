@@ -43,6 +43,14 @@ from contexts.projects.interface.api.agile_views import (
     SprintStartView,
 )
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
+from contexts.projects.interface.api.permission_scheme_views import (
+    ProjectAccessView,
+    ProjectPermissionSchemeView,
+)
+from contexts.projects.interface.api.permission_scheme_views import (
+    ProjectAccessView,
+    ProjectPermissionSchemeView,
+)
 from contexts.projects.interface.api.reports_views import ProjectReportsView
 from contexts.projects.interface.api.sprint_views import (
     SprintDetailView,
@@ -87,6 +95,10 @@ urlpatterns = [
     path("cards/<uuid:card_id>/children/", CardChildrenView.as_view(), name="card-children"),
     path("projects/<uuid:project_id>/reports/", ProjectReportsView.as_view(), name="project-reports"),
     path("projects/<uuid:project_id>/my-permissions/", MyProjectPermissionsView.as_view(), name="my-permissions"),
+    path("projects/<uuid:project_id>/access/", ProjectAccessView.as_view(), name="project-access"),
+    path("projects/<uuid:project_id>/permission-scheme/", ProjectPermissionSchemeView.as_view(), name="permission-scheme"),
+    path("projects/<uuid:project_id>/access/", ProjectAccessView.as_view(), name="project-access"),
+    path("projects/<uuid:project_id>/permission-scheme/", ProjectPermissionSchemeView.as_view(), name="permission-scheme"),
     # Versions
     path("projects/<uuid:project_id>/versions/", VersionListCreateView.as_view(), name="version-list"),
     path("versions/<uuid:version_id>/", VersionDetailView.as_view(), name="version-detail"),
