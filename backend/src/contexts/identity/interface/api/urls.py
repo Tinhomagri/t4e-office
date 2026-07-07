@@ -12,7 +12,9 @@ from contexts.identity.interface.api.views import (
 )
 from contexts.identity.interface.api.workspace_views import (
     AcceptInvitationView,
+    AuditLogView,
     InvitationListCreateView,
+    MemberDetailView,
     MembersView,
     RevokeInvitationView,
 )
@@ -33,9 +35,19 @@ urlpatterns = [
         name="workspace-members",
     ),
     path(
+        "workspaces/<uuid:workspace_id>/members/<uuid:user_id>/",
+        MemberDetailView.as_view(),
+        name="workspace-member-detail",
+    ),
+    path(
         "workspaces/<uuid:workspace_id>/invitations/",
         InvitationListCreateView.as_view(),
         name="workspace-invitations",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/audit-log/",
+        AuditLogView.as_view(),
+        name="workspace-audit-log",
     ),
     path(
         "invitations/accept/",

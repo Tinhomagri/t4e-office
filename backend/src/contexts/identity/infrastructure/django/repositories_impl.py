@@ -121,6 +121,21 @@ class DjangoMembershipRepository(MembershipRepository):
             for r in rows
         ]
 
+    def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
+        MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id=user_id
+        ).update(role=new_role.value)
+
+    def remove(self, *, workspace_id: str, user_id: str) -> None:
+        MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id=user_id
+        ).delete()
+
+    def count_owners(self, *, workspace_id: str) -> int:
+        return MembershipModel.objects.filter(
+            workspace_id=workspace_id, role=Role.OWNER.value
+        ).count()
+
 
 class DjangoInvitationRepository(InvitationRepository):
     """Persistência de convites via Django ORM."""

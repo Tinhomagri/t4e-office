@@ -54,3 +54,15 @@ class MembershipRepository(ABC):
     @abstractmethod
     def list_members(self, *, workspace_id: str) -> list[MemberView]:
         """Lista membros do workspace com dados do usuário."""
+
+    @abstractmethod
+    def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
+        """Altera o papel de um membro no workspace."""
+
+    @abstractmethod
+    def remove(self, *, workspace_id: str, user_id: str) -> None:
+        """Remove o vínculo do usuário com o workspace."""
+
+    @abstractmethod
+    def count_owners(self, *, workspace_id: str) -> int:
+        """Conta quantos owners existem no workspace."""

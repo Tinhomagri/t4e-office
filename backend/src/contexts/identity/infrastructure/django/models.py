@@ -197,3 +197,36 @@ class InvitationModel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.email} -> {self.workspace} ({self.status})"
+
+
+class RoleAuditLog(models.Model):
+    """Registro imutável de mudanças de papel e remoções de membro.
+
+    Nunca é atualizado — append-only. Permite responder "quem mudou o quê e quando"
+    durante a defesa do projeto (segurança auditável, como o Jira faz).
+    """
+
+    ACTION_CHOICES = [
+        ("role_changed", "Papel alterado"),
+        ("member_removed", "Membro removido"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        WorkspaceModel, on_delete=models.CASCADE, related_name="audit_logs"
+    )
+    actor_id = models.UUIDField(help_text="ID de quem realizou a ação")
+    target_user_id = models.UUIDField(help_text="ID de quem foi afetado")
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    old_role = models.CharField(max_length=10, blank=True, default="")
+    new_role = models.CharField(max_length=10, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "identity_role_audit_log"
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"[{self.action}] {self.actor_id} → {self.target_user_id} @ {self.workspace_id}"
