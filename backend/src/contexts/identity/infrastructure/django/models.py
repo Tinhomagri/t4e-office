@@ -2,14 +2,13 @@
 import uuid
 from datetime import timedelta
 
-from django.utils import timezone
-
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
     PermissionsMixin,
 )
 from django.db import models
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -231,34 +230,3 @@ class RoleAuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"[{self.action}] {self.actor_id} → {self.target_user_id} @ {self.workspace_id}"
-
-
-class RoleAuditLog(models.Model):
-    """Registro imutável de mudanças de papel e remoções de membro."""
-
-    ACTION_CHOICES = [
-        ("role_changed", "Papel alterado"),
-        ("member_removed", "Membro removido"),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    workspace = models.ForeignKey(
-        WorkspaceModel,
-        on_delete=models.CASCADE,
-        related_name="audit_logs",
-    )
-    actor_id = models.UUIDField(help_text="ID do usuário que realizou a ação")
-    target_user_id = models.UUIDField(help_text="ID do usuário afetado")
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    old_role = models.CharField(max_length=10, blank=True, default="")
-    new_role = models.CharField(max_length=10, blank=True, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "identity_role_audit_log"
-        ordering = ["-created_at"]
-        verbose_name = "Audit Log"
-        verbose_name_plural = "Audit Logs"
-
-    def __str__(self) -> str:
-        return f"{self.action} by {self.actor_id} on {self.target_user_id} @ {self.workspace_id}"

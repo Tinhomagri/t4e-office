@@ -7,8 +7,8 @@ from contexts.identity.domain.repositories.invitation_repository import (
 )
 from contexts.identity.domain.repositories.user_repository import UserRepository
 from contexts.identity.domain.repositories.workspace_repository import (
-    MemberView,
     MembershipRepository,
+    MemberView,
     WorkspaceRepository,
 )
 from contexts.identity.domain.value_objects.email import Email
@@ -120,21 +120,6 @@ class DjangoMembershipRepository(MembershipRepository):
             )
             for r in rows
         ]
-
-    def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
-        MembershipModel.objects.filter(
-            workspace_id=workspace_id, user_id=user_id
-        ).update(role=new_role.value)
-
-    def remove(self, *, workspace_id: str, user_id: str) -> None:
-        MembershipModel.objects.filter(
-            workspace_id=workspace_id, user_id=user_id
-        ).delete()
-
-    def count_owners(self, *, workspace_id: str) -> int:
-        return MembershipModel.objects.filter(
-            workspace_id=workspace_id, role="owner"
-        ).count()
 
     def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
         MembershipModel.objects.filter(

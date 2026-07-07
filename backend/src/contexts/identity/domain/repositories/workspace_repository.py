@@ -66,15 +66,3 @@ class MembershipRepository(ABC):
     @abstractmethod
     def count_owners(self, *, workspace_id: str) -> int:
         """Conta quantos owners existem no workspace."""
-
-    @abstractmethod
-    def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
-        """Atualiza o papel de um membro no workspace."""
-
-    @abstractmethod
-    def remove(self, *, workspace_id: str, user_id: str) -> None:
-        """Remove o vínculo do usuário com o workspace."""
-
-    @abstractmethod
-    def count_owners(self, *, workspace_id: str) -> int:
-        """Conta quantos membros com papel owner existem no workspace."""

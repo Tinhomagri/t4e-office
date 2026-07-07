@@ -28,7 +28,6 @@ from contexts.projects.infrastructure.django.models import (
 from contexts.projects.interface.api.capabilities import (
     DEFAULT_ROLES,
     ROLE_CAPABILITIES,
-    capabilities_for,
     effective_role,
 )
 from contexts.projects.interface.api.permissions import assert_project_capability
@@ -76,7 +75,8 @@ class ProjectAccessView(APIView):
         for item in explicit_qs:
             uid = str(item["user_id"])
             slug = item["role__slug"]
-            if uid not in explicit_roles or _order.get(slug, 99) < _order.get(explicit_roles[uid], 99):
+            current = _order.get(explicit_roles[uid], 99) if uid in explicit_roles else 99
+            if _order.get(slug, 99) < current:
                 explicit_roles[uid] = slug
 
         memberships = MembershipModel.objects.filter(

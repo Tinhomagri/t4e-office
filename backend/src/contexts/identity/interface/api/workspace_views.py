@@ -13,7 +13,7 @@ from contexts.identity.application.use_cases.revoke_invitation import RevokeInvi
 from contexts.identity.application.use_cases.send_invitation import SendInvitation
 from contexts.identity.application.use_cases.update_member_role import UpdateMemberRole
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
-from contexts.identity.infrastructure.django.models import RoleAuditLog, WorkspaceModel
+from contexts.identity.infrastructure.django.models import RoleAuditLog
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoInvitationRepository,
     DjangoMembershipRepository,
@@ -26,7 +26,7 @@ from contexts.identity.interface.api.serializers import (
     MemberSerializer,
     UpdateMemberRoleSerializer,
 )
-from shared.domain.errors import NotFoundError, PermissionDeniedError
+from shared.domain.errors import PermissionDeniedError
 
 
 def _invitation_dict(inv) -> dict:
@@ -70,7 +70,6 @@ class MemberDetailView(APIView):
         repo = DjangoMembershipRepository()
 
         # Captura papel atual para o audit log
-        from contexts.identity.domain.repositories.workspace_repository import MemberView
         old_role_obj = repo.role_of(workspace_id=str(workspace_id), user_id=str(user_id))
         old_role_str = old_role_obj.value if old_role_obj else ""
 
