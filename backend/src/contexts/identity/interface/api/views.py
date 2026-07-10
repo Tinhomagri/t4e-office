@@ -1,12 +1,23 @@
 """Views finas do contexto identity — orquestram casos de uso."""
+import logging
+
 from django.conf import settings
 from django.db import transaction
+from django.shortcuts import redirect
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from contexts.google.infrastructure.django.oauth_provider_impl import (
+    LOGIN_SCOPES,
+    GoogleOAuthProvider,
+)
+from contexts.identity.application.use_cases.authenticate_with_google import (
+    AuthenticateWithGoogle,
+)
 from contexts.identity.application.use_cases.create_workspace import CreateWorkspace
 from contexts.identity.application.use_cases.list_workspaces import ListWorkspaces
 from contexts.identity.application.use_cases.register_user import RegisterUser
@@ -17,6 +28,11 @@ from contexts.identity.application.use_cases.send_verification_email import (
 )
 from contexts.identity.application.use_cases.verify_email import VerifyEmail
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
+from contexts.identity.infrastructure.django.google_login_state import (
+    issue_state,
+    verify_state,
+)
+from contexts.identity.infrastructure.django.models import UserModel
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoMembershipRepository,
     DjangoUserRepository,
@@ -30,6 +46,16 @@ from contexts.identity.interface.api.serializers import (
     WorkspaceSerializer,
 )
 from shared.domain.errors import NotFoundError, ValidationError
+
+logger = logging.getLogger(__name__)
+
+
+def _google_login_provider() -> GoogleOAuthProvider:
+    return GoogleOAuthProvider(
+        redirect_uri=settings.GOOGLE_OAUTH_LOGIN_REDIRECT_URI,
+        scopes=LOGIN_SCOPES,
+        include_granted_scopes=False,
+    )
 
 
 class RegisterView(APIView):
@@ -68,6 +94,62 @@ class RegisterView(APIView):
                 "message": "Cadastro realizado. Verifique seu email para ativar a conta.",
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class GoogleLoginUrlView(APIView):
+    """Gera a URL de consentimento Google p/ login/cadastro (sem sessão)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        state = issue_state()
+        url = _google_login_provider().build_authorization_url(state=state)
+        return Response({"authorization_url": url})
+
+
+class GoogleLoginCallbackView(APIView):
+    """Callback do fluxo Google de login/cadastro — emite JWT e redireciona."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        front = settings.FRONTEND_URL
+        callback_path = "/login/google/callback"
+
+        if request.query_params.get("error"):
+            return redirect(f"{front}{callback_path}?error=denied")
+
+        code = request.query_params.get("code", "")
+        state = request.query_params.get("state", "")
+        if not code or not verify_state(state):
+            return redirect(f"{front}{callback_path}?error=invalid_state")
+
+        try:
+            tokens = _google_login_provider().exchange_code(code=code)
+        except Exception:
+            logger.exception("Falha ao trocar code por tokens no login Google")
+            return redirect(f"{front}{callback_path}?error=exchange_failed")
+
+        try:
+            with transaction.atomic():
+                result = AuthenticateWithGoogle(
+                    user_repository=DjangoUserRepository()
+                ).execute(email=tokens.email or "", full_name=tokens.name or "")
+                if result.created:
+                    CreateWorkspace(
+                        workspace_repository=DjangoWorkspaceRepository(),
+                        membership_repository=DjangoMembershipRepository(),
+                    ).execute(
+                        name=f"Workspace de {result.full_name}", owner_id=result.user_id
+                    )
+        except ValidationError:
+            return redirect(f"{front}{callback_path}?error=no_email")
+
+        user_row = UserModel.objects.get(id=result.user_id)
+        refresh = RefreshToken.for_user(user_row)
+        return redirect(
+            f"{front}{callback_path}?access={refresh.access_token}&refresh={refresh}"
         )
 
 

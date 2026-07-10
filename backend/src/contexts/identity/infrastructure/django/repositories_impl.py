@@ -44,7 +44,7 @@ class DjangoUserRepository(UserRepository):
         return UserModel.objects.filter(email=str(email)).exists()
 
     def create(
-        self, *, email: Email, full_name: str, raw_password: str, is_active: bool = False
+        self, *, email: Email, full_name: str, raw_password: str | None, is_active: bool = False
     ) -> User:
         # O manager hasheia a senha (set_password)
         row = UserModel.objects.create_user(

@@ -6,6 +6,7 @@ import { AvatarLabPage } from "@/features/avatar/AvatarLabPage"
 import { BoardsPage } from "@/features/boards/BoardsPage"
 import { CopilotPage } from "@/features/copilot/CopilotPage"
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
+import { GoogleCallbackPage } from "@/features/auth/GoogleCallbackPage"
 import { IntegrationsPage } from "@/features/integrations/IntegrationsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/login" replace /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
+  { path: "/login/google/callback", element: <GoogleCallbackPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },

@@ -11,6 +11,7 @@ import { SubmitButton } from "@/shared/ui/SubmitButton"
 import { fetchMe, login } from "./auth.api"
 import { AuthLayout } from "./AuthLayout"
 import { useAuthStore } from "./auth.store"
+import { GoogleButton } from "./GoogleButton"
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -104,6 +105,14 @@ export function LoginPage() {
           loading={mutation.isPending}
           onClick={handleSubmit}
         />
+
+        <div className="flex items-center gap-3 py-1">
+          <div className="h-px flex-1 bg-ink/10 dark:bg-paper/10" />
+          <span className="text-xs uppercase tracking-wide text-paper-400">ou</span>
+          <div className="h-px flex-1 bg-ink/10 dark:bg-paper/10" />
+        </div>
+
+        <GoogleButton label="Entrar com Google" />
 
         <p className="pt-2 text-center text-sm text-paper-500">
           Não tem conta?{" "}

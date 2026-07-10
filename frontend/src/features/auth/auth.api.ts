@@ -23,6 +23,14 @@ export async function login(payload: LoginPayload): Promise<TokenPair> {
   return data
 }
 
+// URL de consentimento do Google p/ login/cadastro (redireciona o navegador)
+export async function getGoogleLoginUrl(): Promise<string> {
+  const { data } = await api.get<{ authorization_url: string }>(
+    "/auth/google/login-url/",
+  )
+  return data.authorization_url
+}
+
 // Dados do usuário autenticado
 export async function fetchMe(): Promise<AuthUser> {
   const { data } = await api.get<AuthUser>("/auth/me/")

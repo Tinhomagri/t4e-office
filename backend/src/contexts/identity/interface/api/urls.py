@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from contexts.identity.interface.api.views import (
     ForgotPasswordView,
+    GoogleLoginCallbackView,
+    GoogleLoginUrlView,
     MeView,
     RegisterView,
     ResetPasswordView,
@@ -27,6 +29,13 @@ urlpatterns = [
     # Login: recebe email + password (USERNAME_FIELD=email)
     path("login/", TokenObtainPairView.as_view(), name="login"),
     path("refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    # Login/cadastro via Google: sem senha, email já verificado pelo Google.
+    path("google/login-url/", GoogleLoginUrlView.as_view(), name="google-login-url"),
+    path(
+        "google/callback/",
+        GoogleLoginCallbackView.as_view(),
+        name="google-login-callback",
+    ),
     path("me/", MeView.as_view(), name="me"),
     path("workspaces/", WorkspaceCreateView.as_view(), name="workspace-list-create"),
     path(

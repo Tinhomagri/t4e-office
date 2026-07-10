@@ -14,9 +14,14 @@ class UserRepository(ABC):
 
     @abstractmethod
     def create(
-        self, *, email: Email, full_name: str, raw_password: str, is_active: bool = False
+        self, *, email: Email, full_name: str, raw_password: str | None, is_active: bool = False
     ) -> User:
-        """Cria o usuário com a senha já hasheada pela infraestrutura."""
+        """Cria o usuário com a senha já hasheada pela infraestrutura.
+
+        `raw_password=None` cria um usuário sem senha utilizável (ex.: cadastro
+        via Google OAuth) — login por senha fica indisponível até uma futura
+        definição de senha.
+        """
 
     @abstractmethod
     def get_by_email(self, email: Email) -> User | None:
