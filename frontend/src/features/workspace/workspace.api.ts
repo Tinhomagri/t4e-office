@@ -30,11 +30,15 @@ import type {
   CreateSprintInput,
   CreateVersionInput,
   CreateWorklogInput,
+  AuditLogEntry,
   Invitation,
   IssueLink,
   Member,
+  PermissionScheme,
   Project,
+  ProjectAccessMember,
   ProjectPermissions,
+  ProjectRoleSlug,
   Role,
   Sprint,
   UpdateCardInput,
@@ -86,6 +90,59 @@ export async function acceptInvitation(token: string): Promise<{ workspace_id: s
 
 export async function revokeInvitation(invitationId: string): Promise<void> {
   await api.post(`/auth/invitations/${invitationId}/revoke/`)
+}
+
+export async function updateMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: Role,
+): Promise<void> {
+  await api.patch(`/auth/workspaces/${workspaceId}/members/${userId}/`, { role })
+}
+
+export async function removeMember(workspaceId: string, userId: string): Promise<void> {
+  await api.delete(`/auth/workspaces/${workspaceId}/members/${userId}/`)
+}
+
+export async function listAuditLog(workspaceId: string): Promise<AuditLogEntry[]> {
+  const { data } = await api.get<AuditLogEntry[]>(
+    `/auth/workspaces/${workspaceId}/audit-log/`,
+  )
+  return data
+}
+
+// ---- Acesso e esquema de permissões por projeto (RBAC Domínio 12) ----
+export async function getProjectAccess(
+  projectId: string,
+): Promise<ProjectAccessMember[]> {
+  const { data } = await api.get<ProjectAccessMember[]>(
+    `/projects/${projectId}/access/`,
+  )
+  return data
+}
+
+export async function assignProjectRole(
+  projectId: string,
+  userId: string,
+  role: ProjectRoleSlug,
+): Promise<void> {
+  await api.put(`/projects/${projectId}/access/`, { user_id: userId, role })
+}
+
+export async function resetProjectRole(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  await api.delete(`/projects/${projectId}/access/`, { params: { user_id: userId } })
+}
+
+export async function getPermissionScheme(
+  projectId: string,
+): Promise<PermissionScheme> {
+  const { data } = await api.get<PermissionScheme>(
+    `/projects/${projectId}/permission-scheme/`,
+  )
+  return data
 }
 
 // ---- Projetos ----

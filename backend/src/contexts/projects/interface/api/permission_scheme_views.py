@@ -122,6 +122,32 @@ class ProjectAccessView(APIView):
 
         return Response({"user_id": target_user_id, "role": role_slug})
 
+    def delete(self, request: Request, project_id: str) -> Response:
+        """Remove a atribuição explícita de papel, voltando ao papel derivado.
+
+        Requer: administer_project. O user_id vem por querystring (?user_id=)
+        ou no corpo — DELETE não tem alvo na URL neste recurso de coleção.
+        """
+        project = assert_project_capability(
+            project_id=project_id,
+            user_id=str(request.user.id),
+            capability="administer_project",
+        )
+
+        target_user_id = str(
+            request.query_params.get("user_id") or request.data.get("user_id") or ""
+        )
+        if not target_user_id:
+            raise ValueError("Informe o user_id do membro.")
+
+        ProjectRoleMemberModel.objects.filter(
+            role__project=project, user_id=target_user_id
+        ).delete()
+
+        # Papel volta a ser o derivado do workspace
+        eff_role = effective_role(project, target_user_id)
+        return Response({"user_id": target_user_id, "role": eff_role, "explicit_role": None})
+
 
 class ProjectPermissionSchemeView(APIView):
     """GET /api/projects/<project_id>/permission-scheme/.

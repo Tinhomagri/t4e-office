@@ -419,3 +419,42 @@ export interface ProjectPermissions {
   role: string
   capabilities: Capability[]
 }
+
+// Papel de projeto (RBAC nível projeto — distinto do papel de workspace).
+export type ProjectRoleSlug = "admin" | "developer" | "viewer"
+
+// Item de /projects/<id>/access/ — membro do workspace visto pelo prisma do projeto.
+export interface ProjectAccessMember {
+  user_id: string
+  name: string
+  email: string
+  workspace_role: Role
+  project_role: ProjectRoleSlug | null // efetivo (explícito ou derivado)
+  explicit_role: ProjectRoleSlug | null // null = derivado do papel de workspace
+}
+
+// /projects/<id>/permission-scheme/ — matriz papel×capacidade.
+export interface PermissionSchemeRole {
+  slug: ProjectRoleSlug
+  name: string
+  capabilities: Capability[]
+}
+
+export interface PermissionScheme {
+  project_id: string
+  roles: PermissionSchemeRole[]
+  all_capabilities: Capability[]
+}
+
+// /auth/workspaces/<id>/audit-log/ — trilha de mudanças de papel/remoções.
+export type AuditAction = "role_changed" | "member_removed"
+
+export interface AuditLogEntry {
+  id: string
+  actor_id: string
+  target_user_id: string
+  action: AuditAction
+  old_role: string
+  new_role: string
+  created_at: string
+}

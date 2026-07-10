@@ -12,6 +12,7 @@ import type {
   CreateCardInput,
   CreateIssueLinkInput,
   CreateSprintInput,
+  ProjectRoleSlug,
   Role,
   Sprint,
   UpdateCardInput,
@@ -352,6 +353,71 @@ export function useRevokeInvite(workspaceId: string | null) {
   return useMutation({
     mutationFn: (invitationId: string) => wsApi.revokeInvitation(invitationId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invitations", workspaceId] }),
+  })
+}
+
+export function useUpdateMemberRole(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
+      wsApi.updateMemberRole(workspaceId!, userId, role),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["members", workspaceId] })
+      qc.invalidateQueries({ queryKey: ["audit-log", workspaceId] })
+    },
+  })
+}
+
+export function useRemoveMember(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) => wsApi.removeMember(workspaceId!, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["members", workspaceId] })
+      qc.invalidateQueries({ queryKey: ["audit-log", workspaceId] })
+    },
+  })
+}
+
+export function useAuditLog(workspaceId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["audit-log", workspaceId],
+    queryFn: () => wsApi.listAuditLog(workspaceId!),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+// ---- Acesso e esquema de permissões por projeto ----
+export function useProjectAccess(projectId: string | null) {
+  return useQuery({
+    queryKey: ["project-access", projectId],
+    queryFn: () => wsApi.getProjectAccess(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useAssignProjectRole(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: ProjectRoleSlug }) =>
+      wsApi.assignProjectRole(projectId!, userId, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-access", projectId] }),
+  })
+}
+
+export function useResetProjectRole(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) => wsApi.resetProjectRole(projectId!, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-access", projectId] }),
+  })
+}
+
+export function usePermissionScheme(projectId: string | null) {
+  return useQuery({
+    queryKey: ["permission-scheme", projectId],
+    queryFn: () => wsApi.getPermissionScheme(projectId!),
+    enabled: !!projectId,
   })
 }
 
