@@ -12,6 +12,17 @@
     />
   </head>
   <body>
+    <!-- Aplica o tema antes do primeiro paint — evita flash de light->dark no load. -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("t4e-office-theme")
+          var theme = raw ? JSON.parse(raw).state.theme : null
+          var dark = theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches
+          if (dark) document.documentElement.classList.add("dark")
+        } catch (e) {}
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

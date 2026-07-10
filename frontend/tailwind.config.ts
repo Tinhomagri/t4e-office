@@ -63,16 +63,18 @@ export default {
         yellow: { 100: "#FFF7D6", 500: "#E2B203", 700: "#946F00" },
 
         // ── Tokens legados remapeados → Atlassian ───────────────────────────
-        // ink: texto/superfícies fortes (era escuro no dark theme).
+        // ink: texto (light) / superfícies (dark). Neutro cinza-preto — não navy —
+        // pra manter o azul reservado ao brand/acentos (pedido: "preto puxado pro
+        // cinza escuro", sem tudo ficar com cara de azul).
         ink: {
-          DEFAULT: "#172B4D",
-          950: "#091E42",
-          900: "#172B4D",
-          800: "#1D2B45",
-          700: "#2C3E5D",
-          600: "#44546F",
-          500: "#626F86",
-          400: "#8590A2",
+          DEFAULT: "#181A1F",
+          950: "#0A0B0D",
+          900: "#17191E",
+          800: "#212328",
+          700: "#2E3036",
+          600: "#494B52",
+          500: "#63656C",
+          400: "#8A8C93",
         },
         // paper: superfícies claras, bordas e texto suave.
         paper: {
