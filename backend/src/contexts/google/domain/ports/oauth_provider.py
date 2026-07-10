@@ -14,6 +14,7 @@ class OAuthTokens:
     # No refresh, o Google pode não devolver um novo refresh_token; fica None.
     refresh_token: str | None = None
     email: str | None = None
+    name: str | None = None
 
 
 class OAuthError(Exception):

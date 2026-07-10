@@ -4,6 +4,9 @@ import {
   Building2,
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
   LayoutDashboard,
   LineChart,
@@ -23,11 +26,12 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { useThemeStore } from "@/shared/theme.store"
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
-import { useCreateWorkspace, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { AgendaPanel } from "@/features/integrations/AgendaPanel"
+import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   Avatar,
   Button,
@@ -51,18 +55,22 @@ interface NavItem {
 }
 
 // Menu espelha os pilares do doc de visão: trabalho, inteligência, equipe.
+// Nomenclatura de grupo alinhada ao padrão Jira (Para você / Projetos / Analytics / Pessoas).
 const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   {
-    heading: "Trabalho",
+    heading: "Para você",
+    items: [{ label: "Meu Dia", to: "/app", icon: LayoutDashboard, end: true }],
+  },
+  {
+    heading: "Projetos",
+    // "Boards" ganha tratamento especial (submenu de projetos) — ver BoardsNavLink.
     items: [
-      { label: "Meu Dia", to: "/app", icon: LayoutDashboard, end: true },
-      { label: "Boards", to: "/app/boards", icon: SquareKanban },
       { label: "Planning Poker", to: "/app/poker", icon: Spade },
       { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
     ],
   },
   {
-    heading: "Inteligência",
+    heading: "Analytics",
     items: [
       { label: "Relatórios", to: "/app/reports", icon: LineChart },
       { label: "Portfólio", to: "/app/portfolio", icon: Building2 },
@@ -70,7 +78,7 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     ],
   },
   {
-    heading: "Equipe",
+    heading: "Pessoas",
     items: [
       { label: "Membros", to: "/app/members", icon: UserPlus },
       { label: "Escritório", to: "/app/office", icon: Users },
@@ -97,6 +105,8 @@ export function AppShell() {
   const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
   const [status, setStatus] = useState<PresenceStatus>("available")
+  const [agendaOpen, setAgendaOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   const { theme, toggle: toggleTheme } = useThemeStore()
 
@@ -111,28 +121,52 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-canvas dark:bg-ink-950 text-ink dark:text-paper">
-      {/* ---------------- Sidebar ---------------- */}
-      <aside className="hidden w-[264px] shrink-0 flex-col bg-gradient-to-b from-ink-900 to-ink-950 dark:from-ink-950 dark:to-[#070709] md:flex">
-        <WorkspaceSwitcher />
+      {/* ---------------- Sidebar (estilo Jira: clara, colapsável, "Criar" em destaque) ---------------- */}
+      <motion.aside
+        animate={{ width: collapsed ? 68 : 264 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        className="relative hidden shrink-0 flex-col border-r border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900 md:flex"
+      >
+        <WorkspaceSwitcher collapsed={collapsed} />
 
-        <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5 scrollbar-slim-dark">
+        {/* Botão "Criar" — âncora visual do Jira, sempre acessível */}
+        <div className={cx("px-3 pt-3", collapsed && "px-2")}>
+          <button
+            onClick={() => navigate("/app/boards")}
+            title="Criar"
+            className={cx(
+              "flex items-center gap-2 rounded-full bg-brand-600 font-semibold text-white shadow-sm transition-colors hover:bg-brand-700",
+              collapsed ? "size-9 justify-center p-0" : "w-full px-4 py-2 text-sm",
+            )}
+          >
+            <Plus className="size-4 shrink-0" strokeWidth={2.4} />
+            {!collapsed && "Criar"}
+          </button>
+        </div>
+
+        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4 scrollbar-slim">
           {NAV_GROUPS.map((group) => (
             <div key={group.heading}>
-              <div className="px-3 pb-2">
-                <SectionLabel>{group.heading}</SectionLabel>
-              </div>
+              {!collapsed && (
+                <div className="px-3 pb-1.5">
+                  <SectionLabel>{group.heading}</SectionLabel>
+                </div>
+              )}
               <div className="flex flex-col gap-0.5">
+                {group.heading === "Projetos" && <BoardsNavLink collapsed={collapsed} />}
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
                     end={item.end}
+                    title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cx(
-                        "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
+                        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                        collapsed && "justify-center px-0 py-2.5",
                         isActive
-                          ? "bg-white/[0.07] font-medium text-paper"
-                          : "text-paper-400 hover:bg-white/[0.04] hover:text-paper-200",
+                          ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                          : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
                       )
                     }
                   >
@@ -141,18 +175,18 @@ export function AppShell() {
                         {/* indicador de acento na borda esquerda */}
                         <span
                           className={cx(
-                            "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500 transition-opacity",
+                            "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
                             isActive ? "opacity-100" : "opacity-0",
                           )}
                         />
                         <item.icon
                           className={cx(
-                            "size-[18px] transition-colors",
-                            isActive ? "text-brand-300" : "text-paper-500 group-hover:text-paper-300",
+                            "size-[18px] shrink-0 transition-colors",
+                            isActive ? "text-brand-600 dark:text-brand-300" : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
                           )}
                           strokeWidth={1.9}
                         />
-                        <span className="flex-1 text-left">{item.label}</span>
+                        {!collapsed && <span className="flex-1 truncate text-left">{item.label}</span>}
                       </>
                     )}
                   </NavLink>
@@ -163,25 +197,38 @@ export function AppShell() {
         </nav>
 
         {/* Footer de usuário */}
-        <div className="border-t border-white/5 p-3">
-          <div className="flex items-center gap-3 rounded-xl px-2 py-2">
+        <div className="border-t border-paper-100 dark:border-ink-800 p-3">
+          <div className={cx("flex items-center gap-3 rounded-xl px-2 py-2", collapsed && "justify-center px-0")}>
             <Avatar initials={initials(user?.full_name)} status={status} />
-            <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-medium text-paper">
-                {user?.full_name ?? "Usuário"}
-              </p>
-              <p className="truncate text-xs text-paper-500">{user?.email}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Sair"
-              className="grid size-8 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-white/5 hover:text-paper-200"
-            >
-              <LogOut className="size-[17px]" strokeWidth={1.9} />
-            </button>
+            {!collapsed && (
+              <>
+                <div className="min-w-0 flex-1 leading-tight">
+                  <p className="truncate text-sm font-medium text-ink dark:text-paper">
+                    {user?.full_name ?? "Usuário"}
+                  </p>
+                  <p className="truncate text-xs text-paper-500">{user?.email}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Sair"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
+                >
+                  <LogOut className="size-[17px]" strokeWidth={1.9} />
+                </button>
+              </>
+            )}
           </div>
         </div>
-      </aside>
+
+        {/* Toggle de colapso — pinado na borda, como o do Jira */}
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          className="absolute -right-3 top-16 grid size-6 place-items-center rounded-full border border-paper-200 bg-paper text-paper-400 shadow-sm transition-colors hover:text-ink dark:border-ink-700 dark:bg-ink-800 dark:hover:text-paper"
+        >
+          {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+        </button>
+      </motion.aside>
 
       {/* ---------------- Coluna principal ---------------- */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -215,6 +262,13 @@ export function AppShell() {
               <Bell className="size-[18px]" strokeWidth={1.9} />
               <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-brand-500 ring-2 ring-paper dark:ring-ink-900" />
             </IconButton>
+            <IconButton
+              title="Agenda"
+              onClick={() => setAgendaOpen((v) => !v)}
+              className={agendaOpen ? "border-brand-500 text-brand-600 dark:text-brand-400" : undefined}
+            >
+              <CalendarClock className="size-[18px]" strokeWidth={1.9} />
+            </IconButton>
             <IconButton title="Configurações">
               <Settings className="size-[18px]" strokeWidth={1.9} />
             </IconButton>
@@ -244,12 +298,107 @@ export function AppShell() {
       </div>
 
       <CopilotChatWidget />
+      <AgendaPanel open={agendaOpen} onClose={() => setAgendaOpen(false)} />
+    </div>
+  )
+}
+
+// Item "Boards" com submenu de projetos — como a lista de projetos do Jira
+// embaixo do item "Projects" na sidebar.
+function BoardsNavLink({ collapsed }: { collapsed: boolean }) {
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const { activeWorkspaceId } = useWorkspaces()
+  const { data: projects } = useProjects(activeWorkspaceId)
+
+  const onBoards = location.pathname.startsWith("/app/boards")
+  const activeProjectId = onBoards ? searchParams.get("project") : null
+  const [open, setOpen] = useState(true)
+
+  if (collapsed) {
+    return (
+      <NavLink
+        to="/app/boards"
+        title="Boards"
+        className={({ isActive }) =>
+          cx(
+            "group relative flex items-center justify-center rounded-lg px-0 py-2.5 text-sm transition-colors",
+            isActive
+              ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+              : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
+          )
+        }
+      >
+        <SquareKanban className="size-[18px] shrink-0" strokeWidth={1.9} />
+      </NavLink>
+    )
+  }
+
+  return (
+    <div>
+      <div
+        className={cx(
+          "group relative flex items-center gap-1 rounded-lg pr-1.5 text-sm transition-colors",
+          onBoards && !activeProjectId
+            ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+            : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
+            onBoards && !activeProjectId ? "opacity-100" : "opacity-0",
+          )}
+        />
+        <NavLink to="/app/boards" className="flex flex-1 items-center gap-3 px-3 py-2">
+          <SquareKanban
+            className={cx(
+              "size-[18px] shrink-0 transition-colors",
+              onBoards ? "text-brand-600 dark:text-brand-300" : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
+            )}
+            strokeWidth={1.9}
+          />
+          <span className="flex-1 truncate text-left">Boards</span>
+        </NavLink>
+        {(projects?.length ?? 0) > 0 && (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            title={open ? "Recolher projetos" : "Mostrar projetos"}
+            className="grid size-6 shrink-0 place-items-center rounded-md text-paper-400 hover:bg-paper-200 dark:hover:bg-ink-700"
+          >
+            <ChevronDown className={cx("size-3.5 transition-transform", open ? "rotate-0" : "-rotate-90")} />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="ml-[27px] flex flex-col gap-0.5 border-l border-paper-100 pl-2 dark:border-ink-700">
+          {(projects ?? []).map((p) => (
+            <NavLink
+              key={p.id}
+              to={`/app/boards?project=${p.id}`}
+              className={cx(
+                "flex items-center gap-2 truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors",
+                p.id === activeProjectId
+                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                  : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
+              )}
+            >
+              <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
+                {p.key.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="truncate">{p.name}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // Seletor de workspace no topo da sidebar — mostra o ativo e permite trocar.
-function WorkspaceSwitcher() {
+// Estilo "site picker" do Jira: fundo claro, avatar quadrado, chevron duplo.
+function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const { data: workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspaces()
   const [open, setOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
@@ -258,30 +407,37 @@ function WorkspaceSwitcher() {
   const tile = (active?.name ?? "Pulse").trim().charAt(0).toUpperCase()
 
   return (
-    <div className="relative border-b border-white/5 p-3">
+    <div className="relative border-b border-paper-100 dark:border-ink-800 p-3">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.05] focus-ring"
+        className={cx(
+          "flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 focus-ring",
+          collapsed && "justify-center px-0",
+        )}
       >
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-bold text-white shadow-brand-glow">
+        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-bold text-white shadow-brand-glow">
           {tile}
         </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-sm font-semibold text-paper">
-            {active?.name ?? "Pulse"}
-          </p>
-          <p className="truncate text-[11px] tracking-[0.16em] text-paper-500">
-            T4E GROUP
-          </p>
-        </div>
-        <ChevronsUpDown className="size-4 shrink-0 text-paper-500" strokeWidth={1.9} />
+        {!collapsed && (
+          <>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-sm font-semibold text-ink dark:text-paper">
+                {active?.name ?? "Pulse"}
+              </p>
+              <p className="truncate text-[11px] tracking-[0.16em] text-paper-400">
+                T4E GROUP
+              </p>
+            </div>
+            <ChevronsUpDown className="size-4 shrink-0 text-paper-400" strokeWidth={1.9} />
+          </>
+        )}
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-3 right-3 top-[64px] z-20 animate-scale-in rounded-xl border border-white/10 bg-ink-800 p-1.5 shadow-pop">
-            <p className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-500">
+          <div className="absolute left-3 right-3 top-[64px] z-20 animate-scale-in rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 p-1.5 shadow-pop">
+            <p className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-400">
               Seus workspaces
             </p>
             {(workspaces ?? []).map((w) => (
@@ -291,26 +447,26 @@ function WorkspaceSwitcher() {
                   setActiveWorkspace(w.id)
                   setOpen(false)
                 }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-paper-200 transition-colors hover:bg-white/5"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-ink dark:text-paper-200 transition-colors hover:bg-paper-100 dark:hover:bg-white/5"
               >
-                <div className="grid size-6 place-items-center rounded-md bg-white/10 text-[11px] font-semibold text-paper">
+                <div className="grid size-6 place-items-center rounded-md bg-brand-500/10 text-[11px] font-semibold text-brand-700 dark:bg-white/10 dark:text-paper">
                   {w.name.trim().charAt(0).toUpperCase()}
                 </div>
                 <span className="flex-1 truncate">{w.name}</span>
                 {w.id === activeWorkspaceId && (
-                  <Check className="size-4 text-brand-300" strokeWidth={2.2} />
+                  <Check className="size-4 text-brand-600 dark:text-brand-300" strokeWidth={2.2} />
                 )}
               </button>
             ))}
-            <div className="my-1 h-px bg-white/5" />
+            <div className="my-1 h-px bg-paper-100 dark:bg-white/5" />
             <button
               onClick={() => {
                 setOpen(false)
                 setCreateOpen(true)
               }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-paper-400 transition-colors hover:bg-white/5 hover:text-paper-200"
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-white/5 hover:text-ink dark:hover:text-paper-200"
             >
-              <div className="grid size-6 place-items-center rounded-md border border-dashed border-white/20">
+              <div className="grid size-6 place-items-center rounded-md border border-dashed border-paper-300 dark:border-white/20">
                 <Plus className="size-3.5" />
               </div>
               Criar workspace

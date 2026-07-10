@@ -1,9 +1,21 @@
 import { create } from "zustand"
+import { persist } from "zustand/middleware"
 
-// Tema fixo light (Atlassian Design System). O dark mode foi removido na
-// migração — o store permanece para compatibilidade de API (toggle/set são
-// no-ops) e garante que a classe `dark` nunca fique no <html>.
+// Dark mode real — a paleta ink/paper/brand já tem os tons `dark:` mapeados
+// (ink-900/950 = navy escuro), herdados de antes da migração pro Atlassian
+// light. O store persiste a escolha; o script inline em index.html aplica a
+// classe antes do primeiro paint pra evitar flash de tema errado.
 type Theme = "light" | "dark"
+
+const STORAGE_KEY = "t4e-office-theme"
+
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.toggle("dark", theme === "dark")
+}
+
+function systemPrefersDark(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches
+}
 
 interface ThemeState {
   theme: Theme
@@ -11,21 +23,25 @@ interface ThemeState {
   set: (t: Theme) => void
 }
 
-function forceLight() {
-  document.documentElement.classList.remove("dark")
-}
-
-export const useThemeStore = create<ThemeState>()((set) => ({
-  theme: "light",
-  toggle: () => {
-    forceLight()
-    set({ theme: "light" })
-  },
-  set: () => {
-    forceLight()
-    set({ theme: "light" })
-  },
-}))
-
-// Garante tema claro antes do primeiro render.
-forceLight()
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set, get) => ({
+      theme: systemPrefersDark() ? "dark" : "light",
+      toggle: () => {
+        const next = get().theme === "dark" ? "light" : "dark"
+        applyTheme(next)
+        set({ theme: next })
+      },
+      set: (t) => {
+        applyTheme(t)
+        set({ theme: t })
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      onRehydrateStorage: () => (state) => {
+        if (state) applyTheme(state.theme)
+      },
+    },
+  ),
+)

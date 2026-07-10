@@ -156,6 +156,12 @@ GOOGLE_OAUTH_REDIRECT_URI = env(
     "GOOGLE_OAUTH_REDIRECT_URI",
     default="http://localhost:8000/api/google/callback/",
 )
+# Redirect separado p/ o fluxo de login/cadastro com Google (sem usuário autenticado
+# ainda). Precisa estar cadastrado como "Authorized redirect URI" no Google Cloud tb.
+GOOGLE_OAUTH_LOGIN_REDIRECT_URI = env(
+    "GOOGLE_OAUTH_LOGIN_REDIRECT_URI",
+    default="http://localhost:8000/api/auth/google/callback/",
+)
 # Chave Fernet p/ cifrar tokens Google no banco — gere com:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 GOOGLE_TOKEN_ENC_KEY = env("GOOGLE_TOKEN_ENC_KEY", default="")

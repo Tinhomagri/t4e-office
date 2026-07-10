@@ -1,14 +1,22 @@
+import { AnimatePresence, motion } from "framer-motion"
 import {
+  AlertCircle,
   CalendarClock,
   CalendarPlus,
   CalendarX2,
+  Check,
+  Clock,
   ExternalLink,
   Link2,
+  Mail,
   Sparkles,
+  Type,
   Unplug,
+  Users,
   Video,
+  X,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
 
 import { extractApiError } from "@/shared/api/client"
@@ -16,12 +24,8 @@ import {
   Badge,
   Button,
   cx,
-  Field,
-  Input,
-  Modal,
   PageHeader,
   Spinner,
-  Textarea,
 } from "@/shared/ui/primitives"
 import {
   useConnectGoogle,
@@ -305,6 +309,15 @@ export function IntegrationsPage() {
   )
 }
 
+const DURATION_PRESETS = [15, 30, 45, 60]
+
+function parseAttendees(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateMeeting()
   const [title, setTitle] = useState("")
@@ -314,6 +327,9 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
   const [description, setDescription] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+
+  const attendeeList = parseAttendees(attendees)
+  const canSubmit = !!title.trim() && !!start
 
   const reset = () => {
     setTitle("")
@@ -339,10 +355,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
         title,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
-        attendees: attendees
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        attendees: attendeeList,
         description,
       })
       setDone(result.meet_link ?? result.html_link)
@@ -352,86 +365,261 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title="Agendar reunião"
-      description="Cria o evento na sua agenda com link do Google Meet e convites."
-      footer={
-        done ? (
-          <Button onClick={handleClose}>Fechar</Button>
-        ) : (
-          <>
-            <Button variant="ghost" onClick={handleClose}>
-              Cancelar
-            </Button>
-            <Button
-              loading={create.isPending}
-              disabled={!title || !start}
-              onClick={handleSubmit}
-            >
-              Criar reunião
-            </Button>
-          </>
-        )
-      }
-    >
-      {done ? (
-        <div className="space-y-3 py-2 text-sm text-ink dark:text-paper">
-          <p>Reunião criada! Convites enviados aos participantes.</p>
-          <a
-            href={done}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-2 font-medium text-brand-700 hover:bg-brand-100"
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-ink-950/50 backdrop-blur-sm"
+            onClick={handleClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            className="relative z-10 max-h-[92vh] w-full max-w-md overflow-hidden rounded-3xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-pop"
           >
-            <Video className="size-4" /> Abrir reunião
-          </a>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <Field label="Título">
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Review do sprint"
-            />
-          </Field>
-          <div className="flex gap-3">
-            <Field label="Início">
-              <Input
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-              />
-            </Field>
-            <Field label="Duração (min)">
-              <Input
-                type="number"
-                min={15}
-                step={15}
-                value={durationMin}
-                onChange={(e) => setDurationMin(Number(e.target.value))}
-              />
-            </Field>
-          </div>
-          <Field label="Participantes" hint="Emails separados por vírgula">
-            <Input
-              value={attendees}
-              onChange={(e) => setAttendees(e.target.value)}
-              placeholder="ana@empresa.com, bruno@empresa.com"
-            />
-          </Field>
-          <Field label="Descrição (opcional)">
-            <Textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </Field>
-          {error && <p className="text-sm text-danger">{error}</p>}
+            {done ? (
+              <SuccessState meetLink={done} onClose={handleClose} />
+            ) : (
+              <>
+                {/* Header em gradiente com blobs decorativos */}
+                <div className="relative overflow-hidden bg-gradient-to-br from-brand-500 via-brand-600 to-indigo-700 px-6 py-6">
+                  <div className="pointer-events-none absolute -right-8 -top-10 size-32 rounded-full bg-white/10 blur-2xl" />
+                  <div className="pointer-events-none absolute -left-6 bottom-0 size-24 rounded-full bg-white/10 blur-xl" />
+                  <button
+                    onClick={handleClose}
+                    className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+                  >
+                    <X className="size-4" />
+                  </button>
+                  <div className="relative flex items-center gap-3">
+                    <div className="grid size-11 place-items-center rounded-2xl bg-white/15 shadow-inner backdrop-blur">
+                      <CalendarPlus className="size-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Agendar reunião</h2>
+                      <p className="mt-0.5 text-[13px] text-white/75">
+                        Cria o evento com link do Meet e envia convites
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="max-h-[62vh] space-y-5 overflow-y-auto px-6 py-5 scrollbar-slim">
+                  <LiveField icon={Type} label="Título">
+                    <input
+                      autoFocus
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Ex: Review do sprint"
+                      className="w-full border-none bg-transparent text-[15px] font-medium text-ink outline-none placeholder-paper-400 dark:text-paper"
+                    />
+                  </LiveField>
+
+                  <LiveField icon={Clock} label="Início">
+                    <input
+                      type="datetime-local"
+                      value={start}
+                      onChange={(e) => setStart(e.target.value)}
+                      className="w-full border-none bg-transparent text-[15px] text-ink outline-none dark:text-paper [color-scheme:light] dark:[color-scheme:dark]"
+                    />
+                  </LiveField>
+
+                  {/* Duração — chips animados em vez de input numérico cru */}
+                  <div>
+                    <p className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-ink dark:text-paper">
+                      <Clock className="size-3.5 text-paper-400" /> Duração
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {DURATION_PRESETS.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setDurationMin(m)}
+                          className={cx(
+                            "relative rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all",
+                            durationMin === m
+                              ? "bg-brand-600 text-white shadow-brand-glow"
+                              : "bg-paper-100 text-paper-500 hover:bg-paper-200 dark:bg-ink-800 dark:hover:bg-ink-700",
+                          )}
+                        >
+                          {m < 60 ? `${m} min` : `${m / 60}h`}
+                        </button>
+                      ))}
+                      <input
+                        type="number"
+                        min={5}
+                        step={5}
+                        value={durationMin}
+                        onChange={(e) => setDurationMin(Number(e.target.value))}
+                        className="w-20 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-1.5 text-center text-sm font-medium text-ink dark:text-paper focus-ring"
+                      />
+                    </div>
+                  </div>
+
+                  <LiveField icon={Users} label="Participantes" hint="Emails separados por vírgula">
+                    <input
+                      value={attendees}
+                      onChange={(e) => setAttendees(e.target.value)}
+                      placeholder="ana@empresa.com, bruno@empresa.com"
+                      className="w-full border-none bg-transparent text-[15px] text-ink outline-none placeholder-paper-400 dark:text-paper"
+                    />
+                  </LiveField>
+
+                  {/* Preview animado dos convidados conforme digita */}
+                  <AnimatePresence>
+                    {attendeeList.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="flex flex-wrap gap-1.5 overflow-hidden"
+                      >
+                        {attendeeList.map((email) => (
+                          <span
+                            key={email}
+                            className="flex items-center gap-1.5 rounded-full bg-brand-500/10 py-1 pl-1 pr-2.5 text-xs font-medium text-brand-700 dark:text-brand-300"
+                          >
+                            <span
+                              className={cx(
+                                "grid size-5 place-items-center rounded-full bg-gradient-to-br text-[8px] font-bold text-white",
+                                gradientFor(email),
+                              )}
+                            >
+                              {email.slice(0, 2).toUpperCase()}
+                            </span>
+                            {email}
+                          </span>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <LiveField icon={Mail} label="Descrição" hint="Opcional">
+                    <textarea
+                      rows={2}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Pauta, contexto, links úteis…"
+                      className="w-full resize-none border-none bg-transparent text-sm text-ink outline-none placeholder-paper-400 dark:text-paper"
+                    />
+                  </LiveField>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.p
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="flex items-center gap-2 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger"
+                      >
+                        <AlertCircle className="size-4 shrink-0" /> {error}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t border-paper-100 dark:border-ink-800 px-6 py-4">
+                  <Button variant="ghost" onClick={handleClose}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    icon={<Video className="size-4" />}
+                    loading={create.isPending}
+                    disabled={!canSubmit}
+                    onClick={handleSubmit}
+                  >
+                    Criar reunião
+                  </Button>
+                </div>
+              </>
+            )}
+          </motion.div>
         </div>
       )}
-    </Modal>
+    </AnimatePresence>
+  )
+}
+
+// Campo "vivo": borda só aparece com foco (:focus-within), ícone acompanha a cor.
+function LiveField({
+  icon: Icon,
+  label,
+  hint,
+  children,
+}: {
+  icon: typeof Type
+  label: string
+  hint?: string
+  children: ReactNode
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-center justify-between text-[13px] font-medium text-ink dark:text-paper">
+        {label}
+        {hint && <span className="text-xs font-normal text-paper-400">{hint}</span>}
+      </span>
+      <div className="group flex items-center gap-2.5 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800/60 px-3.5 py-2.5 transition-colors focus-within:border-brand-400 focus-within:bg-paper dark:focus-within:bg-ink-800">
+        <Icon className="size-4 shrink-0 text-paper-400 transition-colors group-focus-within:text-brand-500" />
+        {children}
+      </div>
+    </label>
+  )
+}
+
+function SuccessState({ meetLink, onClose }: { meetLink: string; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex flex-col items-center px-6 py-10 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0.4, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.05 }}
+        className="grid size-16 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg"
+      >
+        <Check className="size-8 text-white" strokeWidth={3} />
+      </motion.div>
+      <motion.h3
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="mt-4 text-lg font-bold text-ink dark:text-paper"
+      >
+        Reunião criada!
+      </motion.h3>
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mt-1 text-sm text-paper-500"
+      >
+        Convites enviados aos participantes.
+      </motion.p>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.28 }}
+        className="mt-6 flex w-full flex-col gap-2"
+      >
+        <a
+          href={meetLink}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+        >
+          <Video className="size-4" /> Entrar na call
+        </a>
+        <Button variant="ghost" onClick={onClose}>
+          Fechar
+        </Button>
+      </motion.div>
+    </motion.div>
   )
 }

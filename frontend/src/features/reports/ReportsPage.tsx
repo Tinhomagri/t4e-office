@@ -46,6 +46,14 @@ import { Button, PageHeader, Select, Spinner, cx } from "@/shared/ui/primitives"
 // ── Paleta (estilo Power BI) ────────────────────────────────────────────────
 const BRAND = "#6c5cf0"
 
+// Relatório vazio — usado quando o workspace não tem projeto ativo, pra
+// mostrar a mesma UI (com estados vazios de cada gráfico) em vez de sumir com tudo.
+const EMPTY_REPORTS: ProjectReports = {
+  burndown: { sprint: null, ideal: [], actual: [] },
+  velocity: [],
+  cfd: [],
+}
+
 const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"]
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
@@ -92,7 +100,7 @@ function isOverdue(c: Card): boolean {
 // ══════════════════════════════════════════════════════════════════════════════
 export function ReportsPage() {
   const { activeWorkspaceId } = useWorkspaces()
-  const { data: projects } = useProjects(activeWorkspaceId)
+  const { data: projects, isLoading: projectsLoading } = useProjects(activeWorkspaceId)
   const { data: members } = useMembers(activeWorkspaceId)
   const [projectId, setProjectId] = useState<string | null>(null)
   const pid = projectId ?? projects?.[0]?.id ?? null
@@ -101,7 +109,13 @@ export function ReportsPage() {
   const { data: cards, isLoading: cardsLoading } = useCards(pid)
 
   const project = projects?.find((p) => p.id === pid) ?? null
-  const isLoading = reportsLoading || cardsLoading
+  // Sem projeto: os hooks de reports/cards ficam desabilitados (enabled: !!pid) e
+  // nunca resolvem — usamos dados vazios pra renderizar a mesma UI zerada, em vez
+  // de trocar a página inteira por uma mensagem.
+  const noProject = !projectsLoading && !pid
+  const isLoading = projectsLoading || (!!pid && (reportsLoading || cardsLoading))
+  const reportsData = pid ? reports : EMPTY_REPORTS
+  const cardsData = pid ? cards : []
 
   const memberName = useMemo(() => {
     const map = new Map<string, string>((members ?? []).map((m: Member) => [m.user_id, m.name]))
@@ -125,8 +139,8 @@ export function ReportsPage() {
           )}
           <Button
             variant="ghost"
-            onClick={() => cards && project && exportCsv(cards, project.key, memberName)}
-            disabled={!cards?.length}
+            onClick={() => cardsData && project && exportCsv(cardsData, project.key, memberName)}
+            disabled={!cardsData?.length}
           >
             <Download className="size-4" /> CSV
           </Button>
@@ -136,10 +150,16 @@ export function ReportsPage() {
         </div>
       </PageHeader>
 
-      {isLoading || !reports || !cards ? (
+      {noProject && (
+        <p className="-mt-2 flex items-center gap-1.5 text-xs text-paper-400">
+          <Layers className="size-3.5" /> Nenhum projeto neste workspace ainda — crie um em Boards para ver dados reais aqui.
+        </p>
+      )}
+
+      {isLoading || !reportsData || !cardsData ? (
         <div className="flex justify-center py-24"><Spinner className="size-6" /></div>
       ) : (
-        <ReportBody reports={reports} cards={cards} memberName={memberName} />
+        <ReportBody reports={reportsData} cards={cardsData} memberName={memberName} />
       )}
     </div>
   )
