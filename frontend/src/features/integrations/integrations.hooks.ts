@@ -15,6 +15,17 @@ export function useUpcomingEvents(enabled: boolean) {
   })
 }
 
+export function useDayEvents(enabled: boolean, day: Date) {
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate())
+  const timeMin = dayStart.toISOString()
+  const timeMax = new Date(dayStart.getTime() + 86_400_000).toISOString()
+  return useQuery({
+    queryKey: ["google", "events", "day", timeMin],
+    queryFn: () => gApi.listUpcomingEvents({ timeMin, timeMax }),
+    enabled,
+  })
+}
+
 export function useWeekEvents(enabled: boolean, weekStart: Date) {
   const timeMin = weekStart.toISOString()
   const timeMax = new Date(weekStart.getTime() + 7 * 86_400_000).toISOString()

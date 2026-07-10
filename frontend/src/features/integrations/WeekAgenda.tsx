@@ -3,7 +3,7 @@
 // injetar o link do Meet no popup nativo do Google. Aqui os dados vêm da nossa
 // API (que já expõe meet_link) e o popup de clique é nosso.
 import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, Video, X } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Spinner, cx } from "@/shared/ui/primitives"
 import { useWeekEvents } from "./integrations.hooks"
@@ -30,6 +30,13 @@ export function WeekAgenda() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const { data: events, isLoading } = useWeekEvents(true, weekStart)
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
+  const [now, setNow] = useState(() => new Date())
+
+  // Reposiciona a linha do horário atual a cada minuto.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart)
@@ -37,7 +44,6 @@ export function WeekAgenda() {
     return d
   })
 
-  const today = new Date()
   const monthLabel = weekStart.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
 
   const timed = (events ?? []).filter((e) => !e.all_day)
@@ -48,15 +54,21 @@ export function WeekAgenda() {
 
   const hourRows = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, i) => DAY_START_HOUR + i)
 
+  const minutesFromStart = (d: Date) =>
+    Math.max(0, Math.min((DAY_END_HOUR - DAY_START_HOUR) * 60, (d.getHours() - DAY_START_HOUR) * 60 + d.getMinutes()))
+
   const posFor = (e: CalendarEvent) => {
     const s = new Date(e.start)
     const en = new Date(e.end)
-    const minutesFromStart = (d: Date) =>
-      Math.max(0, Math.min((DAY_END_HOUR - DAY_START_HOUR) * 60, (d.getHours() - DAY_START_HOUR) * 60 + d.getMinutes()))
     const top = (minutesFromStart(s) / 60) * HOUR_PX
     const height = Math.max(20, ((minutesFromStart(en) - minutesFromStart(s)) / 60) * HOUR_PX)
     return { top, height }
   }
+
+  // Só mostra a linha do horário atual dentro da janela visível (7h–21h).
+  const showNowLine =
+    now.getHours() >= DAY_START_HOUR && now.getHours() < DAY_END_HOUR
+  const nowTop = (minutesFromStart(now) / 60) * HOUR_PX
 
   return (
     <section className="overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 shadow-card">
@@ -103,7 +115,7 @@ export function WeekAgenda() {
                   <p
                     className={cx(
                       "mx-auto mt-0.5 grid size-6 place-items-center rounded-full text-sm font-semibold",
-                      sameDay(d, today) ? "bg-brand-500 text-white" : "text-ink dark:text-paper",
+                      sameDay(d, now) ? "bg-brand-500 text-white" : "text-ink dark:text-paper",
                     )}
                   >
                     {d.getDate()}
@@ -149,6 +161,15 @@ export function WeekAgenda() {
                   {hourRows.map((h) => (
                     <div key={h} style={{ height: HOUR_PX }} className="border-t border-paper-100 dark:border-ink-800" />
                   ))}
+                  {showNowLine && sameDay(d, now) && (
+                    <div
+                      style={{ top: nowTop }}
+                      className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
+                    >
+                      <span className="-ml-[3px] size-2 shrink-0 rounded-full bg-red-500 dark:bg-red-400" />
+                      <span className="h-[2px] w-full bg-red-500 dark:bg-red-400" />
+                    </div>
+                  )}
                   {eventsFor(d).map((e) => {
                     const { top, height } = posFor(e)
                     return (
