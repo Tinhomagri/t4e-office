@@ -1,0 +1,7 @@
+# Mantém o bundle da função enxuto.
+db.sqlite3
+.ruff_cache
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+*.egg-info
