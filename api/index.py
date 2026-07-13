@@ -1,13 +1,14 @@
 """Vercel Python entrypoint — expõe a app WSGI do Django.
 
-Root Directory do projeto Vercel = backend/. O código Django vive em
-backend/src, então adicionamos esse diretório ao sys.path antes de importar.
+Root Directory do projeto Vercel = raiz do repo (frontend + backend juntos).
+O código Django vive em backend/src, então adicionamos esse diretório ao
+sys.path antes de importar.
 """
 import os
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src"
+SRC = Path(__file__).resolve().parent.parent / "backend" / "src"
 sys.path.insert(0, str(SRC))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.prod")
