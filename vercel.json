@@ -18,6 +18,6 @@
     { "src": "/admin/(.*)", "dest": "api/index.py" },
     { "src": "/static/(.*)", "dest": "api/index.py" },
     { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "frontend/dist/index.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
