@@ -1,0 +1,17 @@
+# Deps de runtime da função web (WSGI) no Vercel.
+# celery/redis/channels ficam de fora: são worker/ASGI, não usados no serverless.
+django>=5.2,<6.0
+djangorestframework>=3.15
+djangorestframework-simplejwt>=5.3
+drf-spectacular>=0.27
+psycopg[binary]>=3.2
+django-environ>=0.11
+django-cors-headers>=4.4
+anthropic>=0.40
+openai>=1.40
+pypdf>=5.0
+python-docx>=1.1
+google-auth>=2.30
+google-auth-oauthlib>=1.2
+google-api-python-client>=2.140
+cryptography>=43.0
