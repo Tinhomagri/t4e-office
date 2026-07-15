@@ -47,6 +47,8 @@ class CreateCard:
         epic_id: str | None = None,
         epic_color: str = "",
         labels: list[str] | None = None,
+        channel: str = "",
+        publish_date=None,
     ) -> Card:
         project = self.project_repository.get(project_id=project_id)
         if project is None:
@@ -77,5 +79,7 @@ class CreateCard:
             epic_id=epic_id,
             epic_color=epic_color,
             labels=labels or [],
+            channel=channel,
+            publish_date=publish_date,
         )
         return self.card_repository.create(card=card)

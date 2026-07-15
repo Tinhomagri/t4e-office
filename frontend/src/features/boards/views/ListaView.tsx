@@ -5,6 +5,7 @@ import type { Card, CardPriority, CardStatus, CardType, Member, Sprint } from "@
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
+  briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
 }
 const STATUS_COLOR: Record<CardStatus, string> = {
   backlog: "bg-paper-300 text-paper-600",
@@ -12,9 +13,15 @@ const STATUS_COLOR: Record<CardStatus, string> = {
   doing: "bg-brand-100 text-brand-700",
   review: "bg-warning/15 text-orange-700",
   done: "bg-success/15 text-green-700",
+  briefing: "bg-violet-100 text-violet-700",
+  criacao: "bg-brand-100 text-brand-700",
+  aprovacao: "bg-warning/15 text-orange-700",
+  agendado: "bg-cyan-100 text-cyan-700",
+  publicado: "bg-success/15 text-green-700",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
+  post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const PRIORITY_LABEL: Record<CardPriority, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -42,7 +49,7 @@ export function ListaView({
   const [statusFilter, setStatusFilter] = useState<CardStatus | "">("")
 
   const priorityOrder: Record<CardPriority, number> = { low: 0, medium: 1, high: 2, urgent: 3 }
-  const statusOrder: Record<CardStatus, number> = { backlog: 0, todo: 1, doing: 2, review: 3, done: 4 }
+  const statusOrder: Record<CardStatus, number> = { backlog: 0, todo: 1, doing: 2, review: 3, done: 4, briefing: 5, criacao: 6, aprovacao: 7, agendado: 8, publicado: 9 }
 
   const sorted = useMemo(() => {
     const filtered = cards.filter((c) => {

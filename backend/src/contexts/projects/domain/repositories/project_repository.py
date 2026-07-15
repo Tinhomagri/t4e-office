@@ -12,7 +12,9 @@ class ProjectRepository(ABC):
         """Indica se a chave já existe no workspace."""
 
     @abstractmethod
-    def create(self, *, workspace_id: str, name: str, key: str) -> Project:
+    def create(
+        self, *, workspace_id: str, name: str, key: str, template: str = "software"
+    ) -> Project:
         """Persiste um novo projeto."""
 
     @abstractmethod

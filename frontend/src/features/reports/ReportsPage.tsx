@@ -57,15 +57,19 @@ const EMPTY_REPORTS: ProjectReports = {
 const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"]
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
+  briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
 }
 const STATUS_COLOR: Record<CardStatus, string> = {
   backlog: "#94a3b8", todo: "#818cf8", doing: "#6c5cf0", review: "#a855f7", done: "#16a34a",
+  briefing: "#8b5cf6", criacao: "#6c5cf0", aprovacao: "#f59e0b", agendado: "#06b6d4", publicado: "#16a34a",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Épico",
+  post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const TYPE_COLOR: Record<CardType, string> = {
   feature: "#6c5cf0", bug: "#ef4444", debt: "#f97316", spike: "#06b6d4", chore: "#94a3b8", epic: "#a855f7",
+  post: "#6c5cf0", peca: "#94a3b8", campanha: "#a855f7", artigo: "#f97316", email: "#f59e0b",
 }
 const PRIORITY_ORDER: CardPriority[] = ["urgent", "high", "medium", "low"]
 const PRIORITY_LABEL: Record<CardPriority, string> = {

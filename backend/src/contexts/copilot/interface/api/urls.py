@@ -12,8 +12,10 @@ from contexts.copilot.interface.api.views import (
     DocumentCreateTasksView,
     DocumentListCreateView,
 )
+from contexts.copilot.interface.api.marketing_views import GenerateCopyView
 
 urlpatterns = [
+    path("generate-copy/", GenerateCopyView.as_view(), name="copilot-generate-copy"),
     path("ai-config/", AiConfigView.as_view(), name="ai-config"),
     path("ai-config/test/", AiConfigTestView.as_view(), name="ai-config-test"),
     path("chat/", CopilotChatView.as_view(), name="copilot-chat"),

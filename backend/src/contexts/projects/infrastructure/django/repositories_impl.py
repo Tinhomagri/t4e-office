@@ -41,6 +41,7 @@ def _to_entity(row: ProjectModel) -> Project:
         workspace_id=str(row.workspace_id),
         name=row.name,
         key=row.key,
+        template=row.template,
     )
 
 
@@ -68,6 +69,8 @@ def _card_to_entity(row: CardModel) -> Card:
         epic_id=str(row.epic_id) if row.epic_id else None,
         epic_color=row.epic_color,
         labels=list(row.labels or []),
+        channel=row.channel,
+        publish_date=row.publish_date,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -96,9 +99,11 @@ class DjangoProjectRepository(ProjectRepository):
             workspace_id=workspace_id, key=key
         ).exists()
 
-    def create(self, *, workspace_id: str, name: str, key: str) -> Project:
+    def create(
+        self, *, workspace_id: str, name: str, key: str, template: str = "software"
+    ) -> Project:
         row = ProjectModel.objects.create(
-            workspace_id=workspace_id, name=name, key=key
+            workspace_id=workspace_id, name=name, key=key, template=template
         )
         return _to_entity(row)
 
@@ -152,6 +157,8 @@ class DjangoCardRepository(CardRepository):
             epic_id=card.epic_id,
             epic_color=card.epic_color,
             labels=card.labels,
+            channel=card.channel,
+            publish_date=card.publish_date,
         )
         return _card_to_entity(row)
 
@@ -182,6 +189,8 @@ class DjangoCardRepository(CardRepository):
             epic_id=card.epic_id,
             epic_color=card.epic_color,
             labels=card.labels,
+            channel=card.channel,
+            publish_date=card.publish_date,
         )
         row = CardModel.objects.get(id=card.id)
         return _card_to_entity(row)

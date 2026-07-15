@@ -65,6 +65,8 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "epic_id": card.epic_id,
         "epic_color": card.epic_color,
         "labels": card.labels,
+        "channel": card.channel,
+        "publish_date": card.publish_date,
         "created_at": card.created_at.isoformat() if card.created_at else None,
         "updated_at": card.updated_at.isoformat() if card.updated_at else None,
     }
@@ -151,6 +153,8 @@ class CardListCreateView(APIView):
                     "epic_id": str(cm.epic_id) if cm.epic_id else None,
                     "epic_color": cm.epic_color,
                     "labels": cm.labels or [],
+                    "channel": cm.channel,
+                    "publish_date": cm.publish_date,
                 })
             return Response(CardSerializer(rows, many=True).data)
 

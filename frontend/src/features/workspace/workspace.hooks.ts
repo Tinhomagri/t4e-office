@@ -13,6 +13,7 @@ import type {
   CreateIssueLinkInput,
   CreateSprintInput,
   ProjectRoleSlug,
+  ProjectTemplate,
   Role,
   Sprint,
   UpdateCardInput,
@@ -57,7 +58,7 @@ export function useProjects(workspaceId: string | null) {
 export function useCreateProject(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; key: string }) =>
+    mutationFn: (input: { name: string; key: string; template?: ProjectTemplate }) =>
       wsApi.createProject({ workspace_id: workspaceId!, ...input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", workspaceId] }),
   })
@@ -656,6 +657,35 @@ export function useDeleteAttachment(cardId: string | null) {
   return useMutation({
     mutationFn: (attachmentId: string) => wsApi.deleteAttachment(attachmentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["attachments", cardId] }),
+  })
+}
+
+// ---- Marketing: aprovação de peças e versões ----
+export function useApproveCard(projectId: string | null, cardId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ decision, comment }: { decision: "approved" | "rejected"; comment?: string }) =>
+      wsApi.approveCard(cardId!, decision, comment ?? ""),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      qc.invalidateQueries({ queryKey: ["attachments", cardId] })
+      qc.invalidateQueries({ queryKey: ["history", cardId] })
+      toast.success(
+        result.decision === "approved" ? "Peça aprovada ✓" : "Peça reprovada — autor notificado",
+      )
+    },
+  })
+}
+
+export function useUploadAttachmentVersion(cardId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ attachmentId, file }: { attachmentId: string; file: File }) =>
+      wsApi.uploadAttachmentVersion(attachmentId, file),
+    onSuccess: (a) => {
+      qc.invalidateQueries({ queryKey: ["attachments", cardId] })
+      toast.success(`Nova versão v${a.version} enviada`)
+    },
   })
 }
 

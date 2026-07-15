@@ -9,16 +9,20 @@ import type { Card, CardPriority, CardStatus, CardType, Member, Sprint } from "@
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
+  briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
 }
 // Paleta vibrante estilo Jira — cada status tem uma cor própria e reconhecível.
 const STATUS_COLOR: Record<CardStatus, string> = {
   backlog: "#94a3b8", todo: "#6366f1", doing: "#f59e0b", review: "#a855f7", done: "#22c55e",
+  briefing: "#8b5cf6", criacao: "#3b82f6", aprovacao: "#f59e0b", agendado: "#06b6d4", publicado: "#22c55e",
 }
 const STATUS_BAR: Record<CardStatus, string> = {
   backlog: "bg-slate-400", todo: "bg-indigo-500", doing: "bg-amber-500", review: "bg-purple-500", done: "bg-green-500",
+  briefing: "bg-violet-500", criacao: "bg-blue-500", aprovacao: "bg-amber-500", agendado: "bg-cyan-500", publicado: "bg-green-500",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
+  post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const TYPE_BAR: Record<CardType, string> = {
   feature: "bg-gradient-to-r from-blue-500 to-cyan-400",
@@ -27,10 +31,17 @@ const TYPE_BAR: Record<CardType, string> = {
   spike: "bg-gradient-to-r from-cyan-500 to-teal-400",
   chore: "bg-gradient-to-r from-slate-500 to-slate-400",
   epic: "bg-gradient-to-r from-violet-500 to-fuchsia-400",
+  post: "bg-gradient-to-r from-blue-500 to-cyan-400",
+  peca: "bg-gradient-to-r from-slate-500 to-slate-400",
+  campanha: "bg-gradient-to-r from-violet-500 to-fuchsia-400",
+  artigo: "bg-gradient-to-r from-orange-500 to-amber-400",
+  email: "bg-gradient-to-r from-amber-500 to-yellow-400",
 }
 const TYPE_DOT: Record<CardType, string> = {
   feature: "bg-blue-500", bug: "bg-red-500", debt: "bg-orange-500",
   spike: "bg-cyan-500", chore: "bg-slate-500", epic: "bg-violet-500",
+  post: "bg-blue-500", peca: "bg-slate-500", campanha: "bg-violet-500",
+  artigo: "bg-orange-500", email: "bg-amber-500",
 }
 const PRIORITY_LABEL: Record<CardPriority, string> = {
   urgent: "Highest", high: "High", medium: "Medium", low: "Low",

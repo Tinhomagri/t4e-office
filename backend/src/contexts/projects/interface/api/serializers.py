@@ -8,6 +8,9 @@ class CreateProjectSerializer(serializers.Serializer):
     workspace_id = serializers.CharField()
     name = serializers.CharField(max_length=120)
     key = serializers.CharField(max_length=10, min_length=2)
+    template = serializers.ChoiceField(
+        choices=["software", "campanha", "social", "conteudo"], default="software"
+    )
 
 
 class ProjectSerializer(serializers.Serializer):
@@ -17,10 +20,19 @@ class ProjectSerializer(serializers.Serializer):
     name = serializers.CharField()
     key = serializers.CharField()
     workspace_id = serializers.CharField()
+    template = serializers.CharField(default="software")
 
 
-_STATUS = ["backlog", "todo", "doing", "review", "done"]
-_TYPE = ["feature", "bug", "debt", "spike", "chore", "epic"]
+_STATUS = [
+    "backlog", "todo", "doing", "review", "done",
+    # fluxo marketing
+    "briefing", "criacao", "aprovacao", "agendado", "publicado",
+]
+_TYPE = [
+    "feature", "bug", "debt", "spike", "chore", "epic",
+    # tipos marketing
+    "post", "peca", "campanha", "artigo", "email",
+]
 _PRIORITY = ["low", "medium", "high", "urgent"]
 _SPRINT_STATUS = ["planned", "active", "closed"]
 
@@ -45,6 +57,8 @@ class CreateCardSerializer(serializers.Serializer):
     labels = serializers.ListField(
         child=serializers.CharField(max_length=40), required=False
     )
+    channel = serializers.CharField(required=False, allow_blank=True, max_length=30)
+    publish_date = serializers.DateField(required=False, allow_null=True)
 
 
 class UpdateCardSerializer(serializers.Serializer):
@@ -68,6 +82,8 @@ class UpdateCardSerializer(serializers.Serializer):
     labels = serializers.ListField(
         child=serializers.CharField(max_length=40), required=False
     )
+    channel = serializers.CharField(required=False, allow_blank=True, max_length=30)
+    publish_date = serializers.DateField(required=False, allow_null=True)
 
 
 class CardSerializer(serializers.Serializer):
@@ -94,6 +110,8 @@ class CardSerializer(serializers.Serializer):
     epic_id = serializers.CharField(allow_null=True, default=None)
     epic_color = serializers.CharField(allow_blank=True, default="")
     labels = serializers.ListField(child=serializers.CharField())
+    channel = serializers.CharField(allow_blank=True, default="")
+    publish_date = serializers.DateField(allow_null=True, default=None)
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

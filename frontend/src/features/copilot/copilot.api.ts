@@ -65,6 +65,27 @@ export async function analyzeDocument(documentId: string): Promise<Analysis> {
   return data
 }
 
+// ── Marketing: geração de copy por canal ────────────────────────────────────
+export interface GeneratedCopy {
+  channel: string
+  variations: string[]
+}
+
+export async function generateCopy(
+  workspaceId: string,
+  title: string,
+  description: string,
+  channel: string,
+): Promise<GeneratedCopy> {
+  const { data } = await api.post<GeneratedCopy>("/copilot/generate-copy/", {
+    workspace_id: workspaceId,
+    title,
+    description,
+    channel,
+  })
+  return data
+}
+
 // ── Integração de IA por workspace ──────────────────────────────────────────
 export type AiProvider = "anthropic" | "openai"
 

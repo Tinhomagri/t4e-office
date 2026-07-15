@@ -24,6 +24,11 @@ export const STATUS_LABEL: Record<CardStatus, string> = {
   doing: "Em andamento",
   review: "Revisão",
   done: "Concluído",
+  briefing: "Briefing",
+  criacao: "Criação",
+  aprovacao: "Aprovação",
+  agendado: "Agendado",
+  publicado: "Publicado",
 }
 
 export const STATUS_BAR: Record<CardStatus, string> = {
@@ -32,6 +37,11 @@ export const STATUS_BAR: Record<CardStatus, string> = {
   doing: "bg-brand-500",
   review: "bg-warning",
   done: "bg-success",
+  briefing: "bg-violet-500",
+  criacao: "bg-brand-500",
+  aprovacao: "bg-warning",
+  agendado: "bg-cyan-500",
+  publicado: "bg-success",
 }
 
 export const HEALTH_LABEL: Record<Health, string> = {

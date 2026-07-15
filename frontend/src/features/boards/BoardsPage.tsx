@@ -60,6 +60,7 @@ import type {
   CardStatus,
   CardType,
   Project,
+  ProjectTemplate,
 } from "@/features/workspace/workspace.types"
 import { useCreateProjectSession, useProjectSessions } from "@/features/poker/poker.hooks"
 
@@ -327,7 +328,7 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   } else if (view === "cronograma") {
     inner = <CronogramaView cards={allCards} sprints={sprints ?? []} members={members ?? []} onOpen={setOpenCard} />
   } else if (view === "calendario") {
-    inner = <CalendarioView cards={allCards} onOpen={setOpenCard} />
+    inner = <CalendarioView cards={allCards} onOpen={setOpenCard} projectId={projectId} />
   } else if (view === "metas") {
     inner = <MetasView projectId={projectId} cards={allCards} onOpen={setOpenCard} />
   } else {
@@ -388,15 +389,17 @@ function NewProjectModal({
   const createProject = useCreateProject(workspaceId)
   const [name, setName] = useState("")
   const [key, setKey] = useState("")
+  const [template, setTemplate] = useState<ProjectTemplate>("software")
   const [error, setError] = useState<string | null>(null)
 
   const submit = async () => {
     setError(null)
     try {
-      const p = await createProject.mutateAsync({ name, key: key.toUpperCase() })
+      const p = await createProject.mutateAsync({ name, key: key.toUpperCase(), template })
       onCreated(p)
       setName("")
       setKey("")
+      setTemplate("software")
       onClose()
     } catch (e) {
       setError(errMsg(e))
@@ -433,11 +436,38 @@ function NewProjectModal({
             className="font-mono uppercase"
           />
         </Field>
+        <Field label="Template" hint="Define o fluxo inicial do board.">
+          <div className="grid grid-cols-2 gap-2">
+            {PROJECT_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTemplate(t.id)}
+                className={`rounded-lg border p-3 text-left transition ${
+                  template === t.id
+                    ? "border-brand bg-brand/5 ring-1 ring-brand"
+                    : "border-border hover:border-brand/50"
+                }`}
+              >
+                <span className="block text-sm font-medium">{t.label}</span>
+                <span className="block text-xs text-fg-muted">{t.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>
     </Modal>
   )
 }
+
+// Templates de projeto — marketing usa workflow Briefing→Publicado no backend.
+const PROJECT_TEMPLATES: { id: ProjectTemplate; label: string; hint: string }[] = [
+  { id: "software", label: "Software", hint: "A fazer → Em andamento → Concluído" },
+  { id: "campanha", label: "Campanha", hint: "Briefing → Criação → Aprovação → Publicado" },
+  { id: "social", label: "Social Media", hint: "Posts com canal e calendário editorial" },
+  { id: "conteudo", label: "Conteúdo", hint: "Blog, site e materiais institucionais" },
+]
 
 function NewCardModal({
   projectId,

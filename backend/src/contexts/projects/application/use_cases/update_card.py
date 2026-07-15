@@ -32,6 +32,8 @@ _TRACKED = [
     "parent_id",
     "epic_id",
     "labels",
+    "channel",
+    "publish_date",
 ]
 
 
@@ -51,6 +53,8 @@ def _repr(card: Card) -> dict[str, str]:
         "parent_id": card.parent_id or "",
         "epic_id": card.epic_id or "",
         "labels": ", ".join(card.labels),
+        "channel": card.channel,
+        "publish_date": "" if card.publish_date is None else str(card.publish_date),
     }
 
 
@@ -93,6 +97,8 @@ class UpdateCard:
         epic_id=_UNSET,
         epic_color=_UNSET,
         labels=_UNSET,
+        channel=_UNSET,
+        publish_date=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
         if card is None:
@@ -139,6 +145,10 @@ class UpdateCard:
             card.epic_color = epic_color
         if labels is not _UNSET:
             card.labels = labels
+        if channel is not _UNSET:
+            card.channel = channel
+        if publish_date is not _UNSET:
+            card.publish_date = publish_date
 
         # Revalida invariantes do domínio após a mutação.
         card.__post_init__()

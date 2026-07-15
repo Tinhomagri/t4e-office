@@ -41,8 +41,17 @@ from shared.domain.errors import ValidationError
 # Anthropic (tools) ou OpenAI (functions) na camada de cada provedor.
 
 _ENUM_PRIORITY = ["low", "medium", "high", "urgent"]
-_ENUM_TYPE = ["feature", "bug", "debt", "spike", "chore"]
-_ENUM_STATUS = ["backlog", "todo", "doing", "review", "done"]
+_ENUM_TYPE = [
+    "feature", "bug", "debt", "spike", "chore",
+    # marketing
+    "post", "peca", "campanha", "artigo", "email",
+]
+_ENUM_STATUS = [
+    "backlog", "todo", "doing", "review", "done",
+    # fluxo marketing
+    "briefing", "criacao", "aprovacao", "agendado", "publicado",
+]
+_ENUM_CHANNEL = ["instagram", "facebook", "linkedin", "tiktok", "youtube", "blog", "email", "site"]
 
 READ_TOOLS: list[dict] = [
     {
@@ -133,6 +142,16 @@ _ACTION_SCHEMA = {
         },
         "points": {"type": "integer"},
         "sprint_id": {"type": "string"},
+        # marketing (projetos com template campanha/social/conteudo)
+        "channel": {
+            "type": "string",
+            "enum": _ENUM_CHANNEL,
+            "description": "Canal de publicação (cards de marketing).",
+        },
+        "publish_date": {
+            "type": "string",
+            "description": "Data de publicação YYYY-MM-DD (calendário editorial).",
+        },
         # create_sprint / update_sprint
         "sprint_name": {"type": "string"},
         "goal": {"type": "string"},
@@ -348,18 +367,23 @@ class AgentTools:
         # Cards novos entram em 'todo' para aparecerem no Quadro. O status
         # 'backlog' não é uma coluna do workflow, então seria invisível — nunca
         # criamos direto no backlog (o usuário move depois se quiser).
-        status = a.get("status") or "todo"
+        # Projetos de marketing começam em 'briefing'; software em 'todo'.
+        default_status = "briefing" if project.template != "software" else "todo"
+        status = a.get("status") or default_status
         if status == "backlog":
-            status = "todo"
+            status = default_status
+        default_type = "post" if project.template != "software" else "feature"
         card = CreateCard(self._projects, self._cards, self._access).execute(
             project_id=str(project.id),
             actor_id=self.actor_id,
             title=a["title"],
             description=a.get("description", ""),
             priority=a.get("priority", "medium"),
-            type=a.get("type", "feature"),
+            type=a.get("type", default_type),
             status=status,
             source="copilot",
+            channel=a.get("channel", ""),
+            publish_date=_parse_date(a.get("publish_date")),
         )
         ref = f"{project.key}-{card.number}"
         # Campos extra (pontos, sprint) via update, se informados.
@@ -403,9 +427,12 @@ class AgentTools:
                 "priority",
                 "points",
                 "sprint_id",
+                "channel",
             )
             if k in a
         }
+        if "publish_date" in a:
+            fields["publish_date"] = _parse_date(a.get("publish_date"))
         card_id = self._resolve_card_id(a["card_id"])
         card = UpdateCard(
             self._projects, self._cards, self._access, self._history

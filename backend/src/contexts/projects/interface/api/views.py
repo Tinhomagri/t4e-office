@@ -37,7 +37,11 @@ class ProjectListCreateView(APIView):
             name=serializer.validated_data["name"],
             key=serializer.validated_data["key"],
             actor_id=str(request.user.id),
+            template=serializer.validated_data.get("template", "software"),
         )
+        # Workflow inicial conforme o template (ex.: marketing → Briefing…Publicado)
+        from contexts.projects.interface.api.extra_views import seed_workflow_statuses
+        seed_workflow_statuses(result.project_id, result.template)
         return Response(
             ProjectSerializer(
                 {
@@ -45,6 +49,7 @@ class ProjectListCreateView(APIView):
                     "name": result.name,
                     "key": result.key,
                     "workspace_id": result.workspace_id,
+                    "template": result.template,
                 }
             ).data,
             status=status.HTTP_201_CREATED,
@@ -73,6 +78,7 @@ class ProjectListCreateView(APIView):
                     "name": p.name,
                     "key": p.key,
                     "workspace_id": p.workspace_id,
+                    "template": p.template,
                 }
                 for p in projects
             ],

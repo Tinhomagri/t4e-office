@@ -23,6 +23,9 @@ registerLocale("pt-BR", ptBR)
 
 import { GithubDevPanel } from "@/features/github/GithubDevPanel"
 import { useAuthStore } from "@/features/auth/auth.store"
+import { useWorkspaceStore } from "@/features/workspace/workspace.store"
+import * as copilotApi from "@/features/copilot/copilot.api"
+import { errMsg } from "./board.shared"
 import {
   useAddCardComponent,
   useAddCardVersion,
@@ -46,8 +49,10 @@ import {
   useFieldValues,
   useRemoveCardComponent,
   useRemoveCardVersion,
+  useApproveCard,
   useUpdateCard,
   useUploadAttachment,
+  useUploadAttachmentVersion,
   useUpsertFieldValue,
   useVersions,
   useWorklogs,
@@ -79,6 +84,11 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   doing: "Em andamento",
   review: "Em revisão",
   done: "Concluído",
+  briefing: "Briefing",
+  criacao: "Criação",
+  aprovacao: "Aprovação",
+  agendado: "Agendado",
+  publicado: "Publicado",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature",
@@ -87,6 +97,11 @@ const TYPE_LABEL: Record<CardType, string> = {
   spike: "Spike",
   chore: "Tarefa",
   epic: "Epic",
+  post: "Post",
+  peca: "Peça",
+  campanha: "Campanha",
+  artigo: "Artigo",
+  email: "E-mail",
 }
 const PRIORITY_LABEL: Record<CardPriority, string> = {
   low: "Baixa",
@@ -100,6 +115,11 @@ const STATUS_TONE: Record<CardStatus, "neutral" | "brand" | "warning" | "success
   doing: "brand",
   review: "warning",
   done: "success",
+  briefing: "neutral",
+  criacao: "brand",
+  aprovacao: "warning",
+  agendado: "brand",
+  publicado: "success",
 }
 
 
@@ -108,7 +128,21 @@ const STATUS_TONE: Record<CardStatus, "neutral" | "brand" | "warning" | "success
 
 const TYPE_ICON: Record<CardType, string> = {
   feature: "⚡", bug: "🐛", debt: "💳", spike: "🔬", chore: "🔧", epic: "🏔",
+  post: "📣", peca: "🎨", campanha: "🚀", artigo: "📝", email: "✉️",
 }
+
+// Canais de marketing (campo do card em projetos campanha/social/conteúdo)
+const CHANNEL_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "instagram", label: "Instagram" },
+  { value: "facebook", label: "Facebook" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "youtube", label: "YouTube" },
+  { value: "blog", label: "Blog" },
+  { value: "email", label: "E-mail" },
+  { value: "site", label: "Site" },
+]
 
 const AVATAR_GRADIENTS = [
   "from-violet-500 to-purple-700", "from-blue-500 to-indigo-700",
@@ -251,6 +285,10 @@ export function CardDrawer({
               )}
             </Section>
 
+            {MARKETING_TYPES.has(draft.type) && (
+              <CopyGenerator card={draft} onUse={(text) => { set("description", text); persist({ description: text }) }} />
+            )}
+
             <Subtasks parentCard={card} projectId={projectId} />
 
             <Links card={card} projectId={projectId} />
@@ -384,6 +422,27 @@ export function CardDrawer({
               />
             </DetailRow>
 
+            <DetailSelect
+              label="Canal"
+              value={draft.channel ?? ""}
+              onChange={(v) => {
+                set("channel", v)
+                persist({ channel: v })
+              }}
+              options={CHANNEL_OPTIONS}
+            />
+
+            <DetailRow label="Publicação">
+              <DateInput
+                value={draft.publish_date ?? null}
+                onChange={(v) => { set("publish_date", v); persist({ publish_date: v }) }}
+              />
+            </DetailRow>
+
+            {draft.status === "aprovacao" && (
+              <ApprovalPanel card={card} projectId={projectId} />
+            )}
+
             <Labels
               value={draft.labels ?? []}
               onChange={(next) => {
@@ -393,6 +452,127 @@ export function CardDrawer({
             />
           </aside>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Copy com IA (marketing) — gera variações de legenda por canal via copiloto
+// ---------------------------------------------------------------------------
+const MARKETING_TYPES = new Set<CardType>(["post", "peca", "campanha", "artigo", "email"])
+
+function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => void }) {
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const [variations, setVariations] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const generate = async () => {
+    if (!workspaceId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await copilotApi.generateCopy(
+        workspaceId,
+        card.title,
+        card.description ?? "",
+        card.channel || "instagram",
+      )
+      setVariations(res.variations)
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Section title="Copy com IA ✨">
+      <div className="space-y-2">
+        {variations.map((v, i) => (
+          <div key={i} className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/40 p-2.5">
+            <p className="whitespace-pre-wrap text-sm text-ink dark:text-paper">{v}</p>
+            <div className="mt-1.5 flex gap-2">
+              <button
+                onClick={() => onUse(v)}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700"
+              >
+                Usar como descrição
+              </button>
+              <button
+                onClick={() => navigator.clipboard.writeText(v)}
+                className="text-xs font-medium text-paper-400 hover:text-ink dark:hover:text-paper"
+              >
+                Copiar
+              </button>
+            </div>
+          </div>
+        ))}
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <Button size="sm" variant="ghost" onClick={generate} loading={loading}>
+          ✨ {variations.length ? "Gerar novamente" : `Gerar copy para ${card.channel || "o canal"}`}
+        </Button>
+      </div>
+    </Section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Aprovação de peça (marketing) — visível quando o card está em "Aprovação"
+// ---------------------------------------------------------------------------
+function ApprovalPanel({ card, projectId }: { card: Card; projectId: string }) {
+  const approve = useApproveCard(projectId, card.id)
+  const [comment, setComment] = useState("")
+  const [rejecting, setRejecting] = useState(false)
+
+  const decide = (decision: "approved" | "rejected") => {
+    approve.mutate({ decision, comment })
+    setComment("")
+    setRejecting(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 space-y-2">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-warning">
+        Aprovação pendente
+      </p>
+      {rejecting && (
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Motivo da reprovação (obrigatório)…"
+          rows={2}
+          className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2.5 py-1.5 text-sm outline-none focus:border-brand-400"
+        />
+      )}
+      <div className="flex gap-2">
+        {rejecting ? (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => decide("rejected")}
+              disabled={!comment.trim()}
+              loading={approve.isPending}
+              className="text-danger"
+            >
+              Confirmar reprovação
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>
+              Cancelar
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button size="sm" onClick={() => decide("approved")} loading={approve.isPending}>
+              ✓ Aprovar
+            </Button>
+            <Button size="sm" variant="ghost" className="text-danger" onClick={() => setRejecting(true)}>
+              ✕ Reprovar
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -841,14 +1021,20 @@ function fileIcon(mime: string) {
 function Attachments({ cardId }: { cardId: string }) {
   const { data: attachments } = useAttachments(cardId)
   const upload = useUploadAttachment(cardId)
+  const uploadVersion = useUploadAttachmentVersion(cardId)
   const del = useDeleteAttachment(cardId)
   const user = useAuthStore((s) => s.user)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Anexo alvo de "nova versão" — quando setado, o próximo arquivo vira v(N+1).
+  const versionTargetRef = useRef<string | null>(null)
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    await upload.mutateAsync(file)
+    const target = versionTargetRef.current
+    versionTargetRef.current = null
+    if (target) await uploadVersion.mutateAsync({ attachmentId: target, file })
+    else await upload.mutateAsync(file)
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -878,6 +1064,28 @@ function Attachments({ cardId }: { cardId: string }) {
                 {fmtFileSize(a.size)} · {fmtDateTime(a.created_at)}
               </p>
             </div>
+            {a.version > 1 && (
+              <span className="shrink-0 rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 py-0.5 text-[10px] font-semibold text-paper-500">
+                v{a.version}
+              </span>
+            )}
+            {a.approval_status === "approved" && (
+              <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success">
+                Aprovado
+              </span>
+            )}
+            {a.approval_status === "rejected" && (
+              <span className="shrink-0 rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">
+                Reprovado
+              </span>
+            )}
+            <button
+              onClick={() => { versionTargetRef.current = a.id; inputRef.current?.click() }}
+              title="Enviar nova versão desta peça"
+              className="shrink-0 text-[11px] font-medium text-brand-600 hover:text-brand-700"
+            >
+              + versão
+            </button>
             {a.author_id === user?.id && (
               <button
                 onClick={() => del.mutate(a.id)}

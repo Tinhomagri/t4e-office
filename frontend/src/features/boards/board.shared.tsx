@@ -8,6 +8,11 @@ export const STATUS_LABEL: Record<CardStatus, string> = {
   doing: "Em andamento",
   review: "Em revisão",
   done: "Concluído",
+  briefing: "Briefing",
+  criacao: "Criação",
+  aprovacao: "Aprovação",
+  agendado: "Agendado",
+  publicado: "Publicado",
 }
 
 export const STATUS_DOT: Record<CardStatus, string> = {
@@ -16,6 +21,11 @@ export const STATUS_DOT: Record<CardStatus, string> = {
   doing: "bg-amber-500",
   review: "bg-purple-500",
   done: "bg-green-500",
+  briefing: "bg-violet-500",
+  criacao: "bg-blue-500",
+  aprovacao: "bg-amber-500",
+  agendado: "bg-cyan-500",
+  publicado: "bg-green-500",
 }
 
 export const TYPE_LABEL: Record<CardType, string> = {
@@ -25,6 +35,11 @@ export const TYPE_LABEL: Record<CardType, string> = {
   spike: "Spike",
   chore: "Tarefa",
   epic: "Epic",
+  post: "Post",
+  peca: "Peça",
+  campanha: "Campanha",
+  artigo: "Artigo",
+  email: "E-mail",
 }
 
 export const TYPE_COLOR: Record<CardType, string> = {
@@ -34,6 +49,11 @@ export const TYPE_COLOR: Record<CardType, string> = {
   spike: "bg-cyan-100 text-cyan-700",
   chore: "bg-paper-200 dark:bg-ink-700 text-paper-600",
   epic: "bg-violet-100 text-violet-700",
+  post: "bg-brand-100 text-brand-700",
+  peca: "bg-paper-200 dark:bg-ink-700 text-paper-600",
+  campanha: "bg-violet-100 text-violet-700",
+  artigo: "bg-orange-100 text-orange-700",
+  email: "bg-amber-100 text-amber-700",
 }
 
 export const PRIORITY_LABEL: Record<CardPriority, string> = {

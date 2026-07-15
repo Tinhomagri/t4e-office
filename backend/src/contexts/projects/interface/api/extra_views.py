@@ -275,6 +275,8 @@ def _ser_attachment(a: AttachmentModel, request: Request) -> dict:
         "id": str(a.id), "card_id": str(a.card_id),
         "author_id": str(a.author_id), "filename": a.filename,
         "url": url, "mime_type": a.mime_type, "size": a.size,
+        "group_id": str(a.group_id), "version": a.version,
+        "approval_status": a.approval_status,
         "created_at": a.created_at.isoformat(),
     }
 
@@ -359,6 +361,30 @@ DEFAULT_STATUSES = [
     {"name": "Concluído", "slug": "done", "category": "done", "color": "#10b981", "order": 3},
 ]
 
+# Workflow dos templates de marketing (Campanha / Social Media / Conteúdo)
+MARKETING_STATUSES = [
+    {"name": "Briefing", "slug": "briefing", "category": "todo", "color": "#8b5cf6", "order": 0},
+    {"name": "Criação", "slug": "criacao", "category": "in_progress", "color": "#3b82f6", "order": 1},
+    {"name": "Aprovação", "slug": "aprovacao", "category": "in_progress", "color": "#f59e0b", "order": 2},
+    {"name": "Agendado", "slug": "agendado", "category": "in_progress", "color": "#06b6d4", "order": 3},
+    {"name": "Publicado", "slug": "publicado", "category": "done", "color": "#10b981", "order": 4},
+]
+
+TEMPLATE_STATUSES = {
+    "software": DEFAULT_STATUSES,
+    "campanha": MARKETING_STATUSES,
+    "social": MARKETING_STATUSES,
+    "conteudo": MARKETING_STATUSES,
+}
+
+
+def seed_workflow_statuses(project_id: str, template: str) -> None:
+    """Cria os statuses iniciais do projeto conforme o template escolhido."""
+    if WorkflowStatusModel.objects.filter(project_id=project_id).exists():
+        return
+    for d in TEMPLATE_STATUSES.get(template, DEFAULT_STATUSES):
+        WorkflowStatusModel.objects.create(project_id=project_id, is_default=True, **d)
+
 
 def _ser_ws(ws: WorkflowStatusModel) -> dict:
     return {
@@ -376,9 +402,14 @@ class WorkflowStatusListCreateView(APIView):
         assert_project_member(project_id=str(project_id), user_id=_uid(request))
         qs = WorkflowStatusModel.objects.filter(project_id=project_id)
         if not qs.exists():
-            # Seed defaults on first access
-            for d in DEFAULT_STATUSES:
-                WorkflowStatusModel.objects.create(project_id=project_id, is_default=True, **d)
+            # Seed on first access, conforme o template do projeto
+            from contexts.projects.infrastructure.django.models import ProjectModel
+            template = (
+                ProjectModel.objects.filter(id=project_id)
+                .values_list("template", flat=True)
+                .first()
+            ) or "software"
+            seed_workflow_statuses(str(project_id), template)
             qs = WorkflowStatusModel.objects.filter(project_id=project_id)
         return Response([_ser_ws(ws) for ws in qs])
 

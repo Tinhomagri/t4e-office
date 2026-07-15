@@ -31,6 +31,11 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   doing: "Em progresso",
   review: "Em revisão",
   done: "Concluído",
+  briefing: "Briefing",
+  criacao: "Criação",
+  aprovacao: "Aprovação",
+  agendado: "Agendado",
+  publicado: "Publicado",
 }
 
 const STATUS_TONE: Record<CardStatus, string> = {
@@ -39,6 +44,11 @@ const STATUS_TONE: Record<CardStatus, string> = {
   doing: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
   review: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   done: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  briefing: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  criacao: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
+  aprovacao: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  agendado: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+  publicado: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
 }
 
 const PRIORITY_BAR: Record<CardPriority, string> = {

@@ -2,6 +2,7 @@ import { api } from "@/shared/api/client"
 
 import type {
   ActivityEntry,
+  ApprovalResult,
   Attachment,
   AutomationRule,
   AutomationRunLog,
@@ -465,6 +466,38 @@ export async function uploadAttachment(cardId: string, file: File): Promise<Atta
 
 export async function deleteAttachment(attachmentId: string): Promise<void> {
   await api.delete(`/attachments/${attachmentId}/`)
+}
+
+// ---- Marketing: aprovação de peças e versões ----
+export async function approveCard(
+  cardId: string,
+  decision: "approved" | "rejected",
+  comment = "",
+): Promise<ApprovalResult> {
+  const { data } = await api.post<ApprovalResult>(`/cards/${cardId}/approval/`, {
+    decision,
+    comment,
+  })
+  return data
+}
+
+export async function listAttachmentVersions(attachmentId: string): Promise<Attachment[]> {
+  const { data } = await api.get<Attachment[]>(`/attachments/${attachmentId}/versions/`)
+  return data
+}
+
+export async function uploadAttachmentVersion(
+  attachmentId: string,
+  file: File,
+): Promise<Attachment> {
+  const form = new FormData()
+  form.append("file", file)
+  const { data } = await api.post<Attachment>(
+    `/attachments/${attachmentId}/versions/`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  )
+  return data
 }
 
 // ---- Worklogs ----

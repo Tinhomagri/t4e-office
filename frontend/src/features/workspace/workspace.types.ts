@@ -1,7 +1,19 @@
 // Tipos do domínio de workspace/projetos/cards — espelham os serializers do backend.
 
-export type CardStatus = "backlog" | "todo" | "doing" | "review" | "done"
-export type CardType = "feature" | "bug" | "debt" | "spike" | "chore" | "epic"
+export type CardStatus =
+  | "backlog" | "todo" | "doing" | "review" | "done"
+  // fluxo marketing
+  | "briefing" | "criacao" | "aprovacao" | "agendado" | "publicado"
+export type CardType =
+  | "feature" | "bug" | "debt" | "spike" | "chore" | "epic"
+  // tipos marketing
+  | "post" | "peca" | "campanha" | "artigo" | "email"
+// Templates de criação de projeto
+export type ProjectTemplate = "software" | "campanha" | "social" | "conteudo"
+// Canais de publicação de marketing (calendário editorial)
+export type MarketingChannel =
+  | "instagram" | "facebook" | "linkedin" | "tiktok"
+  | "youtube" | "blog" | "email" | "site"
 export type CardPriority = "low" | "medium" | "high" | "urgent"
 export type Role = "owner" | "admin" | "member"
 export type InvitationStatus = "pending" | "accepted" | "revoked"
@@ -20,6 +32,7 @@ export interface Project {
   name: string
   key: string
   workspace_id: string
+  template?: ProjectTemplate
 }
 
 export interface Card {
@@ -44,6 +57,9 @@ export interface Card {
   epic_id: string | null
   epic_color: string
   labels: string[]
+  // Marketing: canal de publicação e data (calendário editorial)
+  channel?: string
+  publish_date?: string | null
   // Contadores para densidade do card (anotados pelo backend).
   comments_count?: number
   attachments_count?: number
@@ -126,6 +142,7 @@ export interface CreateProjectInput {
   workspace_id: string
   name: string
   key: string
+  template?: ProjectTemplate
 }
 
 export interface CreateCardInput {
@@ -144,6 +161,8 @@ export interface CreateCardInput {
   epic_id?: string | null
   epic_color?: string
   labels?: string[]
+  channel?: string
+  publish_date?: string | null
 }
 
 export type UpdateCardInput = Partial<CreateCardInput> & { order?: number }
@@ -281,7 +300,20 @@ export interface Attachment {
   url: string | null
   mime_type: string
   size: number
+  // Versionamento de peça (fluxo de aprovação de marketing)
+  group_id: string
+  version: number
+  approval_status: "" | "approved" | "rejected"
   created_at: string
+}
+
+// Resultado da decisão de aprovação de um card de marketing
+export interface ApprovalResult {
+  card_id: string
+  decision: "approved" | "rejected"
+  old_status: string
+  new_status: string
+  comment: string
 }
 
 export interface Worklog {

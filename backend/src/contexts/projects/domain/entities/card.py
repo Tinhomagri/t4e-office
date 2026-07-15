@@ -14,6 +14,12 @@ class CardStatus(str, Enum):
     DOING = "doing"
     REVIEW = "review"
     DONE = "done"
+    # Fluxo de marketing (templates Campanha/Social/Conteúdo)
+    BRIEFING = "briefing"
+    CRIACAO = "criacao"
+    APROVACAO = "aprovacao"
+    AGENDADO = "agendado"
+    PUBLICADO = "publicado"
 
 
 class CardType(str, Enum):
@@ -25,6 +31,12 @@ class CardType(str, Enum):
     SPIKE = "spike"
     CHORE = "chore"
     EPIC = "epic"
+    # Tipos de trabalho de marketing
+    POST = "post"
+    PECA = "peca"
+    CAMPANHA = "campanha"
+    ARTIGO = "artigo"
+    EMAIL = "email"
 
 
 class CardPriority(str, Enum):
@@ -65,6 +77,8 @@ class Card:
     epic_id: str | None = None  # épico ao qual pertence — None = sem épico
     epic_color: str = ""  # cor do épico (apenas quando type=epic)
     labels: list[str] = field(default_factory=list)
+    channel: str = ""  # canal de marketing (instagram, linkedin, blog, email…)
+    publish_date: date | None = None  # data de publicação — calendário editorial
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

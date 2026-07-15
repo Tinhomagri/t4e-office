@@ -14,6 +14,8 @@ class ProjectModel(models.Model):
     )
     name = models.CharField(max_length=120, help_text="Nome do projeto")
     key = models.CharField(max_length=10, help_text="Prefixo curto do ID dos cards (ex: MIA)")
+    # Template de criação: define workflow inicial (software | campanha | social | conteudo)
+    template = models.CharField(max_length=20, default="software")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -82,6 +84,12 @@ class CardModel(models.Model):
         ("spike", "Spike"),
         ("chore", "Tarefa"),
         ("epic", "Épico"),
+        # Tipos de marketing
+        ("post", "Post"),
+        ("peca", "Peça"),
+        ("campanha", "Campanha"),
+        ("artigo", "Artigo"),
+        ("email", "E-mail"),
     ]
     PRIORITY_CHOICES = [
         ("low", "Baixa"),
@@ -145,6 +153,10 @@ class CardModel(models.Model):
     # Cor do épico (só faz sentido quando type="epic") — paleta Atlassian.
     epic_color = models.CharField(max_length=7, blank=True, default="")
     labels = models.JSONField(default=list, blank=True)
+    # Marketing: canal de publicação (instagram, linkedin, blog, email…) e data
+    # de publicação — base do calendário editorial.
+    channel = models.CharField(max_length=30, blank=True, default="")
+    publish_date = models.DateField(null=True, blank=True, db_index=True)
     start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     order = models.IntegerField(default=0, help_text="Ordem dentro da coluna")
@@ -343,6 +355,11 @@ class AttachmentModel(models.Model):
     file = models.FileField(upload_to="attachments/%Y/%m/")
     mime_type = models.CharField(max_length=100, blank=True, default="")
     size = models.PositiveIntegerField(default=0, help_text="Tamanho em bytes")
+    # Versionamento de peça: anexos do mesmo group_id são versões da mesma arte.
+    group_id = models.UUIDField(default=uuid.uuid4, db_index=True)
+    version = models.PositiveSmallIntegerField(default=1)
+    # Decisão de aprovação da versão: "" (pendente) | approved | rejected
+    approval_status = models.CharField(max_length=10, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -472,6 +489,7 @@ class NotificationModel(models.Model):
         ("card_assigned", "Card atribuído"),
         ("card_commented", "Comentário adicionado"),
         ("card_status_changed", "Status alterado"),
+        ("card_approval", "Peça aprovada/reprovada"),
         ("automation_ran", "Automação executada"),
         ("sprint_started", "Sprint iniciada"),
     ]

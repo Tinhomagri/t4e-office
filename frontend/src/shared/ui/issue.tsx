@@ -13,6 +13,11 @@ import {
   Equal,
   FlaskConical,
   CheckSquare,
+  Image,
+  Mail,
+  Megaphone,
+  Newspaper,
+  Share2,
   Zap,
   type LucideIcon,
 } from "lucide-react"
@@ -32,6 +37,11 @@ const TYPE_META: Record<CardType, { icon: LucideIcon; className: string; label: 
   chore: { icon: CheckSquare, className: "bg-blue-500 text-white", label: "Tarefa" },
   spike: { icon: FlaskConical, className: "bg-cyan-600 text-white", label: "Spike" },
   debt: { icon: CreditCard, className: "bg-orange-500 text-white", label: "Débito" },
+  post: { icon: Share2, className: "bg-blue-500 text-white", label: "Post" },
+  peca: { icon: Image, className: "bg-slate-500 text-white", label: "Peça" },
+  campanha: { icon: Megaphone, className: "bg-violet-600 text-white", label: "Campanha" },
+  artigo: { icon: Newspaper, className: "bg-orange-500 text-white", label: "Artigo" },
+  email: { icon: Mail, className: "bg-amber-500 text-white", label: "E-mail" },
 }
 
 export function IssueTypeIcon({
@@ -97,6 +107,11 @@ const STATUS_META: Record<CardStatus, { className: string; label: string }> = {
   doing: { className: "bg-blue-100 text-blue-700", label: "Em andamento" },
   review: { className: "bg-orange-100 text-orange-700", label: "Em revisão" },
   done: { className: "bg-green-100 text-green-700", label: "Concluído" },
+  briefing: { className: "bg-violet-100 text-violet-700", label: "Briefing" },
+  criacao: { className: "bg-blue-100 text-blue-700", label: "Criação" },
+  aprovacao: { className: "bg-orange-100 text-orange-700", label: "Aprovação" },
+  agendado: { className: "bg-cyan-100 text-cyan-700", label: "Agendado" },
+  publicado: { className: "bg-green-100 text-green-700", label: "Publicado" },
 }
 
 export function StatusLozenge({

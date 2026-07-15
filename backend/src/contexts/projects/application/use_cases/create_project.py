@@ -16,6 +16,7 @@ class CreateProjectResult:
     name: str
     key: str
     workspace_id: str
+    template: str = "software"
 
 
 class CreateProject:
@@ -30,7 +31,13 @@ class CreateProject:
         self.workspace_access = workspace_access
 
     def execute(
-        self, *, workspace_id: str, name: str, key: str, actor_id: str
+        self,
+        *,
+        workspace_id: str,
+        name: str,
+        key: str,
+        actor_id: str,
+        template: str = "software",
     ) -> CreateProjectResult:
         # Só membros do workspace podem criar projeto nele
         if not self.workspace_access.is_member(
@@ -45,11 +52,12 @@ class CreateProject:
             raise ConflictError("Já existe um projeto com esta chave no workspace.")
 
         project = self.project_repository.create(
-            workspace_id=workspace_id, name=name, key=key
+            workspace_id=workspace_id, name=name, key=key, template=template
         )
         return CreateProjectResult(
             project_id=str(project.id),
             name=project.name,
             key=project.key,
             workspace_id=str(project.workspace_id),
+            template=project.template,
         )

@@ -12,6 +12,7 @@ class Project:
     workspace_id: str
     name: str
     key: str  # prefixo curto do ID de cards, ex.: MIA
+    template: str = "software"  # software | campanha | social | conteudo
 
     def __post_init__(self) -> None:
         if not self.name.strip():
