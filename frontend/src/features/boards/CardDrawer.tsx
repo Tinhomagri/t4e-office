@@ -462,13 +462,25 @@ export function CardDrawer({
 // ---------------------------------------------------------------------------
 const MARKETING_TYPES = new Set<CardType>(["post", "peca", "campanha", "artigo", "email"])
 
+const TONE_OPTIONS: { value: copilotApi.CopyTone; label: string }[] = [
+  { value: "", label: "Tom automático" },
+  { value: "institucional", label: "Institucional" },
+  { value: "descontraido", label: "Descontraído" },
+  { value: "urgente", label: "Urgente / CTA" },
+  { value: "educativo", label: "Educativo" },
+  { value: "inspirador", label: "Inspirador" },
+]
+
 function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => void }) {
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const [variations, setVariations] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tone, setTone] = useState<copilotApi.CopyTone>("")
+  const [hashtags, setHashtags] = useState(true)
+  const [adaptChannel, setAdaptChannel] = useState("")
 
-  const generate = async () => {
+  const generate = async (sourceCopy = "", channelOverride = "") => {
     if (!workspaceId) return
     setLoading(true)
     setError(null)
@@ -477,7 +489,8 @@ function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => v
         workspaceId,
         card.title,
         card.description ?? "",
-        card.channel || "instagram",
+        channelOverride || card.channel || "instagram",
+        { tone, includeHashtags: hashtags, sourceCopy },
       )
       setVariations(res.variations)
     } catch (e) {
@@ -487,9 +500,41 @@ function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => v
     }
   }
 
+  const selectClass =
+    "rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1 text-xs text-ink dark:text-paper outline-none focus:border-brand-400"
+
   return (
     <Section title="Copy com IA ✨">
       <div className="space-y-2">
+        {/* Controles avançados: tom de voz, hashtags e adaptação de canal */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={tone} onChange={(e) => setTone(e.target.value as copilotApi.CopyTone)} className={selectClass} aria-label="Tom de voz">
+            {TONE_OPTIONS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1.5 text-xs text-paper-500 dark:text-paper-400 cursor-pointer">
+            <input type="checkbox" checked={hashtags} onChange={(e) => setHashtags(e.target.checked)} className="accent-brand-500" />
+            Hashtags
+          </label>
+          {card.description && (
+            <select
+              value={adaptChannel}
+              onChange={(e) => {
+                const target = e.target.value
+                setAdaptChannel(target)
+                if (target) void generate(card.description ?? "", target)
+              }}
+              className={selectClass}
+              aria-label="Adaptar copy para outro canal"
+            >
+              <option value="">Adaptar para…</option>
+              {CHANNEL_OPTIONS.filter((c) => c.value && c.value !== card.channel).map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          )}
+        </div>
         {variations.map((v, i) => (
           <div key={i} className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/40 p-2.5">
             <p className="whitespace-pre-wrap text-sm text-ink dark:text-paper">{v}</p>
@@ -510,7 +555,7 @@ function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => v
           </div>
         ))}
         {error && <p className="text-sm text-danger">{error}</p>}
-        <Button size="sm" variant="ghost" onClick={generate} loading={loading}>
+        <Button size="sm" variant="ghost" onClick={() => void generate()} loading={loading}>
           ✨ {variations.length ? "Gerar novamente" : `Gerar copy para ${card.channel || "o canal"}`}
         </Button>
       </div>

@@ -11,8 +11,8 @@ const PRIORITY_COLOR: Record<CardPriority, string> = {
   urgent: "bg-red-100 text-red-700",
 }
 
-// Cores por canal de marketing — calendário editorial
-const CHANNEL_COLOR: Record<string, string> = {
+// Cores por canal de marketing — calendário editorial (reusado pela MarketingView)
+export const CHANNEL_COLOR: Record<string, string> = {
   instagram: "bg-pink-100 text-pink-700",
   facebook: "bg-blue-100 text-blue-700",
   linkedin: "bg-sky-100 text-sky-700",
@@ -23,7 +23,7 @@ const CHANNEL_COLOR: Record<string, string> = {
   site: "bg-violet-100 text-violet-700",
 }
 
-const CHANNEL_LABEL: Record<string, string> = {
+export const CHANNEL_LABEL: Record<string, string> = {
   instagram: "Instagram", facebook: "Facebook", linkedin: "LinkedIn",
   tiktok: "TikTok", youtube: "YouTube", blog: "Blog", email: "E-mail", site: "Site",
 }

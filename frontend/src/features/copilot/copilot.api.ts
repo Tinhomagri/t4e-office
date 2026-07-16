@@ -71,17 +71,32 @@ export interface GeneratedCopy {
   variations: string[]
 }
 
+export type CopyTone = "" | "institucional" | "descontraido" | "urgente" | "educativo" | "inspirador"
+
+export interface GenerateCopyOptions {
+  tone?: CopyTone
+  includeHashtags?: boolean | null
+  count?: number
+  // Copy existente a ser adaptada para o canal alvo (modo adaptação)
+  sourceCopy?: string
+}
+
 export async function generateCopy(
   workspaceId: string,
   title: string,
   description: string,
   channel: string,
+  options: GenerateCopyOptions = {},
 ): Promise<GeneratedCopy> {
   const { data } = await api.post<GeneratedCopy>("/copilot/generate-copy/", {
     workspace_id: workspaceId,
     title,
     description,
     channel,
+    tone: options.tone ?? "",
+    include_hashtags: options.includeHashtags ?? null,
+    count: options.count ?? 3,
+    source_copy: options.sourceCopy ?? "",
   })
   return data
 }

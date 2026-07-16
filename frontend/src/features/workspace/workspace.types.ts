@@ -316,6 +316,36 @@ export interface ApprovalResult {
   comment: string
 }
 
+// ---- Marketing Hub: relatório, fila de publicação e biblioteca ----
+export interface MarketingQueueCard {
+  id: string
+  ref: string
+  title: string
+  status: string
+  type: string
+  channel: string
+  publish_date: string | null
+  assignee_id: string | null
+}
+
+export interface MarketingReport {
+  totals: { cards: number; planned: number; published: number; overdue: number }
+  by_status: Record<string, number>
+  by_channel: Record<string, number>
+  approval: { approved: number; rejected: number; rate: number | null }
+  queue: {
+    overdue: MarketingQueueCard[]
+    today: MarketingQueueCard[]
+    week: MarketingQueueCard[]
+  }
+  done_statuses: string[]
+}
+
+// Peça aprovada da biblioteca (anexo + card de origem)
+export interface MarketingAsset extends Attachment {
+  card: MarketingQueueCard
+}
+
 export interface Worklog {
   id: string
   card_id: string

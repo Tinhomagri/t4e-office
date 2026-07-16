@@ -35,14 +35,31 @@ _CHANNEL_TONE = {
 }
 
 
+_TONE_HINT = {
+    "": "",
+    "institucional": "tom institucional, sério e confiável",
+    "descontraido": "tom descontraído e bem-humorado",
+    "urgente": "tom de urgência/escassez com CTA forte",
+    "educativo": "tom educativo, didático, que ensina algo",
+    "inspirador": "tom inspirador e aspiracional",
+}
+
+
 class GenerateCopySerializer(serializers.Serializer):
     workspace_id = serializers.CharField()
     title = serializers.CharField(max_length=200)
     description = serializers.CharField(required=False, allow_blank=True, default="")
     channel = serializers.CharField(max_length=30, default="instagram")
+    # Avançado: tom de voz, hashtags, quantidade e adaptação de copy existente
+    tone = serializers.ChoiceField(
+        choices=list(_TONE_HINT.keys()), required=False, default=""
+    )
+    include_hashtags = serializers.BooleanField(required=False, allow_null=True, default=None)
+    count = serializers.IntegerField(required=False, min_value=1, max_value=5, default=3)
+    source_copy = serializers.CharField(required=False, allow_blank=True, default="")
 
 
-def _extract_variations(raw: str) -> list[str]:
+def _extract_variations(raw: str, limit: int = 3) -> list[str]:
     """Extrai a lista de variações da resposta da IA (JSON, com fallback)."""
     match = re.search(r"\[.*\]", raw, flags=re.DOTALL)
     if match:
@@ -50,12 +67,12 @@ def _extract_variations(raw: str) -> list[str]:
             parsed = json.loads(match.group(0))
             variations = [str(v).strip() for v in parsed if str(v).strip()]
             if variations:
-                return variations[:3]
+                return variations[:limit]
         except (json.JSONDecodeError, TypeError):
             pass
     # Fallback: blocos separados por linha em branco
     blocks = [b.strip() for b in raw.split("\n\n") if b.strip()]
-    return blocks[:3] if blocks else [raw.strip()]
+    return blocks[:limit] if blocks else [raw.strip()]
 
 
 class GenerateCopyView(APIView):
@@ -74,21 +91,49 @@ class GenerateCopyView(APIView):
 
         channel = v["channel"].lower()
         tone = _CHANNEL_TONE.get(channel, "adequado ao canal informado")
-        prompt = (
+        count = v["count"]
+
+        parts = [
             "Você é um copywriter sênior de marketing digital escrevendo em "
-            "português do Brasil.\n"
-            f"Canal: {channel} — tom {tone}.\n"
-            f"Tema/título do conteúdo: {v['title']}\n"
-            + (f"Briefing/descrição: {v['description']}\n" if v["description"] else "")
-            + "\nEscreva 3 variações de copy prontas para publicar nesse canal, "
-            "com abordagens diferentes entre si (ex.: emocional, informativa, CTA "
-            "agressivo). Responda APENAS com um array JSON de 3 strings, sem "
-            "nenhum texto fora do JSON."
+            "português do Brasil.",
+            f"Canal: {channel} — tom {tone}.",
+        ]
+        if v["tone"]:
+            parts.append(f"Tom de voz obrigatório: {_TONE_HINT[v['tone']]}.")
+        if v["include_hashtags"] is True:
+            parts.append("Inclua hashtags relevantes ao final de cada variação.")
+        elif v["include_hashtags"] is False:
+            parts.append("NÃO use hashtags em nenhuma variação.")
+        parts.append(f"Tema/título do conteúdo: {v['title']}")
+        if v["description"]:
+            parts.append(f"Briefing/descrição: {v['description']}")
+        if v["source_copy"]:
+            # Modo adaptação: reescreve uma copy existente para o canal de destino
+            parts.append(
+                "Copy original a ser ADAPTADA para o canal acima (preserve a "
+                f"mensagem central, ajuste formato e linguagem):\n{v['source_copy']}"
+            )
+            parts.append(
+                f"\nEscreva {count} adaptações prontas para publicar nesse canal."
+            )
+        else:
+            parts.append(
+                f"\nEscreva {count} variações de copy prontas para publicar nesse "
+                "canal, com abordagens diferentes entre si (ex.: emocional, "
+                "informativa, CTA agressivo)."
+            )
+        parts.append(
+            f"Responda APENAS com um array JSON de {count} strings, sem nenhum "
+            "texto fora do JSON."
         )
+        prompt = "\n".join(parts)
+
         raw = ai_config.chat_for_workspace(
             workspace_id, [{"role": "user", "content": prompt}]
         )
         metrics.log_event(
             workspace_id=workspace_id, actor_id=str(request.user.id), kind="generate_copy"
         )
-        return Response({"channel": channel, "variations": _extract_variations(raw)})
+        return Response(
+            {"channel": channel, "variations": _extract_variations(raw, limit=count)}
+        )

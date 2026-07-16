@@ -677,6 +677,23 @@ export function useApproveCard(projectId: string | null, cardId: string | null) 
   })
 }
 
+// ---- Marketing Hub: dashboard, fila de publicação e biblioteca ----
+export function useMarketingReport(projectId: string | null) {
+  return useQuery({
+    queryKey: ["marketing-report", projectId],
+    queryFn: () => wsApi.getMarketingReport(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useMarketingAssets(projectId: string | null, channel?: string) {
+  return useQuery({
+    queryKey: ["marketing-assets", projectId, channel ?? ""],
+    queryFn: () => wsApi.listMarketingAssets(projectId!, channel),
+    enabled: !!projectId,
+  })
+}
+
 export function useUploadAttachmentVersion(cardId: string | null) {
   const qc = useQueryClient()
   return useMutation({

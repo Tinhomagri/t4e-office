@@ -45,6 +45,8 @@ from contexts.projects.interface.api.extra_views import (
 from contexts.projects.interface.api.marketing_views import (
     AttachmentVersionView,
     CardApprovalView,
+    MarketingAssetsView,
+    MarketingReportView,
 )
 from contexts.projects.interface.api.link_views import (
     CardLinkListCreateView,
@@ -132,6 +134,8 @@ urlpatterns = [
     # Marketing: aprovação de peças e versões de anexo
     path("cards/<uuid:card_id>/approval/", CardApprovalView.as_view(), name="card-approval"),
     path("attachments/<uuid:attachment_id>/versions/", AttachmentVersionView.as_view(), name="attachment-versions"),
+    path("projects/<uuid:project_id>/marketing-report/", MarketingReportView.as_view(), name="marketing-report"),
+    path("projects/<uuid:project_id>/marketing-assets/", MarketingAssetsView.as_view(), name="marketing-assets"),
     # CustomFields
     path("projects/<uuid:project_id>/custom-fields/", CustomFieldListCreateView.as_view(), name="custom-field-list"),
     path("custom-fields/<uuid:field_id>/", CustomFieldDetailView.as_view(), name="custom-field-detail"),

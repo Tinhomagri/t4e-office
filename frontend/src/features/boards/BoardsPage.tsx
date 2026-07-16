@@ -9,6 +9,7 @@ import {
   Layers,
   LayoutList,
   ListChecks,
+  Megaphone,
   Plus,
   SquareKanban,
   Spade,
@@ -22,6 +23,7 @@ import { ResumoView } from "./views/ResumoView"
 import { ListaView } from "./views/ListaView"
 import { CronogramaView } from "./views/CronogramaView"
 import { CalendarioView } from "./views/CalendarioView"
+import { MarketingView } from "./views/MarketingView"
 import { MetasView } from "./views/MetasView"
 import { DocumentosView } from "./views/DocumentosView"
 import { BacklogView } from "./views/BacklogView"
@@ -64,7 +66,10 @@ import type {
 } from "@/features/workspace/workspace.types"
 import { useCreateProjectSession, useProjectSessions } from "@/features/poker/poker.hooks"
 
-type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
+type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "marketing" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
+
+// Abas visíveis apenas em projetos de marketing (template != software)
+const MARKETING_ONLY_VIEWS = new Set<ProjectView>(["marketing"])
 
 const PROJECT_VIEWS: { id: ProjectView; label: string; icon: React.ReactNode }[] = [
   { id: "resumo", label: "Resumo", icon: <SquareKanban className="size-3.5" /> },
@@ -73,6 +78,7 @@ const PROJECT_VIEWS: { id: ProjectView; label: string; icon: React.ReactNode }[]
   { id: "lista", label: "Lista", icon: <LayoutList className="size-3.5" /> },
   { id: "cronograma", label: "Cronograma", icon: <GanttChartSquare className="size-3.5" /> },
   { id: "calendario", label: "Calendário", icon: <CalendarDays className="size-3.5" /> },
+  { id: "marketing", label: "Marketing", icon: <Megaphone className="size-3.5" /> },
   { id: "metas", label: "Metas", icon: <Target className="size-3.5" /> },
   { id: "desenvolvimento", label: "Desenvolvimento", icon: <GitBranch className="size-3.5" /> },
   { id: "documentos", label: "Documentos", icon: <FileText className="size-3.5" /> },
@@ -186,7 +192,11 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
       {/* Jira-style view tab bar */}
       {activeProject && (
         <div className="mt-3 flex items-center gap-0.5 border-b border-paper-100 dark:border-ink-800">
-          {PROJECT_VIEWS.map((v) => (
+          {PROJECT_VIEWS.filter(
+            (v) =>
+              !MARKETING_ONLY_VIEWS.has(v.id) ||
+              (activeProject.template && activeProject.template !== "software"),
+          ).map((v) => (
             <button
               key={v.id}
               onClick={() => setActiveView(v.id)}
@@ -329,6 +339,8 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     inner = <CronogramaView cards={allCards} sprints={sprints ?? []} members={members ?? []} onOpen={setOpenCard} />
   } else if (view === "calendario") {
     inner = <CalendarioView cards={allCards} onOpen={setOpenCard} projectId={projectId} />
+  } else if (view === "marketing") {
+    inner = <MarketingView projectId={projectId} cards={allCards} onOpen={setOpenCard} />
   } else if (view === "metas") {
     inner = <MetasView projectId={projectId} cards={allCards} onOpen={setOpenCard} />
   } else {

@@ -34,6 +34,8 @@ import type {
   AuditLogEntry,
   Invitation,
   IssueLink,
+  MarketingAsset,
+  MarketingReport,
   Member,
   PermissionScheme,
   Project,
@@ -496,6 +498,25 @@ export async function uploadAttachmentVersion(
     `/attachments/${attachmentId}/versions/`,
     form,
     { headers: { "Content-Type": "multipart/form-data" } },
+  )
+  return data
+}
+
+// ---- Marketing Hub: relatório e biblioteca de peças ----
+export async function getMarketingReport(projectId: string): Promise<MarketingReport> {
+  const { data } = await api.get<MarketingReport>(
+    `/projects/${projectId}/marketing-report/`,
+  )
+  return data
+}
+
+export async function listMarketingAssets(
+  projectId: string,
+  channel?: string,
+): Promise<MarketingAsset[]> {
+  const { data } = await api.get<MarketingAsset[]>(
+    `/projects/${projectId}/marketing-assets/`,
+    { params: channel ? { channel } : undefined },
   )
   return data
 }
