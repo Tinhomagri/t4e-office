@@ -19,4 +19,5 @@ urlpatterns = [
     path("api/", include("contexts.estimation.interface.api.urls")),
     path("api/google/", include("contexts.google.interface.api.urls")),
     path("api/github/", include("contexts.github.interface.api.urls")),
+    path("api/presence/", include("contexts.presence.interface.api.urls")),
 ]

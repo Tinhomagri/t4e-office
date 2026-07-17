@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "contexts.estimation",
     "contexts.google",
     "contexts.github",
+    "contexts.presence",
 ]
 
 MIDDLEWARE = [

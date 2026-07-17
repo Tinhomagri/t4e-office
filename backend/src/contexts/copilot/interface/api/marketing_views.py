@@ -11,11 +11,11 @@ variação e cola/salva no card.
 import json
 import re
 
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import serializers
 
 from contexts.copilot.infrastructure import ai_config, metrics
 from contexts.copilot.infrastructure.django.repositories_impl import (

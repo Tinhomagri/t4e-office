@@ -20,13 +20,14 @@ export interface AvatarConfig {
   hand: number // item de mão/costas
 }
 
-// Paletas customizáveis (cor é conteúdo do avatar; não viola o P&B da UI).
+// Paletas Stardew clássico: dessaturadas e terrosas, nunca vibrantes.
+// (Mesmos comprimentos de antes — presets/validadores indexam por posição.)
 export const PAL = {
-  skin: ["#ffd9b3", "#f1c197", "#e0a877", "#c68642", "#8d5524", "#5c3a21", "#ffe0c4", "#d8a06a"],
-  hair: ["#2b2118", "#5a3a22", "#8a5a2b", "#c9963f", "#e8c66b", "#d94f4f", "#7c6cff", "#444a55", "#f0f0f0", "#ff6fa5", "#3aa0ff", "#39d98a", "#9b59b6", "#1a1a1a", "#b87333"],
-  shirt: ["#5b7fd9", "#d94f4f", "#5ddba0", "#ffb84d", "#7c6cff", "#ff6fa5", "#3a3f4b", "#f0f0f0", "#2a9d8f", "#e76f51", "#1e2230", "#222", "#0a84ff", "#34c759", "#ffcc00"],
-  pants: ["#3a4a6b", "#2b2b35", "#6b4a2b", "#4b5563", "#7c4a6b", "#2f5d4a", "#5b5b5b", "#1e2230", "#3a3a44", "#5a3a5a", "#264653"],
-  shoe: ["#2b2118", "#3a3f4b", "#d94f4f", "#f0f0f0", "#5b7fd9", "#8a5a2b", "#39d98a", "#ffcc00"],
+  skin: ["#f5deb3", "#e8b89a", "#d4a373", "#a0723c", "#7d4e2a", "#5c3a1e", "#eecfa8", "#c08a5a"],
+  hair: ["#1a1a1a", "#4a2c1a", "#8b4513", "#c68642", "#e8c39e", "#c94f30", "#8a6ba0", "#444a55", "#d8d2c8", "#c48ba0", "#5a7ba5", "#6b8e5a", "#7a5a8a", "#2b2118", "#a06a3a"],
+  shirt: ["#4a6fa5", "#a54a3c", "#6b8e5a", "#c9a04a", "#7a6ba0", "#b58a97", "#3a3f4b", "#d8d2c8", "#4a7a70", "#b0653f", "#2c3a50", "#33302c", "#4a6fa5", "#5d8a52", "#c9a04a"],
+  pants: ["#2c3e5a", "#33302c", "#5c3a1e", "#5a5a5a", "#6b4a5a", "#3d5445", "#5a5a5a", "#2c3a50", "#3a3a40", "#54415a", "#37514d"],
+  shoe: ["#2b2118", "#3a3f4b", "#8a4438", "#c9c2b5", "#4a5a78", "#6b4423", "#4d6b4a", "#a08040"],
 } as const
 
 export const HAIR_STYLES = [
@@ -74,7 +75,9 @@ export const ANIM_FPS: Record<string, number> = {
 export type Direction = "down" | "up" | "left" | "right"
 export const DIRS: Direction[] = ["down", "up", "left", "right"]
 
-export const FW = 32
+// Grid 16×32 — mesmo do Stardew Valley original. Não aumentar: resolução
+// maior quebra a proporção característica do estilo.
+export const FW = 16
 export const FH = 32
 
 export const DEFAULT_AVATAR: AvatarConfig = {
