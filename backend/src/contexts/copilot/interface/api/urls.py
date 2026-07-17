@@ -1,6 +1,7 @@
 """Rotas do contexto copilot."""
 from django.urls import path
 
+from contexts.copilot.interface.api.marketing_views import GenerateCopyView
 from contexts.copilot.interface.api.views import (
     AgentExecuteView,
     AiConfigTestView,
@@ -12,7 +13,6 @@ from contexts.copilot.interface.api.views import (
     DocumentCreateTasksView,
     DocumentListCreateView,
 )
-from contexts.copilot.interface.api.marketing_views import GenerateCopyView
 
 urlpatterns = [
     path("generate-copy/", GenerateCopyView.as_view(), name="copilot-generate-copy"),

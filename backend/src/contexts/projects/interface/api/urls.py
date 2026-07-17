@@ -42,15 +42,15 @@ from contexts.projects.interface.api.extra_views import (
     WorklogDetailView,
     WorklogListCreateView,
 )
+from contexts.projects.interface.api.link_views import (
+    CardLinkListCreateView,
+    IssueLinkDetailView,
+)
 from contexts.projects.interface.api.marketing_views import (
     AttachmentVersionView,
     CardApprovalView,
     MarketingAssetsView,
     MarketingReportView,
-)
-from contexts.projects.interface.api.link_views import (
-    CardLinkListCreateView,
-    IssueLinkDetailView,
 )
 from contexts.projects.interface.api.notification_views import (
     NotificationDetailView,
