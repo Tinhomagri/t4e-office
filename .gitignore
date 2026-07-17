@@ -26,6 +26,9 @@ coverage.xml
 # Banco local
 *.sqlite3
 
+# Uploads de mídia (runtime, não versionar)
+backend/attachments/
+
 # Node / frontend
 node_modules/
 dist/
@@ -36,3 +39,5 @@ coverage/
 .idea/
 .vscode/
 *.swp
+.vercel
+.env*
