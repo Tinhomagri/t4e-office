@@ -9,6 +9,11 @@ import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
 import { GoogleCallbackPage } from "@/features/auth/GoogleCallbackPage"
 import { IntegrationsPage } from "@/features/integrations/IntegrationsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
+import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
+import { ImportBoardPage } from "@/features/marketing/ImportBoardPage"
+import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
+import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
+import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
 import { MembersPage } from "@/features/workspace/members/MembersPage"
 import { MyDayPage } from "@/features/today/MyDayPage"
@@ -89,6 +94,11 @@ export const router = createBrowserRouter([
       { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
       { path: "office", element: <OfficePage /> },
       { path: "integrations", element: <IntegrationsPage /> },
+      { path: "marketing/calendario", element: <EditorialCalendarPage /> },
+      { path: "marketing/fila", element: <PublishQueuePage /> },
+      { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
+      { path: "marketing/redes", element: <SocialAccountsPage /> },
+      { path: "importar", element: <ImportBoardPage /> },
       { path: "avatar", element: <AvatarLabPage /> },
       { path: "copilot", element: <CopilotPage /> },
     ],

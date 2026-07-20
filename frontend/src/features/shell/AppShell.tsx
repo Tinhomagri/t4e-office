@@ -2,7 +2,9 @@ import { motion } from "framer-motion"
 import {
   Bell,
   Building2,
+  BarChart3,
   CalendarClock,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -10,17 +12,21 @@ import {
   ChevronsUpDown,
   LayoutDashboard,
   LineChart,
+  ListChecks,
   LogOut,
   Moon,
   type LucideIcon,
+  Megaphone,
   Plus,
   Search,
   Settings,
+  Share2,
   Smile,
   Sparkles,
   Spade,
   SquareKanban,
   Sun,
+  Upload,
   UserPlus,
   Users,
 } from "lucide-react"
@@ -63,10 +69,21 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   },
   {
     heading: "Projetos",
-    // "Boards" ganha tratamento especial (submenu de projetos) — ver BoardsNavLink.
+    // "Boards" ganha tratamento especial (submenu de projetos de software) — ver ProjectsNavLink.
     items: [
       { label: "Planning Poker", to: "/app/poker", icon: Spade },
       { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
+      { label: "Importar Jira/Trello", to: "/app/importar", icon: Upload },
+    ],
+  },
+  {
+    heading: "Marketing",
+    // Menu próprio: "Campanhas" injeta o submenu dos projetos de marketing.
+    items: [
+      { label: "Calendário editorial", to: "/app/marketing/calendario", icon: CalendarDays },
+      { label: "Fila de publicação", to: "/app/marketing/fila", icon: ListChecks },
+      { label: "Analytics social", to: "/app/marketing/analytics", icon: BarChart3 },
+      { label: "Redes sociais", to: "/app/marketing/redes", icon: Share2 },
     ],
   },
   {
@@ -153,7 +170,12 @@ export function AppShell() {
                 </div>
               )}
               <div className="flex flex-col gap-0.5">
-                {group.heading === "Projetos" && <BoardsNavLink collapsed={collapsed} />}
+                {group.heading === "Projetos" && (
+                  <ProjectsNavLink collapsed={collapsed} kind="software" />
+                )}
+                {group.heading === "Marketing" && (
+                  <ProjectsNavLink collapsed={collapsed} kind="marketing" />
+                )}
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}
@@ -303,33 +325,49 @@ export function AppShell() {
   )
 }
 
-// Item "Boards" com submenu de projetos — como a lista de projetos do Jira
-// embaixo do item "Projects" na sidebar.
-function BoardsNavLink({ collapsed }: { collapsed: boolean }) {
+// Item de projetos com submenu — como a lista de projetos do Jira embaixo do
+// item "Projects". Filtra por tipo de projeto: software (Boards) x marketing
+// (Campanhas), dando a cada tipo seu próprio menu.
+function ProjectsNavLink({
+  collapsed,
+  kind,
+}: {
+  collapsed: boolean
+  kind: "software" | "marketing"
+}) {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { activeWorkspaceId } = useWorkspaces()
-  const { data: projects } = useProjects(activeWorkspaceId)
+  const { data: allProjects } = useProjects(activeWorkspaceId)
 
-  const onBoards = location.pathname.startsWith("/app/boards")
-  const activeProjectId = onBoards ? searchParams.get("project") : null
+  const isMarketing = kind === "marketing"
+  const label = isMarketing ? "Campanhas" : "Boards"
+  const Icon = isMarketing ? Megaphone : SquareKanban
+  // Projeto de marketing = qualquer template diferente de "software".
+  const projects = (allProjects ?? []).filter((p) =>
+    isMarketing ? !!p.template && p.template !== "software" : !p.template || p.template === "software",
+  )
+
+  const activeProjectId = location.pathname.startsWith("/app/boards")
+    ? searchParams.get("project")
+    : null
+  // Item ativo quando o projeto selecionado pertence a este grupo.
+  const groupActive = !!activeProjectId && projects.some((p) => p.id === activeProjectId)
   const [open, setOpen] = useState(true)
 
   if (collapsed) {
     return (
       <NavLink
-        to="/app/boards"
-        title="Boards"
-        className={({ isActive }) =>
-          cx(
-            "group relative flex items-center justify-center rounded-lg px-0 py-2.5 text-sm transition-colors",
-            isActive
-              ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-              : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
-          )
-        }
+        to={isMarketing ? "/app/boards?type=marketing" : "/app/boards"}
+        title={label}
+        className={cx(
+          "group relative flex items-center justify-center rounded-lg px-0 py-2.5 text-sm transition-colors",
+          groupActive
+            ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+            : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
+        )}
       >
-        <SquareKanban className="size-[18px] shrink-0" strokeWidth={1.9} />
+        <Icon className="size-[18px] shrink-0" strokeWidth={1.9} />
       </NavLink>
     )
   }
@@ -339,7 +377,7 @@ function BoardsNavLink({ collapsed }: { collapsed: boolean }) {
       <div
         className={cx(
           "group relative flex items-center gap-1 rounded-lg pr-1.5 text-sm transition-colors",
-          onBoards && !activeProjectId
+          groupActive
             ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
             : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
         )}
@@ -347,20 +385,23 @@ function BoardsNavLink({ collapsed }: { collapsed: boolean }) {
         <span
           className={cx(
             "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
-            onBoards && !activeProjectId ? "opacity-100" : "opacity-0",
+            groupActive ? "opacity-100" : "opacity-0",
           )}
         />
-        <NavLink to="/app/boards" className="flex flex-1 items-center gap-3 px-3 py-2">
-          <SquareKanban
+        <NavLink
+          to={isMarketing ? "/app/boards?type=marketing" : "/app/boards"}
+          className="flex flex-1 items-center gap-3 px-3 py-2"
+        >
+          <Icon
             className={cx(
               "size-[18px] shrink-0 transition-colors",
-              onBoards ? "text-brand-600 dark:text-brand-300" : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
+              groupActive ? "text-brand-600 dark:text-brand-300" : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
             )}
             strokeWidth={1.9}
           />
-          <span className="flex-1 truncate text-left">Boards</span>
+          <span className="flex-1 truncate text-left">{label}</span>
         </NavLink>
-        {(projects?.length ?? 0) > 0 && (
+        {projects.length > 0 && (
           <button
             onClick={() => setOpen((v) => !v)}
             title={open ? "Recolher projetos" : "Mostrar projetos"}
@@ -371,12 +412,12 @@ function BoardsNavLink({ collapsed }: { collapsed: boolean }) {
         )}
       </div>
 
-      {open && (
+      {open && projects.length > 0 && (
         <div className="ml-[27px] flex flex-col gap-0.5 border-l border-paper-100 pl-2 dark:border-ink-700">
-          {(projects ?? []).map((p) => (
+          {projects.map((p) => (
             <NavLink
               key={p.id}
-              to={`/app/boards?project=${p.id}`}
+              to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
               className={cx(
                 "flex items-center gap-2 truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors",
                 p.id === activeProjectId

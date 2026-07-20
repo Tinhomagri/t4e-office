@@ -101,6 +101,130 @@ export async function generateCopy(
   return data
 }
 
+// ── Marketing: geração de campanha multicanal a partir de um briefing ───────
+export interface CampaignPiece {
+  channel: string
+  title: string
+  copy: string
+  publish_date: string | null
+  format_hint: string
+}
+
+export interface GenerateCampaignInput {
+  workspaceId: string
+  brief: string
+  channels: string[]
+  startDate: string
+  endDate: string
+  perChannel?: number
+  tone?: CopyTone
+}
+
+export async function generateCampaign(
+  input: GenerateCampaignInput,
+): Promise<{ pieces: CampaignPiece[] }> {
+  const { data } = await api.post<{ pieces: CampaignPiece[] }>(
+    "/copilot/generate-campaign/",
+    {
+      workspace_id: input.workspaceId,
+      brief: input.brief,
+      channels: input.channels,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      per_channel: input.perChannel ?? 1,
+      tone: input.tone ?? "",
+    },
+  )
+  return data
+}
+
+// ── Marketing: repurpose (1 peça → N canais) ────────────────────────────────
+export async function repurpose(
+  workspaceId: string,
+  title: string,
+  sourceCopy: string,
+  channels: string[],
+  tone: CopyTone = "",
+): Promise<{ pieces: CampaignPiece[] }> {
+  const { data } = await api.post<{ pieces: CampaignPiece[] }>("/copilot/repurpose/", {
+    workspace_id: workspaceId,
+    title,
+    source_copy: sourceCopy,
+    channels,
+    tone,
+  })
+  return data
+}
+
+// ── Marketing: Brand Kit (identidade + tom de voz que guia a IA) ────────────
+export interface BrandKit {
+  tone_of_voice: string
+  colors: string[]
+  fonts: string
+  logo_url: string
+  guidelines: string
+  can_edit: boolean
+}
+
+export async function getBrandKit(workspaceId: string): Promise<BrandKit> {
+  const { data } = await api.get<BrandKit>("/copilot/brand-kit/", {
+    params: { workspace_id: workspaceId },
+  })
+  return data
+}
+
+export async function saveBrandKit(
+  workspaceId: string,
+  kit: Omit<BrandKit, "can_edit">,
+): Promise<BrandKit> {
+  const { data } = await api.put<BrandKit>(
+    "/copilot/brand-kit/",
+    { ...kit, workspace_id: workspaceId },
+    { params: { workspace_id: workspaceId } },
+  )
+  return data
+}
+
+// ── Marketing: contas de rede social conectadas ─────────────────────────────
+export interface SocialAccount {
+  id: string
+  channel: string
+  account_name: string
+  connected_at: string | null
+}
+
+export async function listSocialAccounts(
+  workspaceId: string,
+): Promise<{ accounts: SocialAccount[]; can_edit: boolean }> {
+  const { data } = await api.get<{ accounts: SocialAccount[]; can_edit: boolean }>(
+    "/copilot/social-accounts/",
+    { params: { workspace_id: workspaceId } },
+  )
+  return data
+}
+
+export async function connectSocialAccount(
+  workspaceId: string,
+  channel: string,
+  accountName: string,
+): Promise<SocialAccount> {
+  const { data } = await api.post<SocialAccount>(
+    "/copilot/social-accounts/",
+    { channel, account_name: accountName, workspace_id: workspaceId },
+    { params: { workspace_id: workspaceId } },
+  )
+  return data
+}
+
+export async function disconnectSocialAccount(
+  workspaceId: string,
+  channel: string,
+): Promise<void> {
+  await api.delete("/copilot/social-accounts/", {
+    params: { workspace_id: workspaceId, channel },
+  })
+}
+
 // ── Integração de IA por workspace ──────────────────────────────────────────
 export type AiProvider = "anthropic" | "openai"
 

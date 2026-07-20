@@ -109,3 +109,73 @@ class WorkspaceAiConfigModel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.provider} @ {self.workspace_id}"
+
+
+class WorkspaceBrandKitModel(models.Model):
+    """Kit de marca por workspace: identidade + tom de voz que guia a IA."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.OneToOneField(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="brand_kit"
+    )
+    tone_of_voice = models.TextField(
+        blank=True, default="", help_text="Como a marca fala (ex.: próxima, jovem, sem jargão)"
+    )
+    # Paleta como lista de hex (ex.: ["#E8452C", "#123456"])
+    colors = models.JSONField(default=list, blank=True)
+    fonts = models.CharField(max_length=200, blank=True, default="")
+    logo_url = models.TextField(blank=True, default="")
+    guidelines = models.TextField(
+        blank=True, default="", help_text="Diretrizes livres (o que evitar, termos etc.)"
+    )
+    updated_by = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "copilot_brand_kit"
+        verbose_name = "Kit de marca"
+        verbose_name_plural = "Kits de marca"
+
+    def __str__(self) -> str:
+        return f"BrandKit @ {self.workspace_id}"
+
+
+class SocialAccountModel(models.Model):
+    """Conta de rede social conectada a um workspace, por canal.
+
+    Registro da conexão (handle + provider). Publicação real via API do provider
+    é plugada na camada de publicação; aqui guardamos o vínculo e o estado.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="social_accounts"
+    )
+    channel = models.CharField(max_length=30, help_text="instagram, linkedin, facebook…")
+    account_name = models.CharField(max_length=120, help_text="@handle ou nome da página")
+    # Tokens OAuth cifrados (Fernet) obtidos no fluxo oficial de cada rede.
+    access_token_encrypted = models.TextField(blank=True, default="")
+    refresh_token_encrypted = models.TextField(blank=True, default="")
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    # Id do usuário/página no provider (ex.: page_id do Facebook, open_id TikTok)
+    external_id = models.CharField(max_length=120, blank=True, default="")
+    connected_by = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "copilot_social_account"
+        verbose_name = "Conta social"
+        verbose_name_plural = "Contas sociais"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "channel"], name="unique_workspace_social_channel"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.channel}:{self.account_name} @ {self.workspace_id}"

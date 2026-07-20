@@ -2,10 +2,15 @@
 // 1) Dashboard de campanha (tiles + distribuição por canal)
 // 2) Fila de publicação (atrasadas / hoje / próximos 7 dias, com "marcar publicado")
 // 3) Biblioteca de peças aprovadas (última versão aprovada de cada grupo)
-import { CalendarClock, CheckCircle2, FileImage, FileText, Megaphone, TriangleAlert } from "lucide-react"
+import { CalendarClock, CheckCircle2, FileImage, FileText, Inbox, Megaphone, Palette, Share2, Sparkles, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { cx } from "@/shared/ui/primitives"
+import { Button, cx } from "@/shared/ui/primitives"
+import { BrandKitDialog } from "./BrandKitDialog"
+import { CampaignWizard } from "./CampaignWizard"
+import { RequestDialog } from "./RequestDialog"
+import { SchedulePostDialog } from "./SchedulePostDialog"
+import { SocialAccountsDialog } from "./SocialAccountsDialog"
 import {
   useMarketingAssets,
   useMarketingReport,
@@ -51,21 +56,51 @@ function StatTile({ label, value, hint, tone = "default" }: {
 
 export function MarketingView({
   projectId,
+  workspaceId,
+  projectKey,
   cards,
   onOpen,
 }: {
   projectId: string
+  workspaceId: string
+  projectKey: string
   cards: Card[]
   onOpen: (c: Card) => void
 }) {
   const qc = useQueryClient()
   const { data: report, isLoading } = useMarketingReport(projectId)
   const [channelFilter, setChannelFilter] = useState("")
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [brandOpen, setBrandOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [socialOpen, setSocialOpen] = useState(false)
+  // Card da fila sendo publicado nas redes (abre o SchedulePostDialog)
+  const [publishTarget, setPublishTarget] = useState<MarketingQueueCard | null>(null)
   const { data: assets } = useMarketingAssets(projectId, channelFilter || undefined)
   const updateCard = useUpdateCard(projectId)
 
   if (isLoading || !report) {
-    return <p className="p-6 text-sm text-paper-400">Carregando painel de marketing…</p>
+    return (
+      <div className="space-y-4">
+        <CampaignWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          projectId={projectId}
+          workspaceId={workspaceId}
+          projectKey={projectKey}
+        />
+        <BrandKitDialog open={brandOpen} onClose={() => setBrandOpen(false)} workspaceId={workspaceId} />
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" icon={<Palette className="size-4" />} onClick={() => setBrandOpen(true)}>
+            Kit de marca
+          </Button>
+          <Button icon={<Sparkles className="size-4" />} onClick={() => setWizardOpen(true)}>
+            Nova campanha
+          </Button>
+        </div>
+        <p className="p-6 text-sm text-paper-400">Carregando painel de marketing…</p>
+      </div>
+    )
   }
 
   // Status "publicado" do workflow (fallback: primeiro status de categoria done)
@@ -102,6 +137,50 @@ export function MarketingView({
 
   return (
     <div className="space-y-6 pb-8">
+      <CampaignWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        projectId={projectId}
+        workspaceId={workspaceId}
+        projectKey={projectKey}
+      />
+      <BrandKitDialog open={brandOpen} onClose={() => setBrandOpen(false)} workspaceId={workspaceId} />
+      <RequestDialog open={requestOpen} onClose={() => setRequestOpen(false)} projectId={projectId} />
+      <SocialAccountsDialog open={socialOpen} onClose={() => setSocialOpen(false)} workspaceId={workspaceId} />
+      <SchedulePostDialog
+        open={publishTarget !== null}
+        onClose={() => setPublishTarget(null)}
+        workspaceId={workspaceId}
+        projectId={projectId}
+        cardId={publishTarget?.id}
+        initialContent={publishTarget?.title}
+        initialChannel={publishTarget?.channel}
+      />
+
+      {/* ── Cabeçalho com gerador de campanha ── */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-ink dark:text-paper">Campanha</p>
+          <p className="text-xs text-paper-400">
+            Descreva um briefing e a IA monta o plano multicanal.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" icon={<Inbox className="size-4" />} onClick={() => setRequestOpen(true)}>
+            Solicitação
+          </Button>
+          <Button variant="ghost" icon={<Share2 className="size-4" />} onClick={() => setSocialOpen(true)}>
+            Redes
+          </Button>
+          <Button variant="outline" icon={<Palette className="size-4" />} onClick={() => setBrandOpen(true)}>
+            Kit de marca
+          </Button>
+          <Button icon={<Sparkles className="size-4" />} onClick={() => setWizardOpen(true)}>
+            Nova campanha
+          </Button>
+        </div>
+      </div>
+
       {/* ── Dashboard de campanha ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Peças" value={report.totals.cards} />
@@ -138,6 +217,40 @@ export function MarketingView({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Desempenho (métricas das peças publicadas) ── */}
+      {report.performance.has_data && (
+        <div className="rounded-xl border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-4">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-paper-500 dark:text-paper-400">
+            Desempenho · {report.performance.pieces_measured} peça(s) medida(s)
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatTile label="Alcance" value={report.performance.totals.reach.toLocaleString("pt-BR")} />
+            <StatTile
+              label="Engajamento"
+              value={report.performance.engagement_rate === null ? "—" : `${report.performance.engagement_rate}%`}
+            />
+            <StatTile label="Cliques" value={report.performance.totals.clicks.toLocaleString("pt-BR")} />
+            <StatTile label="Conversões" value={report.performance.totals.conversions.toLocaleString("pt-BR")} tone="success" />
+            <StatTile
+              label="Melhor canal"
+              value={report.performance.best_channel ? (CHANNEL_LABEL[report.performance.best_channel] ?? report.performance.best_channel) : "—"}
+            />
+          </div>
+          {report.performance.best_piece && (
+            <p className="mt-3 text-xs text-paper-500">
+              🏆 Melhor peça:{" "}
+              <button
+                onClick={() => openById(report.performance.best_piece!.id)}
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                {report.performance.best_piece.ref} · {report.performance.best_piece.title}
+              </button>{" "}
+              — {report.performance.best_piece.reach.toLocaleString("pt-BR")} de alcance
+            </p>
+          )}
         </div>
       )}
 
@@ -182,6 +295,14 @@ export function MarketingView({
                           {formatDate(item.publish_date)}
                         </span>
                       </span>
+                    </button>
+                    <button
+                      onClick={() => setPublishTarget(item)}
+                      className="shrink-0 rounded-md px-1.5 py-1 text-brand-600 opacity-0 transition-opacity hover:bg-brand-600/10 group-hover:opacity-100"
+                      title="Publicar nas redes"
+                      aria-label={`Publicar ${item.ref} nas redes`}
+                    >
+                      <Share2 className="size-4" />
                     </button>
                     <button
                       onClick={() => markPublished(item)}
