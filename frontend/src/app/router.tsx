@@ -24,6 +24,7 @@ import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage"
+import { SalesPage } from "@/features/sales/SalesPage"
 import { VerifyEmailPage } from "@/features/auth/VerifyEmailPage"
 import type { ReactNode } from "react"
 
@@ -89,6 +90,7 @@ export const router = createBrowserRouter([
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
       { path: "poker/:sessionId", element: <PokerPage /> },
+      { path: "comercial", element: <SalesPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },

@@ -27,6 +27,7 @@ import {
   Spade,
   SquareKanban,
   Sun,
+  Target,
   Upload,
   UserPlus,
   Users,
@@ -86,6 +87,11 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
       { label: "Analytics social", to: "/app/marketing/analytics", icon: BarChart3 },
       { label: "Redes sociais", to: "/app/marketing/redes", icon: Share2 },
     ],
+  },
+  {
+    // Comercial (CRM): funil de vendas, clientes e follow-ups.
+    heading: "Comercial",
+    items: [{ label: "Comercial", to: "/app/comercial", icon: Target }],
   },
   {
     heading: "Analytics",
