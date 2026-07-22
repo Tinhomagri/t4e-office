@@ -1,5 +1,5 @@
 import { motion, useInView, useMotionValue, useSpring } from "framer-motion"
-import { CalendarClock, CalendarCheck, CircleDot, ExternalLink, Eye, Loader2, RefreshCw, Sparkles, TrendingDown, Zap } from "lucide-react"
+import { CalendarClock, CalendarCheck, CircleDot, ExternalLink, Eye, Loader2, RefreshCw, Sparkles, Target, TrendingDown, Zap } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useEffect, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
@@ -23,6 +23,9 @@ import {
   type BoardCard,
 } from "@/features/workspace/workspace.hooks"
 import type { CardPriority, CardStatus, Sprint } from "@/features/workspace/workspace.types"
+import { useWorkspaceActivities } from "@/features/sales/sales.hooks"
+import { closeDateState, formatDate } from "@/features/sales/sales.shared"
+import type { DealActivity } from "@/features/sales/sales.types"
 import { cx } from "@/shared/ui/primitives"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
@@ -109,6 +112,14 @@ export function MyDayPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const { cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
   const { sprints, isLoading: sprintsLoading } = useWorkspaceSprints(activeWorkspaceId)
+
+  // Follow-ups do comercial: tarefas de negócio atribuídas a mim e ainda abertas.
+  // O "Meu Dia" reúne o trabalho de todas as frentes, não só o dos boards.
+  const { data: salesTasks } = useWorkspaceActivities(activeWorkspaceId, {
+    kind: "task",
+    assigneeId: user?.id,
+    pending: true,
+  })
 
   const mine = cards.filter((c) => c.assignee_id === user?.id)
   const myActive = mine.filter((c) => ACTIVE.includes(c.status))
@@ -302,6 +313,7 @@ export function MyDayPage() {
                 cards={review}
                 empty="Nenhum card em revisão."
               />
+              <SalesFollowUpsPanel tasks={salesTasks ?? []} />
             </div>
           </motion.div>
         </motion.div>
@@ -493,6 +505,77 @@ function FocusCard({ card }: { card: BoardCard }) {
         </span>
       )}
     </motion.div>
+  )
+}
+
+// Follow-ups comerciais no Meu Dia. Ordena por prazo (vencidas primeiro) porque
+// numa tarefa de venda o atraso é o dado que muda a decisão do dia.
+function SalesFollowUpsPanel({ tasks }: { tasks: DealActivity[] }) {
+  const ordered = useMemo(
+    () =>
+      [...tasks].sort((a, b) => {
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return a.due_date.localeCompare(b.due_date)
+      }),
+    [tasks],
+  )
+
+  return (
+    <div className="surface flex flex-col p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Target className="size-4 text-brand-500" />
+        <h3 className="text-sm font-semibold text-ink dark:text-paper">Follow-ups comerciais</h3>
+        <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 text-[11px] font-medium text-paper-600 dark:text-paper-400">
+          {ordered.length}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {ordered.slice(0, 4).map((t) => {
+          const state = closeDateState(t.due_date)
+          return (
+            <Link
+              key={t.id}
+              to="/app/comercial"
+              className="flex items-center gap-2 rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2 text-sm text-ink dark:text-paper-200 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {t.content}
+                {t.deal_title && (
+                  <span className="text-paper-400"> · {t.deal_title}</span>
+                )}
+              </span>
+              {t.due_date && (
+                <span
+                  className={cx(
+                    "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                    state === "overdue"
+                      ? "bg-danger/10 text-danger"
+                      : state === "today"
+                        ? "bg-warning/10 text-warning"
+                        : "text-paper-400",
+                  )}
+                >
+                  {state === "overdue"
+                    ? "Atrasada"
+                    : state === "today"
+                      ? "Hoje"
+                      : formatDate(t.due_date)}
+                </span>
+              )}
+            </Link>
+          )
+        })}
+        {ordered.length === 0 && (
+          <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-5 text-center text-xs text-paper-400">
+            Nenhum follow-up pendente.
+          </p>
+        )}
+        {ordered.length > 4 && (
+          <p className="text-center text-xs text-paper-400">+{ordered.length - 4} mais</p>
+        )}
+      </div>
+    </div>
   )
 }
 

@@ -20,6 +20,7 @@ import type {
   UpdateCustomerInput,
   UpdateDealInput,
   WinDealInput,
+  WorkspaceActivityFilters,
 } from "./sales.types"
 
 // ---- Estágios do funil ----
@@ -149,9 +150,18 @@ export async function listDealActivities(dealId: string): Promise<DealActivity[]
   return data
 }
 
-export async function listWorkspaceActivities(workspaceId: string): Promise<DealActivity[]> {
+export async function listWorkspaceActivities(
+  workspaceId: string,
+  filters: WorkspaceActivityFilters = {},
+): Promise<DealActivity[]> {
   const { data } = await api.get<DealActivity[]>("/sales/activities/", {
-    params: { workspace_id: workspaceId },
+    params: {
+      workspace_id: workspaceId,
+      // Só enviamos os filtros preenchidos — o backend trata ausência como "todos".
+      ...(filters.kind ? { kind: filters.kind } : {}),
+      ...(filters.assigneeId ? { assignee_id: filters.assigneeId } : {}),
+      ...(filters.pending ? { pending: true } : {}),
+    },
   })
   return data
 }

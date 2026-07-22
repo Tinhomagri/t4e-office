@@ -83,6 +83,13 @@ export interface DealActivity {
   created_at: string
 }
 
+// Filtros do feed de atividades do workspace. `pending` = ainda sem done_at.
+export interface WorkspaceActivityFilters {
+  kind?: ActivityKind
+  assigneeId?: string
+  pending?: boolean
+}
+
 export interface DealHistoryEntry {
   id: string
   deal_id: string

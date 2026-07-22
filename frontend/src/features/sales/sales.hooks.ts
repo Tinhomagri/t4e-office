@@ -18,6 +18,7 @@ import type {
   UpdateCustomerInput,
   UpdateDealInput,
   WinDealInput,
+  WorkspaceActivityFilters,
 } from "./sales.types"
 
 // Chaves de cache centralizadas — evita divergência entre hooks.
@@ -29,8 +30,14 @@ export const salesKeys = {
   deals: (workspaceId: string | null, customerId?: string | null) =>
     ["sales-deals", workspaceId, customerId ?? null] as const,
   activities: (dealId: string | null) => ["sales-activities", dealId] as const,
-  workspaceActivities: (workspaceId: string | null) =>
-    ["sales-workspace-activities", workspaceId] as const,
+  workspaceActivities: (workspaceId: string | null, filters?: WorkspaceActivityFilters) =>
+    [
+      "sales-workspace-activities",
+      workspaceId,
+      filters?.kind ?? null,
+      filters?.assigneeId ?? null,
+      filters?.pending ?? false,
+    ] as const,
   history: (dealId: string | null) => ["sales-deal-history", dealId] as const,
 }
 
@@ -235,10 +242,13 @@ export function useDealActivities(dealId: string | null) {
   })
 }
 
-export function useWorkspaceActivities(workspaceId: string | null) {
+export function useWorkspaceActivities(
+  workspaceId: string | null,
+  filters: WorkspaceActivityFilters = {},
+) {
   return useQuery({
-    queryKey: salesKeys.workspaceActivities(workspaceId),
-    queryFn: () => salesApi.listWorkspaceActivities(workspaceId!),
+    queryKey: salesKeys.workspaceActivities(workspaceId, filters),
+    queryFn: () => salesApi.listWorkspaceActivities(workspaceId!, filters),
     enabled: !!workspaceId,
   })
 }
