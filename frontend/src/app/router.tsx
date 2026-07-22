@@ -9,6 +9,11 @@ import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
 import { GoogleCallbackPage } from "@/features/auth/GoogleCallbackPage"
 import { IntegrationsPage } from "@/features/integrations/IntegrationsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
+import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
+import { ImportBoardPage } from "@/features/marketing/ImportBoardPage"
+import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
+import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
+import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
 import { MembersPage } from "@/features/workspace/members/MembersPage"
 import { MyDayPage } from "@/features/today/MyDayPage"
@@ -19,6 +24,7 @@ import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage"
+import { SalesPage } from "@/features/sales/SalesPage"
 import { VerifyEmailPage } from "@/features/auth/VerifyEmailPage"
 import type { ReactNode } from "react"
 
@@ -84,11 +90,17 @@ export const router = createBrowserRouter([
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
       { path: "poker/:sessionId", element: <PokerPage /> },
+      { path: "comercial", element: <SalesPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
       { path: "office", element: <OfficePage /> },
       { path: "integrations", element: <IntegrationsPage /> },
+      { path: "marketing/calendario", element: <EditorialCalendarPage /> },
+      { path: "marketing/fila", element: <PublishQueuePage /> },
+      { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
+      { path: "marketing/redes", element: <SocialAccountsPage /> },
+      { path: "importar", element: <ImportBoardPage /> },
       { path: "avatar", element: <AvatarLabPage /> },
       { path: "copilot", element: <CopilotPage /> },
     ],

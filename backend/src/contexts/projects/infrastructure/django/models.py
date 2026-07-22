@@ -620,3 +620,39 @@ class AutomationRunLogModel(models.Model):
     class Meta:
         db_table = "projects_automation_run_log"
         ordering = ["-ran_at"]
+
+
+class CardMetricModel(models.Model):
+    """Métricas de desempenho de uma peça publicada (entrada manual por ora).
+
+    Uma linha por card. Alimenta o dashboard de campanha (alcance, engajamento,
+    cliques, conversões) e permite ranquear canal/peça por resultado.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    card = models.OneToOneField(
+        "CardModel", on_delete=models.CASCADE, related_name="metric"
+    )
+    reach = models.PositiveIntegerField(default=0)
+    impressions = models.PositiveIntegerField(default=0)
+    likes = models.PositiveIntegerField(default=0)
+    comments = models.PositiveIntegerField(default=0)
+    shares = models.PositiveIntegerField(default=0)
+    clicks = models.PositiveIntegerField(default=0)
+    conversions = models.PositiveIntegerField(default=0)
+    updated_by = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "projects_card_metric"
+        verbose_name = "Métrica de peça"
+        verbose_name_plural = "Métricas de peças"
+
+    def __str__(self) -> str:
+        return f"metric @ {self.card_id}"
+
+    @property
+    def engagement(self) -> int:
+        return self.likes + self.comments + self.shares

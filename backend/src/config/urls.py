@@ -20,4 +20,6 @@ urlpatterns = [
     path("api/google/", include("contexts.google.interface.api.urls")),
     path("api/github/", include("contexts.github.interface.api.urls")),
     path("api/presence/", include("contexts.presence.interface.api.urls")),
+    path("api/integrations/", include("contexts.integrations.interface.api.urls")),
+    path("api/sales/", include("contexts.sales.interface.api.urls")),
 ]

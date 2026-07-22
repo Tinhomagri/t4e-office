@@ -34,6 +34,7 @@ import type {
   AuditLogEntry,
   Invitation,
   IssueLink,
+  CardMetrics,
   MarketingAsset,
   MarketingReport,
   Member,
@@ -499,6 +500,20 @@ export async function uploadAttachmentVersion(
     form,
     { headers: { "Content-Type": "multipart/form-data" } },
   )
+  return data
+}
+
+// ---- Marketing Hub: métricas de desempenho por peça ----
+export async function getCardMetrics(cardId: string): Promise<CardMetrics> {
+  const { data } = await api.get<CardMetrics>(`/cards/${cardId}/metrics/`)
+  return data
+}
+
+export async function saveCardMetrics(
+  cardId: string,
+  metrics: Partial<Omit<CardMetrics, "engagement" | "updated_at">>,
+): Promise<CardMetrics> {
+  const { data } = await api.put<CardMetrics>(`/cards/${cardId}/metrics/`, metrics)
   return data
 }
 

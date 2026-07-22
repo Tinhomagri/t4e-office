@@ -1,3 +1,4 @@
+import { motion } from "framer-motion"
 import {
   Calendar,
   Check,
@@ -25,6 +26,7 @@ import { GithubDevPanel } from "@/features/github/GithubDevPanel"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import * as copilotApi from "@/features/copilot/copilot.api"
+import { RepurposeDialog } from "./RepurposeDialog"
 import { errMsg } from "./board.shared"
 import {
   useAddCardComponent,
@@ -77,6 +79,9 @@ import type {
 import { Avatar, Badge, Button, cx, Skeleton } from "@/shared/ui/primitives"
 import { StatusLozenge } from "@/shared/ui/issue"
 import { RichEditor } from "@/shared/ui/RichEditor"
+import { useQueryClient } from "@tanstack/react-query"
+import * as wsApi from "@/features/workspace/workspace.api"
+import { toast } from "@/shared/ui/toast"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog",
@@ -191,14 +196,24 @@ export function CardDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center p-0 sm:p-4">
-      <div
-        className="absolute inset-0 animate-fade-in bg-ink-950/60 backdrop-blur-sm pointer-events-auto"
+      <motion.div
+        className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm pointer-events-auto"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         onMouseDown={(e) => {
           // Fecha apenas se o clique for realmente no overlay (não em inputs/datepicker)
           if (e.target === e.currentTarget) onClose()
         }}
       />
-      <div className="relative z-10 flex h-full w-full max-w-5xl animate-slide-in-right flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl">
+      <motion.div
+        // Painel "puxado" da direita com leve escala — pega e assenta (tátil).
+        initial={{ opacity: 0, x: 48, scale: 0.985 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        exit={{ opacity: 0, x: 48, scale: 0.985 }}
+        transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
+        className="relative z-10 flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl will-change-transform">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2.5 bg-white dark:bg-ink-900">
             <div className="flex items-center gap-2 flex-wrap">
@@ -286,7 +301,11 @@ export function CardDrawer({
             </Section>
 
             {MARKETING_TYPES.has(draft.type) && (
-              <CopyGenerator card={draft} onUse={(text) => { set("description", text); persist({ description: text }) }} />
+              <>
+                <CopyGenerator card={draft} onUse={(text) => { set("description", text); persist({ description: text }) }} />
+                {draft.description && <RepurposeAction card={draft} projectId={projectId} />}
+                <MetricsEditor card={draft} projectId={projectId} />
+              </>
             )}
 
             <Subtasks parentCard={card} projectId={projectId} />
@@ -452,7 +471,7 @@ export function CardDrawer({
             />
           </aside>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
@@ -470,6 +489,96 @@ const TONE_OPTIONS: { value: copilotApi.CopyTone; label: string }[] = [
   { value: "educativo", label: "Educativo" },
   { value: "inspirador", label: "Inspirador" },
 ]
+
+// Editor de métricas de desempenho de uma peça publicada (entrada manual).
+const METRIC_FIELDS: { key: string; label: string }[] = [
+  { key: "reach", label: "Alcance" },
+  { key: "impressions", label: "Impressões" },
+  { key: "likes", label: "Curtidas" },
+  { key: "comments", label: "Comentários" },
+  { key: "shares", label: "Compart." },
+  { key: "clicks", label: "Cliques" },
+  { key: "conversions", label: "Conversões" },
+]
+
+function MetricsEditor({ card, projectId }: { card: Card; projectId: string }) {
+  const qc = useQueryClient()
+  const [values, setValues] = useState<Record<string, number>>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void wsApi.getCardMetrics(card.id).then((m) => {
+      if (!alive) return
+      const next: Record<string, number> = {}
+      for (const f of METRIC_FIELDS) next[f.key] = (m as unknown as Record<string, number>)[f.key] ?? 0
+      setValues(next)
+    })
+    return () => {
+      alive = false
+    }
+  }, [card.id])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await wsApi.saveCardMetrics(card.id, values)
+      qc.invalidateQueries({ queryKey: ["marketing-report", projectId] })
+      toast.success("Métricas salvas")
+    } catch {
+      toast.error("Falha ao salvar métricas.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Section title="Desempenho 📊">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {METRIC_FIELDS.map((f) => (
+          <label key={f.key} className="block">
+            <span className="mb-0.5 block text-[11px] text-paper-500">{f.label}</span>
+            <input
+              type="number"
+              min={0}
+              value={values[f.key] ?? 0}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, [f.key]: Math.max(0, Number(e.target.value) || 0) }))
+              }
+              className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            />
+          </label>
+        ))}
+      </div>
+      <Button size="sm" variant="outline" onClick={save} loading={saving} className="mt-2">
+        Salvar métricas
+      </Button>
+    </Section>
+  )
+}
+
+// Ação "Espalhar em canais" (repurpose 1→N) para peças de marketing.
+function RepurposeAction({ card, projectId }: { card: Card; projectId: string }) {
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const [open, setOpen] = useState(false)
+  if (!workspaceId) return null
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        📣 Espalhar em canais
+      </Button>
+      {open && (
+        <RepurposeDialog
+          open={open}
+          onClose={() => setOpen(false)}
+          card={card}
+          projectId={projectId}
+          workspaceId={workspaceId}
+        />
+      )}
+    </>
+  )
+}
 
 function CopyGenerator({ card, onUse }: { card: Card; onUse: (text: string) => void }) {
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)

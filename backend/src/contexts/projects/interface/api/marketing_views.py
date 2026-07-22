@@ -27,6 +27,7 @@ from rest_framework.views import APIView
 from contexts.projects.infrastructure.django.models import (
     AttachmentModel,
     CardHistoryModel,
+    CardMetricModel,
     CardModel,
     WorkflowStatusModel,
 )
@@ -261,6 +262,43 @@ class MarketingReportView(APIView):
         rejected_n = decisions.count("rejected")
         total_decisions = approved_n + rejected_n
 
+        # ── Desempenho: agrega métricas das peças que têm dados registrados ──
+        metric_rows = list(
+            CardMetricModel.objects.filter(card__project_id=project_id).select_related("card")
+        )
+        perf_totals = {
+            "reach": 0, "impressions": 0, "likes": 0, "comments": 0,
+            "shares": 0, "clicks": 0, "conversions": 0,
+        }
+        perf_by_channel: dict[str, dict] = {}
+        best_piece = None
+        for m in metric_rows:
+            for k in perf_totals:
+                perf_totals[k] += getattr(m, k)
+            ch = m.card.channel or "—"
+            agg = perf_by_channel.setdefault(
+                ch, {"reach": 0, "engagement": 0, "clicks": 0, "conversions": 0}
+            )
+            agg["reach"] += m.reach
+            agg["engagement"] += m.engagement
+            agg["clicks"] += m.clicks
+            agg["conversions"] += m.conversions
+            if best_piece is None or m.reach > best_piece["reach"]:
+                best_piece = {
+                    "id": str(m.card_id),
+                    "ref": f"{m.card.project.key}-{m.card.number}",
+                    "title": m.card.title,
+                    "channel": m.card.channel,
+                    "reach": m.reach,
+                }
+        eng_base = perf_totals["reach"] or perf_totals["impressions"]
+        engagement_total = (
+            perf_totals["likes"] + perf_totals["comments"] + perf_totals["shares"]
+        )
+        best_channel = None
+        if perf_by_channel:
+            best_channel = max(perf_by_channel.items(), key=lambda kv: kv[1]["reach"])[0]
+
         return Response(
             {
                 "totals": {
@@ -284,6 +322,17 @@ class MarketingReportView(APIView):
                     "week": [_ser_queue_card(c) for c in due_week],
                 },
                 "done_statuses": sorted(done),
+                "performance": {
+                    "has_data": bool(metric_rows),
+                    "pieces_measured": len(metric_rows),
+                    "totals": perf_totals,
+                    "engagement_rate": round(engagement_total / eng_base * 100, 1)
+                    if eng_base
+                    else None,
+                    "by_channel": perf_by_channel,
+                    "best_channel": best_channel,
+                    "best_piece": best_piece,
+                },
             }
         )
 
@@ -320,3 +369,50 @@ class MarketingAssetsView(APIView):
 
         assets.sort(key=lambda x: x["created_at"], reverse=True)
         return Response(assets)
+
+
+_METRIC_FIELDS = (
+    "reach", "impressions", "likes", "comments", "shares", "clicks", "conversions",
+)
+
+
+def _ser_metric(m: "CardMetricModel | None") -> dict:
+    if m is None:
+        return {**{f: 0 for f in _METRIC_FIELDS}, "updated_at": None}
+    return {
+        **{f: getattr(m, f) for f in _METRIC_FIELDS},
+        "engagement": m.engagement,
+        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+    }
+
+
+class CardMetricView(APIView):
+    """Métricas de desempenho de uma peça: GET / PUT.
+
+    /api/cards/<card_id>/metrics/
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, card_id: str) -> Response:
+        assert_card_member(card_id=str(card_id), user_id=_uid(request))
+        m = CardMetricModel.objects.filter(card_id=card_id).first()
+        return Response(_ser_metric(m))
+
+    def put(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(
+            card_id=str(card_id), user_id=_uid(request), capability=caps.EDIT_ISSUE
+        )
+        m, _ = CardMetricModel.objects.get_or_create(card_id=card_id)
+        for f in _METRIC_FIELDS:
+            if f in request.data:
+                try:
+                    setattr(m, f, max(0, int(request.data[f])))
+                except (TypeError, ValueError):
+                    return Response(
+                        {"detail": f"Valor inválido para {f}."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+        m.updated_by_id = _uid(request)
+        m.save()
+        return Response(_ser_metric(m))

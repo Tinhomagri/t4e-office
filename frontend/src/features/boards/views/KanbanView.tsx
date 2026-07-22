@@ -39,6 +39,7 @@ import {
 import { useEffect, useMemo, useState } from "react"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
+import { EASE, dropZone, liftCard, popCheck, settleSpring } from "@/shared/lib/motion"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
 import { useBoardPrefs, colKey, type SwimlaneMode } from "../board.prefs.store"
@@ -349,8 +350,8 @@ export function KanbanView({
             />
           )}
 
-          {/* Kanban — full width breakout */}
-          <div className="-mx-6 px-6 overflow-x-auto pb-4 scrollbar-slim">
+          {/* Kanban — full width breakout (alinhado ao padding do main: 4 no mobile, 6 no sm+) */}
+          <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-4 scrollbar-slim sm:-mx-6 sm:px-6">
             <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
               {swimlane !== "none" ? (
                 <SwimlaneBoard
@@ -393,7 +394,16 @@ export function KanbanView({
                 </div>
               )}
               <DragOverlay dropAnimation={null}>
-                {activeCard ? <CardCell card={activeCard} members={members ?? []} dragging /> : null}
+                {activeCard ? (
+                  <motion.div
+                    initial={{ scale: 1, rotate: 0 }}
+                    animate={{ scale: 1.04, rotate: -2.5 }}
+                    transition={liftCard}
+                    className="cursor-grabbing"
+                  >
+                    <CardCell card={activeCard} members={members ?? []} dragging />
+                  </motion.div>
+                ) : null}
               </DragOverlay>
             </DndContext>
           </div>
@@ -889,13 +899,15 @@ function Column({
   }
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
+      variants={dropZone}
+      animate={isOver ? "over" : "idle"}
       className={cx(
-        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-all duration-200",
+        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out will-change-transform",
         compact ? "max-h-[300px]" : "max-h-[calc(100vh-22rem)]",
         isOver
-          ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow scale-[1.01]"
+          ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow"
           : overWip
             ? "border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10"
             : "border-transparent bg-paper-100/70 dark:bg-ink-900/60",
@@ -1007,12 +1019,21 @@ function Column({
         </div>
       </div>
 
-      {/* Drop zone hint */}
-      {isOver && (
-        <div className="mx-2 mb-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 py-2 text-center text-xs font-medium text-brand-500">
-          Soltar aqui
-        </div>
-      )}
+      {/* Drop zone hint — entra/sai animado */}
+      <AnimatePresence initial={false}>
+        {isOver && (
+          <motion.div
+            key="drop-hint"
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="mx-2 overflow-hidden rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 py-2 text-center text-xs font-medium text-brand-500 dark:bg-brand-900/20"
+          >
+            Soltar aqui
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Card list */}
       <div className="flex min-h-[60px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
@@ -1035,7 +1056,7 @@ function Column({
       <div className="p-2 pt-0">
         <QuickAdd projectId={projectId} status={status} sprintId={sprintId} />
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -1276,11 +1297,18 @@ function DraggableCard({
       layout={dragActive ? false : "position"}
       layoutId={card.id}
       initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
+      // O card de origem "esvazia" enquanto o clone é carregado no overlay:
+      // encolhe e apaga, como se tivesse sido retirado do lugar.
+      animate={{
+        opacity: isDragging ? 0.35 : 1,
+        scale: isDragging ? 0.96 : 1,
+        filter: isDragging ? "grayscale(0.4)" : "grayscale(0)",
+      }}
       exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.6 }}
+      // Assentamento elástico no drop (quando religa o layout).
+      transition={settleSpring}
       onClick={() => onOpen(card)}
-      className="cursor-grab active:cursor-grabbing"
+      className="cursor-grab touch-none active:cursor-grabbing"
     >
       <CardCell card={card} members={members} onDone={onDone} />
     </motion.div>
@@ -1312,31 +1340,55 @@ export function CardCell({
   return (
     <div
       className={cx(
-        "group relative overflow-hidden rounded-md border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none transition-all duration-150",
-        "hover:shadow-panel hover:-translate-y-0.5 hover:border-paper-300 dark:hover:border-ink-600",
-        dragging && "rotate-2 shadow-pop scale-105",
+        "group relative overflow-hidden rounded-md border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
+        "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
+        "hover:-translate-y-1 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
+        "active:translate-y-0 active:shadow-card active:duration-75",
+        dragging && "shadow-pop ring-1 ring-ink/10",
         isEpic ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800" : "border-paper-200 dark:border-ink-700",
         isDone && "opacity-60",
       )}
     >
-      {/* Barra de prioridade (cor cheia à esquerda) */}
-      <span className={cx("absolute inset-y-0 left-0 w-1", PRIORITY_BAR[card.priority])} />
+      {/* Barra de prioridade (cor cheia à esquerda) — engrossa no hover */}
+      <span
+        className={cx(
+          "absolute inset-y-0 left-0 w-1 origin-left transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-[2.2]",
+          PRIORITY_BAR[card.priority],
+        )}
+      />
 
       <div className="px-3 py-2.5 pl-4">
         {/* Título + checkbox de conclusão */}
         <div className="flex items-start gap-2">
           {onDone && (
-            <button
+            <motion.button
               onClick={(e) => { e.stopPropagation(); onDone(card.id) }}
+              variants={popCheck}
+              animate={isDone ? "done" : "idle"}
+              whileTap={{ scale: 0.8 }}
+              aria-pressed={isDone}
+              aria-label={isDone ? "Reabrir card" : "Concluir card"}
               className={cx(
-                "mt-0.5 shrink-0 flex size-3.5 items-center justify-center rounded border transition-colors",
+                "mt-0.5 shrink-0 grid size-3.5 place-items-center rounded border transition-colors",
                 isDone
                   ? "border-success bg-success"
-                  : "border-paper-300 hover:border-success/60 hover:bg-success/5",
+                  : "border-paper-300 hover:border-success/60 hover:bg-success/10",
               )}
             >
-              {isDone && <Check className="size-2.5 text-white" strokeWidth={3} />}
-            </button>
+              <AnimatePresence>
+                {isDone && (
+                  <motion.span
+                    key="check"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={settleSpring}
+                  >
+                    <Check className="size-2.5 text-white" strokeWidth={3} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           )}
           <p className={cx(
             "text-[13px] font-medium leading-snug text-ink dark:text-paper line-clamp-2",

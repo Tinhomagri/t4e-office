@@ -337,3 +337,15 @@
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
+
+/* Acessibilidade: respeita "reduzir movimento" do SO em todo o app. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

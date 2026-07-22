@@ -328,6 +328,31 @@ export interface MarketingQueueCard {
   assignee_id: string | null
 }
 
+export interface CardMetrics {
+  reach: number
+  impressions: number
+  likes: number
+  comments: number
+  shares: number
+  clicks: number
+  conversions: number
+  engagement?: number
+  updated_at: string | null
+}
+
+export interface MarketingPerformance {
+  has_data: boolean
+  pieces_measured: number
+  totals: Omit<CardMetrics, "engagement" | "updated_at">
+  engagement_rate: number | null
+  by_channel: Record<
+    string,
+    { reach: number; engagement: number; clicks: number; conversions: number }
+  >
+  best_channel: string | null
+  best_piece: { id: string; ref: string; title: string; channel: string; reach: number } | null
+}
+
 export interface MarketingReport {
   totals: { cards: number; planned: number; published: number; overdue: number }
   by_status: Record<string, number>
@@ -339,6 +364,7 @@ export interface MarketingReport {
     week: MarketingQueueCard[]
   }
   done_statuses: string[]
+  performance: MarketingPerformance
 }
 
 // Peça aprovada da biblioteca (anexo + card de origem)

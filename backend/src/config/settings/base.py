@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     "contexts.google",
     "contexts.github",
     "contexts.presence",
+    "contexts.integrations",
+    "contexts.sales",
 ]
 
 MIDDLEWARE = [
@@ -179,6 +181,29 @@ GITHUB_OAUTH_REDIRECT_URI = env(
 GITHUB_WEBHOOK_CALLBACK_URL = env("GITHUB_WEBHOOK_CALLBACK_URL", default="")
 # Chave Fernet p/ cifrar o token OAuth do GitHub (reaproveita a do Google se vazia).
 GITHUB_TOKEN_ENC_KEY = env("GITHUB_TOKEN_ENC_KEY", default="")
+
+# OAuth das redes sociais (contexto integrations). Crie o app em cada
+# plataforma (Meta/LinkedIn/X/TikTok/Google) e preencha as credenciais:
+#   SOCIAL_<PROVIDER>_CLIENT_ID / SOCIAL_<PROVIDER>_CLIENT_SECRET
+# Redirect registrado no app: <BASE>/api/integrations/oauth/<provider>/callback/
+SOCIAL_OAUTH_REDIRECT_BASE = env(
+    "SOCIAL_OAUTH_REDIRECT_BASE", default="http://localhost:8000"
+)
+SOCIAL_INSTAGRAM_CLIENT_ID = env("SOCIAL_INSTAGRAM_CLIENT_ID", default="")
+SOCIAL_INSTAGRAM_CLIENT_SECRET = env("SOCIAL_INSTAGRAM_CLIENT_SECRET", default="")
+SOCIAL_FACEBOOK_CLIENT_ID = env("SOCIAL_FACEBOOK_CLIENT_ID", default="")
+SOCIAL_FACEBOOK_CLIENT_SECRET = env("SOCIAL_FACEBOOK_CLIENT_SECRET", default="")
+SOCIAL_LINKEDIN_CLIENT_ID = env("SOCIAL_LINKEDIN_CLIENT_ID", default="")
+SOCIAL_LINKEDIN_CLIENT_SECRET = env("SOCIAL_LINKEDIN_CLIENT_SECRET", default="")
+SOCIAL_X_CLIENT_ID = env("SOCIAL_X_CLIENT_ID", default="")
+SOCIAL_X_CLIENT_SECRET = env("SOCIAL_X_CLIENT_SECRET", default="")
+SOCIAL_TIKTOK_CLIENT_ID = env("SOCIAL_TIKTOK_CLIENT_ID", default="")
+SOCIAL_TIKTOK_CLIENT_SECRET = env("SOCIAL_TIKTOK_CLIENT_SECRET", default="")
+SOCIAL_YOUTUBE_CLIENT_ID = env("SOCIAL_YOUTUBE_CLIENT_ID", default="")
+SOCIAL_YOUTUBE_CLIENT_SECRET = env("SOCIAL_YOUTUBE_CLIENT_SECRET", default="")
+# Publicação: real via API oficial (padrão). SOCIAL_SIMULATE=True mantém a
+# publicação/métricas simuladas para seed e demo sem credenciais reais.
+SOCIAL_SIMULATE = env.bool("SOCIAL_SIMULATE", default=False)
 
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

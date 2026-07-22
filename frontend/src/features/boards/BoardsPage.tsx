@@ -16,7 +16,8 @@ import {
   Target,
   Zap,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { AnimatePresence } from "framer-motion"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { ResumoView } from "./views/ResumoView"
@@ -98,8 +99,18 @@ export function BoardsPage() {
 }
 
 function BoardsInner({ workspaceId }: { workspaceId: string }) {
-  const { data: projects, isLoading } = useProjects(workspaceId)
+  const { data: allProjects, isLoading } = useProjects(workspaceId)
   const [searchParams, setSearchParams] = useSearchParams()
+  // Separação Boards (software) x Campanhas (marketing) — ?type=marketing filtra
+  // a lista, espelhando o menu da sidebar.
+  const typeFilter = searchParams.get("type")
+  const projects = (allProjects ?? []).filter((p) =>
+    typeFilter === "marketing"
+      ? !!p.template && p.template !== "software"
+      : typeFilter === "software"
+        ? !p.template || p.template === "software"
+        : true,
+  )
   const [projectId, setProjectIdState] = useState<string | null>(
     searchParams.get("project"),
   )
@@ -122,6 +133,14 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
     )
   }
 
+  // Sincroniza o projeto ativo com a URL (?project=) — sem isso, navegar pela
+  // sidebar troca a URL mas mantém o projeto antigo no estado.
+  useEffect(() => {
+    const urlProject = searchParams.get("project")
+    if (urlProject && urlProject !== projectId) setProjectIdState(urlProject)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   useEffect(() => {
     if (!projects || projects.length === 0) return
     if (projectId && projects.some((p) => p.id === projectId)) return
@@ -129,9 +148,23 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, projectId])
 
-  if (isLoading) return <CenterSpinner />
-
   const activeProject = projects?.find((p) => p.id === projectId) ?? null
+
+  // Porta de entrada por tipo: projeto de marketing abre no dashboard/calendário
+  // (aba "marketing"), software abre no quadro. Só decide ao TROCAR de projeto e
+  // se não houver ?view explícito — depois o usuário navega livre entre as abas.
+  const lastProjectRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!activeProject) return
+    if (lastProjectRef.current === activeProject.id) return
+    lastProjectRef.current = activeProject.id
+    if (searchParams.get("view")) return
+    const isMarketing = !!activeProject.template && activeProject.template !== "software"
+    setActiveView(isMarketing ? "marketing" : "quadro")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject])
+
+  if (isLoading) return <CenterSpinner />
 
   return (
     <div className="flex flex-col gap-0">
@@ -139,15 +172,27 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
       <PageHeader
         eyebrow={
           <>
-            <SquareKanban className="size-4 text-brand-500" />
-            <span>Boards</span>
+            {typeFilter === "marketing" ? (
+              <Megaphone className="size-4 text-brand-500" />
+            ) : (
+              <SquareKanban className="size-4 text-brand-500" />
+            )}
+            <span>{typeFilter === "marketing" ? "Campanhas" : "Boards"}</span>
           </>
         }
-        title={activeProject ? activeProject.name : "Boards"}
+        title={
+          activeProject
+            ? activeProject.name
+            : typeFilter === "marketing"
+              ? "Campanhas"
+              : "Boards"
+        }
         subtitle={
           activeProject
             ? `Projeto ${activeProject.key} · workspace`
-            : "Projetos e cards do workspace"
+            : typeFilter === "marketing"
+              ? "Projetos de marketing do workspace"
+              : "Projetos e cards do workspace"
         }
       >
         <NotificationBell />
@@ -282,7 +327,11 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   // Drawer + modal de criação sempre montados, compartilhados por todas as views.
   const sharedModals = (
     <>
-      <CardDrawer card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} />
+      <AnimatePresence>
+        {openCard && (
+          <CardDrawer key={openCard.id} card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} />
+        )}
+      </AnimatePresence>
       <NewCardModal projectId={projectId} sprintId={newCard?.sprintId ?? null} status={newCard?.status ?? null} onClose={() => setNewCardStatus(null)} />
     </>
   )
@@ -295,6 +344,23 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
           workspaceId={workspaceId}
           onOpen={setOpenCard}
           onNewCard={(status, sprintId) => setNewCardStatus(status, sprintId ?? null)}
+        />
+        {sharedModals}
+      </>
+    )
+  }
+
+  // Marketing renderiza antes do empty-state genérico: mesmo sem cards, o hub
+  // precisa aparecer para o usuário gerar a primeira campanha.
+  if (view === "marketing") {
+    return (
+      <>
+        <MarketingView
+          projectId={projectId}
+          workspaceId={workspaceId}
+          projectKey={project.key}
+          cards={allCards}
+          onOpen={setOpenCard}
         />
         {sharedModals}
       </>
@@ -339,8 +405,6 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     inner = <CronogramaView cards={allCards} sprints={sprints ?? []} members={members ?? []} onOpen={setOpenCard} />
   } else if (view === "calendario") {
     inner = <CalendarioView cards={allCards} onOpen={setOpenCard} projectId={projectId} />
-  } else if (view === "marketing") {
-    inner = <MarketingView projectId={projectId} cards={allCards} onOpen={setOpenCard} />
   } else if (view === "metas") {
     inner = <MetasView projectId={projectId} cards={allCards} onOpen={setOpenCard} />
   } else {

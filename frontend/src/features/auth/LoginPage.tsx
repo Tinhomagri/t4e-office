@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
 import { extractApiError } from "@/shared/api/client"
+import { fadeUpItem, revealCollapse, staggerContainer } from "@/shared/lib/motion"
 import { Field } from "@/shared/ui/Field"
 import { SubmitButton } from "@/shared/ui/SubmitButton"
 
@@ -45,30 +46,39 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Bem-vindo de volta" subtitle="Entre para acessar seu espaço de trabalho.">
-      <div className="space-y-5">
-        <Field
-          id="email"
-          label="Email"
-          type="email"
-          icon={Mail}
-          value={email}
-          onChange={setEmail}
-          placeholder="voce@empresa.com.br"
-          autoComplete="email"
-        />
-        <Field
-          id="password"
-          label="Senha"
-          icon={Lock}
-          revealable
-          value={password}
-          onChange={setPassword}
-          placeholder="••••••••"
-          autoComplete="current-password"
-        />
+      <motion.div
+        className="space-y-5"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div variants={fadeUpItem}>
+          <Field
+            id="email"
+            label="Email"
+            type="email"
+            icon={Mail}
+            value={email}
+            onChange={setEmail}
+            placeholder="voce@empresa.com.br"
+            autoComplete="email"
+          />
+        </motion.div>
+        <motion.div variants={fadeUpItem}>
+          <Field
+            id="password"
+            label="Senha"
+            icon={Lock}
+            revealable
+            value={password}
+            onChange={setPassword}
+            placeholder="••••••••"
+            autoComplete="current-password"
+          />
+        </motion.div>
 
         {/* Lembrar + esqueceu senha */}
-        <div className="flex items-center justify-between">
+        <motion.div variants={fadeUpItem} className="flex items-center justify-between">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-paper-500">
             <input
               type="checkbox"
@@ -84,15 +94,16 @@ export function LoginPage() {
           >
             Esqueceu a senha?
           </Link>
-        </div>
+        </motion.div>
 
         <AnimatePresence>
           {error && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink dark:text-paper"
+              variants={revealCollapse}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="flex items-center gap-2 overflow-hidden rounded-lg bg-ink/5 px-3 py-2.5 text-sm text-ink dark:text-paper"
             >
               <AlertCircle className="size-4 shrink-0" />
               {error}
@@ -100,21 +111,25 @@ export function LoginPage() {
           )}
         </AnimatePresence>
 
-        <SubmitButton
-          label="Entrar"
-          loading={mutation.isPending}
-          onClick={handleSubmit}
-        />
+        <motion.div variants={fadeUpItem}>
+          <SubmitButton
+            label="Entrar"
+            loading={mutation.isPending}
+            onClick={handleSubmit}
+          />
+        </motion.div>
 
-        <div className="flex items-center gap-3 py-1">
+        <motion.div variants={fadeUpItem} className="flex items-center gap-3 py-1">
           <div className="h-px flex-1 bg-ink/10 dark:bg-paper/10" />
           <span className="text-xs uppercase tracking-wide text-paper-400">ou</span>
           <div className="h-px flex-1 bg-ink/10 dark:bg-paper/10" />
-        </div>
+        </motion.div>
 
-        <GoogleButton label="Entrar com Google" />
+        <motion.div variants={fadeUpItem}>
+          <GoogleButton label="Entrar com Google" />
+        </motion.div>
 
-        <p className="pt-2 text-center text-sm text-paper-500">
+        <motion.p variants={fadeUpItem} className="pt-2 text-center text-sm text-paper-500">
           Não tem conta?{" "}
           <Link
             to="/register"
@@ -122,8 +137,8 @@ export function LoginPage() {
           >
             Criar agora
           </Link>
-        </p>
-      </div>
+        </motion.p>
+      </motion.div>
     </AuthLayout>
   )
 }

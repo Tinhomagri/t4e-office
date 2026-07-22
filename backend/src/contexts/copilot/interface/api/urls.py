@@ -1,7 +1,13 @@
 """Rotas do contexto copilot."""
 from django.urls import path
 
-from contexts.copilot.interface.api.marketing_views import GenerateCopyView
+from contexts.copilot.interface.api.marketing_views import (
+    BrandKitView,
+    GenerateCampaignView,
+    GenerateCopyView,
+    RepurposeView,
+    SocialAccountsView,
+)
 from contexts.copilot.interface.api.views import (
     AgentExecuteView,
     AiConfigTestView,
@@ -16,6 +22,14 @@ from contexts.copilot.interface.api.views import (
 
 urlpatterns = [
     path("generate-copy/", GenerateCopyView.as_view(), name="copilot-generate-copy"),
+    path(
+        "generate-campaign/",
+        GenerateCampaignView.as_view(),
+        name="copilot-generate-campaign",
+    ),
+    path("repurpose/", RepurposeView.as_view(), name="copilot-repurpose"),
+    path("brand-kit/", BrandKitView.as_view(), name="copilot-brand-kit"),
+    path("social-accounts/", SocialAccountsView.as_view(), name="copilot-social-accounts"),
     path("ai-config/", AiConfigView.as_view(), name="ai-config"),
     path("ai-config/test/", AiConfigTestView.as_view(), name="ai-config-test"),
     path("chat/", CopilotChatView.as_view(), name="copilot-chat"),
