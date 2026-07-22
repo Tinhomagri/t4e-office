@@ -17,13 +17,14 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { AnimatePresence, motion } from "framer-motion"
-import { Building2, CalendarClock, Plus, Target, TrendingUp } from "lucide-react"
+import { Building2, CalendarClock, Plus, Settings2, Target, TrendingUp } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { EASE, dropZone, liftCard, settleSpring, springSmooth } from "@/shared/lib/motion"
 import { Button, EmptyState, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
 
 import { DealDrawer } from "../DealDrawer"
+import { ManageStagesModal } from "../ManageStagesModal"
 import {
   useCreateDeal,
   useCustomers,
@@ -57,6 +58,7 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [openDeal, setOpenDeal] = useState<Deal | null>(null)
   const [createIn, setCreateIn] = useState<PipelineStage | null>(null)
+  const [manageStages, setManageStages] = useState(false)
 
   // Toque: exige 180ms parado antes de arrastar, senão o scroll horizontal da
   // board no mobile viraria drag acidental.
@@ -83,10 +85,36 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
-    const stageId = e.over?.id ? String(e.over.id) : null
+    const over = e.over?.id ? String(e.over.id) : null
     const deal = allDeals.find((d) => d.id === String(e.active.id))
-    if (!deal || !stageId || deal.stage_id === stageId) return
-    moveDeal.mutate({ dealId: deal.id, stageId })
+    if (!deal || !over) return
+
+    // Soltou sobre um card: entra logo acima dele, na coluna daquele card.
+    if (over.startsWith("deal:")) {
+      const targetId = over.slice(5)
+      if (targetId === deal.id) return
+      const target = allDeals.find((d) => d.id === targetId)
+      if (!target) return
+
+      // Vizinhos na coluna de destino, ignorando o card arrastado.
+      const column = allDeals
+        .filter((d) => d.stage_id === target.stage_id && d.id !== deal.id)
+        .sort((a, b) => a.rank.localeCompare(b.rank))
+      const at = column.findIndex((d) => d.id === targetId)
+      if (at === -1) return
+
+      moveDeal.mutate({
+        dealId: deal.id,
+        stageId: target.stage_id,
+        previousDealId: at > 0 ? column[at - 1].id : null,
+        nextDealId: targetId,
+      })
+      return
+    }
+
+    // Soltou na coluna: vai para o fim dela.
+    if (deal.stage_id === over) return
+    moveDeal.mutate({ dealId: deal.id, stageId: over })
   }
 
   if (loadingStages || loadingDeals) {
@@ -113,6 +141,15 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div className="flex flex-col gap-4">
       <PipelineSummary deals={allDeals} stages={columns} />
+
+      <div className="flex justify-end">
+        <button
+          onClick={() => setManageStages(true)}
+          className="chip-neutral flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors sm:py-1.5"
+        >
+          <Settings2 className="size-3.5" /> Estágios
+        </button>
+      </div>
 
       {/* Breakout de largura total, alinhado ao padding do main (4 mobile / 6 sm+). */}
       <div className="-mx-4 overflow-x-auto overscroll-x-contain px-4 pb-4 scrollbar-slim sm:-mx-6 sm:px-6">
@@ -144,6 +181,13 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
           </DragOverlay>
         </DndContext>
       </div>
+
+      <ManageStagesModal
+        open={manageStages}
+        onClose={() => setManageStages(false)}
+        workspaceId={workspaceId}
+        stages={columns}
+      />
 
       {createIn && (
         <CreateDealModal
@@ -327,6 +371,9 @@ function StageColumn({
 
 function DraggableDeal({ deal, onOpen }: { deal: Deal; onOpen: (d: Deal) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id })
+  // O card também é alvo de drop: soltar sobre outro card posiciona o negócio
+  // naquele ponto da coluna (reordenação), em vez de mandá-lo para o fim.
+  const { setNodeRef: setDropRef } = useDroppable({ id: `deal:${deal.id}` })
   // Mesmo motivo do KanbanView: com um drag ativo, a animação de layout reflui
   // os vizinhos a cada frame e "treme". Desliga durante o drag, religa no drop
   // para o card deslizar até a nova coluna com o spring de assentamento.
@@ -357,7 +404,9 @@ function DraggableDeal({ deal, onOpen }: { deal: Deal; onOpen: (d: Deal) => void
       }}
       className="cursor-grab touch-none rounded-md focus-ring active:cursor-grabbing"
     >
-      <DealCell deal={deal} />
+      <div ref={setDropRef}>
+        <DealCell deal={deal} />
+      </div>
     </motion.div>
   )
 }

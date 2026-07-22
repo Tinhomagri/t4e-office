@@ -46,14 +46,19 @@ class MoveDealStage:
             raise NotFoundError("Estágio não encontrado neste workspace.")
 
         origin = self.stage_repository.get(stage_id=deal.stage_id)
-        if origin is not None and str(origin.id) == str(target.id):
+        same_stage = origin is not None and str(origin.id) == str(target.id)
+        # Soltar o card na própria coluna é reordenação, não mudança de estágio:
+        # só recalcula o rank, sem mexer na probabilidade nem gravar histórico.
+        # Sem vizinho informado não há o que reordenar — aí continua sendo erro.
+        reordering = same_stage and (previous_deal_id is not None or next_deal_id is not None)
+        if same_stage and not reordering:
             raise ValidationError("O negócio já está neste estágio.")
 
         old_stage_name = origin.name if origin else ""
         old_probability = deal.probability
 
         # Probabilidade: preserva a edição manual do usuário
-        if origin is None or deal.probability == origin.probability_default:
+        if not reordering and (origin is None or deal.probability == origin.probability_default):
             deal.probability = target.probability_default
 
         deal.stage_id = str(target.id)
@@ -64,6 +69,9 @@ class MoveDealStage:
             next_deal_id=next_deal_id,
         )
         updated = self.deal_repository.update(deal=deal)
+
+        if reordering:
+            return updated
 
         self.history_repository.record(
             deal_id=deal_id,
