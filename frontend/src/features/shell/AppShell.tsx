@@ -1,7 +1,8 @@
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   Bell,
   Building2,
+  Menu,
   BarChart3,
   CalendarClock,
   CalendarDays,
@@ -30,7 +31,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
@@ -116,6 +117,21 @@ function initials(name?: string) {
     .join("")
 }
 
+// Reage a um media query (>= md). SSR-safe e com listener limpo.
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  )
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    const on = () => setMatches(mql.matches)
+    on()
+    mql.addEventListener("change", on)
+    return () => mql.removeEventListener("change", on)
+  }, [query])
+  return matches
+}
+
 export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -123,7 +139,18 @@ export function AppShell() {
   const clear = useAuthStore((s) => s.clear)
   const [status, setStatus] = useState<PresenceStatus>("available")
   const [agendaOpen, setAgendaOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsedRaw, setCollapsed] = useState(false)
+  const [mobileNav, setMobileNav] = useState(false)
+
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+  // No mobile a sidebar vira drawer full-width → nunca "colapsada".
+  const collapsed = isDesktop ? collapsedRaw : false
+
+  // Fecha o drawer ao navegar (mudança de rota) e ao voltar pro desktop.
+  useEffect(() => setMobileNav(false), [location.pathname])
+  useEffect(() => {
+    if (isDesktop) setMobileNav(false)
+  }, [isDesktop])
 
   const { theme, toggle: toggleTheme } = useThemeStore()
 
@@ -138,11 +165,31 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-canvas dark:bg-ink-950 text-ink dark:text-paper">
-      {/* ---------------- Sidebar (estilo Jira: clara, colapsável, "Criar" em destaque) ---------------- */}
+      {/* Backdrop do drawer mobile */}
+      <AnimatePresence>
+        {mobileNav && (
+          <motion.div
+            key="nav-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileNav(false)}
+            className="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ---------------- Sidebar (Jira: clara, colapsável; no mobile vira drawer) ---------------- */}
       <motion.aside
         animate={{ width: collapsed ? 68 : 264 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="relative hidden shrink-0 flex-col border-r border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900 md:flex"
+        className={cx(
+          "relative z-50 flex shrink-0 flex-col border-r border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900",
+          // Mobile: fixo, desliza da esquerda. Desktop: estático no fluxo.
+          "fixed inset-y-0 left-0 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] [padding-bottom:env(safe-area-inset-bottom)] md:static md:z-auto md:translate-x-0 md:!transition-none",
+          mobileNav ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0",
+        )}
       >
         <WorkspaceSwitcher collapsed={collapsed} />
 
@@ -184,7 +231,7 @@ export function AppShell() {
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cx(
-                        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors max-md:min-h-11",
                         collapsed && "justify-center px-0 py-2.5",
                         isActive
                           ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
@@ -246,7 +293,7 @@ export function AppShell() {
         <button
           onClick={() => setCollapsed((v) => !v)}
           title={collapsed ? "Expandir menu" : "Recolher menu"}
-          className="absolute -right-3 top-16 grid size-6 place-items-center rounded-full border border-paper-200 bg-paper text-paper-400 shadow-sm transition-colors hover:text-ink dark:border-ink-700 dark:bg-ink-800 dark:hover:text-paper"
+          className="absolute -right-3 top-16 hidden size-6 place-items-center rounded-full border border-paper-200 bg-paper text-paper-400 shadow-sm transition-colors hover:text-ink dark:border-ink-700 dark:bg-ink-800 dark:hover:text-paper md:grid"
         >
           {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
         </button>
@@ -255,21 +302,38 @@ export function AppShell() {
       {/* ---------------- Coluna principal ---------------- */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-paper-200 dark:border-ink-800 bg-paper/80 dark:bg-ink-900/80 px-6 backdrop-blur-xl">
-          <button className="group flex h-10 max-w-md flex-1 items-center gap-2.5 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 px-3.5 text-left text-sm text-paper-400 transition-colors hover:border-paper-300 dark:hover:border-ink-600 hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-paper-200 dark:border-ink-800 bg-paper/80 dark:bg-ink-900/80 px-3 backdrop-blur-xl sm:gap-4 sm:px-6 [padding-top:env(safe-area-inset-top)]">
+          {/* Hambúrguer — só mobile */}
+          <button
+            onClick={() => setMobileNav(true)}
+            aria-label="Abrir menu"
+            className="grid size-11 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper md:hidden"
+          >
+            <Menu className="size-5" strokeWidth={1.9} />
+          </button>
+
+          {/* Busca completa (>= sm) */}
+          <button className="group hidden h-10 max-w-md flex-1 items-center gap-2.5 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 px-3.5 text-left text-sm text-paper-400 transition-colors hover:border-paper-300 dark:hover:border-ink-600 hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring sm:flex">
             <Search className="size-4 shrink-0" strokeWidth={1.9} />
             <span className="flex-1 truncate">Buscar cards, projetos, pessoas…</span>
             <Kbd>⌘K</Kbd>
           </button>
+          {/* Busca compacta (mobile) */}
+          <button
+            aria-label="Buscar"
+            className="grid size-11 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper sm:hidden"
+          >
+            <Search className="size-5" strokeWidth={1.9} />
+          </button>
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
             <button
               onClick={cycleStatus}
               title="Clique para mudar seu status"
-              className="flex items-center gap-2 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-1.5 text-xs font-medium text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring"
+              className="flex items-center gap-2 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5 text-xs font-medium text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring sm:px-3"
             >
               <StatusDot status={status} />
-              {PRESENCE_LABEL[status]}
+              <span className="hidden sm:inline">{PRESENCE_LABEL[status]}</span>
             </button>
 
             <button
@@ -305,7 +369,7 @@ export function AppShell() {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className={cx(
             "flex-1 overflow-y-auto scrollbar-slim dark:bg-ink-950",
-            location.pathname.startsWith("/app/poker") ? "p-0" : "px-6 py-7",
+            location.pathname.startsWith("/app/poker") ? "p-0" : "px-4 py-5 sm:px-6 sm:py-7",
           )}
         >
           <div

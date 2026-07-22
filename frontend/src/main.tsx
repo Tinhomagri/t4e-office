@@ -5,6 +5,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query"
 import { AxiosError } from "axios"
+import { MotionConfig } from "framer-motion"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { RouterProvider } from "react-router-dom"
@@ -38,8 +39,12 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <Toaster />
+      {/* reducedMotion="user": respeita "reduzir movimento" do SO em toda animação
+          framer-motion (springs, layout, AnimatePresence) sem tocar cada componente. */}
+      <MotionConfig reducedMotion="user">
+        <RouterProvider router={router} />
+        <Toaster />
+      </MotionConfig>
     </QueryClientProvider>
   </StrictMode>,
 )

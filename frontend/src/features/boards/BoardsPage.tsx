@@ -16,6 +16,7 @@ import {
   Target,
   Zap,
 } from "lucide-react"
+import { AnimatePresence } from "framer-motion"
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
@@ -326,7 +327,11 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   // Drawer + modal de criação sempre montados, compartilhados por todas as views.
   const sharedModals = (
     <>
-      <CardDrawer card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} />
+      <AnimatePresence>
+        {openCard && (
+          <CardDrawer key={openCard.id} card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} />
+        )}
+      </AnimatePresence>
       <NewCardModal projectId={projectId} sprintId={newCard?.sprintId ?? null} status={newCard?.status ?? null} onClose={() => setNewCardStatus(null)} />
     </>
   )

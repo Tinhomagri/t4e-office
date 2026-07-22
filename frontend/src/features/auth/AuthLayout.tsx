@@ -1,9 +1,12 @@
 import { motion } from "framer-motion"
 import { Suspense, lazy, type ReactNode } from "react"
 
-// Cena 3D carregada sob demanda: Three.js fica fora do bundle inicial das telas.
+import { EASE } from "@/shared/lib/motion"
+
+// Cena WebGL (túnel wireframe) carregada sob demanda: Three.js fica fora do
+// bundle inicial das telas.
 const Scene = lazy(() =>
-  import("@/three/Scene").then((m) => ({ default: m.Scene })),
+  import("@/three/LoginScene").then((m) => ({ default: m.LoginScene })),
 )
 
 interface AuthLayoutProps {
@@ -26,13 +29,13 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           </Suspense>
         </div>
 
-        {/* Grade tracejada animada, reforça o tom técnico/P&B */}
+        {/* Vinheta radial: escurece as bordas → foco no centro do túnel e
+            legibilidade do branding sobreposto. */}
         <div
-          className="pointer-events-none absolute inset-0 animate-grid-pan opacity-[0.07]"
+          className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage:
-              "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
+            background:
+              "radial-gradient(120% 90% at 50% 45%, transparent 30%, rgba(10,11,13,0.75) 100%)",
           }}
         />
 
@@ -44,21 +47,33 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
               T4E OFFICE
             </span>
           </div>
-          <div className="max-w-md">
+          <motion.div
+            className="max-w-md"
+            initial="hidden"
+            animate="show"
+            variants={{ show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } } }}
+          >
             <motion.h2
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              variants={{
+                hidden: { opacity: 0, y: 16 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: EASE } },
+              }}
               className="text-4xl font-extrabold leading-tight text-paper"
             >
               O trabalho e a equipe{" "}
               <span className="text-shimmer animate-shimmer">no mesmo espaço.</span>
             </motion.h2>
-            <p className="mt-4 text-sm leading-relaxed text-paper-400">
+            <motion.p
+              variants={{
+                hidden: { opacity: 0, y: 12 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
+              }}
+              className="mt-4 text-sm leading-relaxed text-paper-400"
+            >
               Gestão de projetos com presença real e uma camada de inteligência
               que reduz o trabalho sobre o trabalho.
-            </p>
-          </div>
+            </motion.p>
+          </motion.div>
           <span className="text-xs text-paper-500">© T4E Group</span>
         </div>
       </div>

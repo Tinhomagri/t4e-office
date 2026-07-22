@@ -1,3 +1,4 @@
+import { motion } from "framer-motion"
 import {
   Calendar,
   Check,
@@ -195,14 +196,24 @@ export function CardDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center p-0 sm:p-4">
-      <div
-        className="absolute inset-0 animate-fade-in bg-ink-950/60 backdrop-blur-sm pointer-events-auto"
+      <motion.div
+        className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm pointer-events-auto"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         onMouseDown={(e) => {
           // Fecha apenas se o clique for realmente no overlay (não em inputs/datepicker)
           if (e.target === e.currentTarget) onClose()
         }}
       />
-      <div className="relative z-10 flex h-full w-full max-w-5xl animate-slide-in-right flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl">
+      <motion.div
+        // Painel "puxado" da direita com leve escala — pega e assenta (tátil).
+        initial={{ opacity: 0, x: 48, scale: 0.985 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        exit={{ opacity: 0, x: 48, scale: 0.985 }}
+        transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
+        className="relative z-10 flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl will-change-transform">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2.5 bg-white dark:bg-ink-900">
             <div className="flex items-center gap-2 flex-wrap">
@@ -460,7 +471,7 @@ export function CardDrawer({
             />
           </aside>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
