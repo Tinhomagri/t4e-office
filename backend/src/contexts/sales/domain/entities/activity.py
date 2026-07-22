@@ -30,6 +30,10 @@ class DealActivity:
     google_event_id: str = ""  # reuniões criadas na Agenda Google
     meet_url: str = ""
     created_at: datetime | None = None
+    # Campos desnormalizados só para exibição (mesmo padrão de DealHistory):
+    # evitam N+1 no feed de atividades, que mostra autor e negócio de origem.
+    author_name: str = ""
+    deal_title: str = ""
 
     def __post_init__(self) -> None:
         if not self.content.strip():

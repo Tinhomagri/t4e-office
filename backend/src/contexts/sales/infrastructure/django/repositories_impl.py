@@ -118,6 +118,8 @@ def _activity_to_entity(row: DealActivityModel) -> DealActivity:
         google_event_id=row.google_event_id,
         meet_url=row.meet_url,
         created_at=row.created_at,
+        author_name=row.author.full_name if row.author_id else "",
+        deal_title=row.deal.title if row.deal_id else "",
     )
 
 
@@ -402,7 +404,11 @@ class DjangoActivityRepository(ActivityRepository):
         return _activity_to_entity(row) if row else None
 
     def list_by_deal(self, *, deal_id: str) -> list[DealActivity]:
-        rows = DealActivityModel.objects.filter(deal_id=deal_id)
+        # select_related: o mapper lê autor e negócio (campos desnormalizados
+        # de exibição) — sem isso cada linha dispara duas queries extras.
+        rows = DealActivityModel.objects.filter(deal_id=deal_id).select_related(
+            "author", "deal"
+        )
         return [_activity_to_entity(r) for r in rows]
 
     def list_by_workspace(
@@ -413,7 +419,9 @@ class DjangoActivityRepository(ActivityRepository):
         assignee_id: str | None = None,
         pending_only: bool = False,
     ) -> list[DealActivity]:
-        qs = DealActivityModel.objects.filter(deal__workspace_id=workspace_id)
+        qs = DealActivityModel.objects.filter(
+            deal__workspace_id=workspace_id
+        ).select_related("author", "deal")
         if kind:
             qs = qs.filter(kind=kind)
         if assignee_id:

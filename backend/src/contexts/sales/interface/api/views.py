@@ -196,6 +196,8 @@ def _ser_activity(a) -> dict:
         "google_event_id": a.google_event_id,
         "meet_url": a.meet_url,
         "created_at": a.created_at,
+        "author_name": a.author_name,
+        "deal_title": a.deal_title,
     }
 
 

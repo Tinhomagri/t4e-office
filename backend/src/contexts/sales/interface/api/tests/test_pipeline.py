@@ -429,3 +429,23 @@ def test_lista_agregada_de_atividades_do_workspace(scenario):
     other = APIClient()
     other.force_authenticate(user=scenario["outsider"])
     assert other.get(f"/api/sales/activities/?workspace_id={ws.id}").status_code == 403
+
+
+def test_atividade_expoe_autor_e_negocio_para_exibicao(scenario):
+    """O feed precisa dizer de qual negócio e de quem é a atividade.
+
+    São campos desnormalizados: sem eles o "Meu Dia" e a aba Atividades
+    mostram a tarefa solta, sem o contexto que o vendedor usa para agir.
+    """
+    ws = scenario["workspace"]
+    client = scenario["client"]
+    deal = _deal(scenario)
+    client.post(
+        f"/api/sales/deals/{deal.id}/activities/",
+        {"kind": "note", "content": "Ligou hoje"},
+        format="json",
+    )
+
+    atividade = client.get(f"/api/sales/activities/?workspace_id={ws.id}").json()[0]
+    assert atividade["deal_title"] == deal.title
+    assert atividade["author_name"] == scenario["owner"].full_name
