@@ -6,6 +6,7 @@ import type {
   ActivityActionResult,
   Contact,
   CreateActivityInput,
+  CreateStageInput,
   CreateContactInput,
   CreateCustomerInput,
   CreateDealInput,
@@ -37,6 +38,22 @@ export async function updateStage(
 ): Promise<PipelineStage> {
   const { data } = await api.patch<PipelineStage>(`/sales/stages/${stageId}/`, input)
   return data
+}
+
+export async function createStage(
+  workspaceId: string,
+  input: CreateStageInput,
+): Promise<PipelineStage> {
+  const { data } = await api.post<PipelineStage>("/sales/stages/", {
+    workspace_id: workspaceId,
+    ...input,
+  })
+  return data
+}
+
+/** Remove o estágio. O backend recusa (409) se ainda houver negócios nele. */
+export async function deleteStage(stageId: string): Promise<void> {
+  await api.delete(`/sales/stages/${stageId}/`)
 }
 
 // ---- Clientes ----
@@ -121,15 +138,20 @@ export async function deleteDeal(dealId: string): Promise<void> {
   await api.delete(`/sales/deals/${dealId}/`)
 }
 
-/** Move o deal de estágio (o backend decide a probabilidade e grava histórico). */
+/**
+ * Move o deal de estágio (o backend decide a probabilidade e grava histórico).
+ * Os vizinhos posicionam o card na coluna; sem eles ele vai para o fim. Informar
+ * vizinho com o mesmo estágio de origem é reordenação — não gera histórico.
+ */
 export async function moveDealStage(
   dealId: string,
   stageId: string,
-  rank?: string,
+  neighbors: { previousDealId?: string | null; nextDealId?: string | null } = {},
 ): Promise<Deal> {
   const { data } = await api.post<Deal>(`/sales/deals/${dealId}/move/`, {
     stage_id: stageId,
-    ...(rank ? { rank } : {}),
+    ...(neighbors.previousDealId ? { previous_deal_id: neighbors.previousDealId } : {}),
+    ...(neighbors.nextDealId ? { next_deal_id: neighbors.nextDealId } : {}),
   })
   return data
 }

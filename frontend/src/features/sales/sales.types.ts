@@ -44,6 +44,13 @@ export interface PipelineStage {
   kind: StageKind
 }
 
+export interface CreateStageInput {
+  name: string
+  color?: string
+  order?: number
+  probability_default?: number
+}
+
 export interface Deal {
   id: string
   workspace_id: string

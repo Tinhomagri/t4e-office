@@ -12,7 +12,9 @@ import type {
   CreateContactInput,
   CreateCustomerInput,
   CreateDealInput,
+  CreateStageInput,
   Deal,
+  PipelineStage,
   LoseDealInput,
   UpdateContactInput,
   UpdateCustomerInput,
@@ -48,6 +50,44 @@ export function useStages(workspaceId: string | null) {
     queryFn: async () => sortStages(await salesApi.listStages(workspaceId!)),
     enabled: !!workspaceId,
     staleTime: 60_000,
+  })
+}
+
+export function useCreateStage(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateStageInput) => salesApi.createStage(workspaceId!, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: salesKeys.stages(workspaceId) })
+      toast.success("Estágio criado")
+    },
+  })
+}
+
+export function useUpdateStage(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      stageId,
+      input,
+    }: {
+      stageId: string
+      input: Partial<Pick<PipelineStage, "name" | "color" | "order" | "probability_default">>
+    }) => salesApi.updateStage(stageId, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: salesKeys.stages(workspaceId) }),
+  })
+}
+
+export function useDeleteStage(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (stageId: string) => salesApi.deleteStage(stageId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: salesKeys.stages(workspaceId) })
+      // Um estágio a menos redistribui as colunas — o board precisa reler.
+      qc.invalidateQueries({ queryKey: ["sales-deals", workspaceId] })
+      toast.success("Estágio removido")
+    },
   })
 }
 
@@ -178,8 +218,17 @@ export function useMoveDealStage(workspaceId: string | null) {
   const key = salesKeys.deals(workspaceId)
 
   return useMutation({
-    mutationFn: ({ dealId, stageId }: { dealId: string; stageId: string; rank?: string }) =>
-      salesApi.moveDealStage(dealId, stageId),
+    mutationFn: ({
+      dealId,
+      stageId,
+      previousDealId,
+      nextDealId,
+    }: {
+      dealId: string
+      stageId: string
+      previousDealId?: string | null
+      nextDealId?: string | null
+    }) => salesApi.moveDealStage(dealId, stageId, { previousDealId, nextDealId }),
     onMutate: async ({ dealId, stageId }) => {
       await qc.cancelQueries({ queryKey: key })
       const previous = qc.getQueryData<Deal[]>(key)

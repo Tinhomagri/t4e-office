@@ -129,6 +129,7 @@ def test_move_estagio_preserva_probabilidade_editada(scenario):
 
 
 def test_move_para_o_mesmo_estagio_falha(scenario):
+    """Sem vizinho informado não há reordenação — continua sendo erro."""
     ws = scenario["workspace"]
     deal = _deal(scenario)
     resp = scenario["client"].post(
@@ -137,6 +138,29 @@ def test_move_para_o_mesmo_estagio_falha(scenario):
         format="json",
     )
     assert resp.status_code == 400
+
+
+def test_reordena_dentro_do_mesmo_estagio(scenario):
+    """Soltar o card na própria coluna reordena: muda o rank e nada mais.
+
+    Reordenar é organização visual do vendedor, não avanço no funil — por isso
+    não mexe na probabilidade nem gera entrada de histórico.
+    """
+    ws = scenario["workspace"]
+    lead = _stage(ws, "lead")
+    primeiro = _deal(scenario, title="Primeiro", rank="a", probability=42)
+    ultimo = _deal(scenario, title="Último", rank="z")
+
+    resp = scenario["client"].post(
+        f"/api/sales/deals/{primeiro.id}/move/",
+        {"stage_id": str(lead.id), "previous_deal_id": str(ultimo.id)},
+        format="json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["rank"] > ultimo.rank
+    assert resp.json()["probability"] == 42
+    assert DealHistoryModel.objects.filter(deal=primeiro, field="stage").count() == 0
 
 
 # ── Ganhar ───────────────────────────────────────────────────────────────────
