@@ -17,14 +17,16 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { AnimatePresence, motion } from "framer-motion"
-import { Building2, CalendarClock, Plus, Settings2, Target, TrendingUp } from "lucide-react"
+import { Building2, CalendarClock, Plus, Settings2, Target, Timer } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { EASE, dropZone, liftCard, settleSpring, springSmooth } from "@/shared/lib/motion"
+import { EASE, dropZone, liftCard, settleSpring } from "@/shared/lib/motion"
+import { FilterChip, SearchField, Toolbar } from "@/shared/ui/command-center"
 import { Button, EmptyState, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
 
 import { DealDrawer } from "../DealDrawer"
 import { ManageStagesModal } from "../ManageStagesModal"
+import { usePipelineMetrics, type StageMetrics } from "../sales.metrics"
 import {
   useCreateDeal,
   useCustomers,
@@ -55,10 +57,14 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
   const { data: customers } = useCustomers(workspaceId)
   const moveDeal = useMoveDealStage(workspaceId)
 
+  const { data: metrics } = usePipelineMetrics(workspaceId)
+
   const [activeId, setActiveId] = useState<string | null>(null)
   const [openDeal, setOpenDeal] = useState<Deal | null>(null)
   const [createIn, setCreateIn] = useState<PipelineStage | null>(null)
   const [manageStages, setManageStages] = useState(false)
+  const [query, setQuery] = useState("")
+  const [ownerFilter, setOwnerFilter] = useState<string | null>(null)
 
   // Toque: exige 180ms parado antes de arrastar, senão o scroll horizontal da
   // board no mobile viraria drag acidental.
@@ -80,6 +86,39 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
     }
     return max
   }, [columns, allDeals])
+
+  // Métricas por estágio (idade média, negócios parados) vindas do backend.
+  const metricsByStage = useMemo(() => {
+    const map: Record<string, StageMetrics> = {}
+    for (const entry of metrics?.by_stage ?? []) map[entry.stage_id] = entry
+    return map
+  }, [metrics])
+
+  // Os filtros afetam só o que a coluna mostra — totais e barras continuam
+  // refletindo o funil inteiro, senão o "quanto tem no funil" mentiria.
+  const visibleDeals = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q && !ownerFilter) return allDeals
+    return allDeals.filter((deal) => {
+      if (ownerFilter && (deal.owner_id ?? "none") !== ownerFilter) return false
+      if (!q) return true
+      return (
+        deal.title.toLowerCase().includes(q) ||
+        deal.customer_name.toLowerCase().includes(q) ||
+        deal.source.toLowerCase().includes(q)
+      )
+    })
+  }, [allDeals, query, ownerFilter])
+
+  const owners = useMemo(
+    () =>
+      (metrics?.by_owner ?? []).map((o) => ({
+        id: o.owner_id ?? "none",
+        name: o.name,
+        count: o.open_count,
+      })),
+    [metrics],
+  )
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
 
@@ -140,16 +179,42 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <PipelineSummary deals={allDeals} stages={columns} />
-
-      <div className="flex justify-end">
-        <button
-          onClick={() => setManageStages(true)}
-          className="chip-neutral flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors sm:py-1.5"
-        >
-          <Settings2 className="size-3.5" /> Estágios
-        </button>
-      </div>
+      <Toolbar>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar negócio, cliente ou origem…"
+          className="min-w-[220px]"
+        />
+        {owners.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {owners.map((owner) => (
+              <FilterChip
+                key={owner.id}
+                label={owner.name}
+                count={owner.count}
+                active={ownerFilter === owner.id}
+                onClick={() => setOwnerFilter((v) => (v === owner.id ? null : owner.id))}
+              />
+            ))}
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {(query || ownerFilter) && (
+            <span className="text-[11px] tabular text-paper-500">
+              {visibleDeals.length} de {allDeals.length}
+            </span>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            icon={<Settings2 className="size-3.5" />}
+            onClick={() => setManageStages(true)}
+          >
+            Estágios
+          </Button>
+        </div>
+      </Toolbar>
 
       {/* Breakout de largura total, alinhado ao padding do main (4 mobile / 6 sm+). */}
       <div className="-mx-4 overflow-x-auto overscroll-x-contain px-4 pb-4 scrollbar-slim sm:-mx-6 sm:px-6">
@@ -159,7 +224,9 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
               <StageColumn
                 key={stage.id}
                 stage={stage}
-                deals={allDeals.filter((d) => d.stage_id === stage.id)}
+                deals={visibleDeals.filter((d) => d.stage_id === stage.id)}
+                totals={columnTotals(allDeals.filter((d) => d.stage_id === stage.id))}
+                metrics={metricsByStage[stage.id]}
                 maxWeighted={maxWeighted}
                 onOpen={setOpenDeal}
                 onCreate={() => setCreateIn(stage)}
@@ -213,85 +280,29 @@ export function PipelineView({ workspaceId }: { workspaceId: string | null }) {
   )
 }
 
-// ─── Resumo do funil ─────────────────────────────────────────────────────────
-
-function PipelineSummary({ deals, stages }: { deals: Deal[]; stages: PipelineStage[] }) {
-  const openStageIds = new Set(stages.filter((s) => s.kind === "open").map((s) => s.id))
-  const open = deals.filter((d) => openStageIds.has(d.stage_id))
-  const { count, total, weighted } = columnTotals(open)
-
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <SummaryTile label="Negócios em aberto" value={String(count)} icon={<Target className="size-4" />} />
-      <SummaryTile label="Valor total no funil" value={formatMoney(total)} icon={<TrendingUp className="size-4" />} />
-      <SummaryTile
-        label="Previsão ponderada"
-        value={formatMoney(weighted)}
-        icon={<TrendingUp className="size-4" />}
-        highlight
-      />
-    </div>
-  )
-}
-
-function SummaryTile({
-  label,
-  value,
-  icon,
-  highlight = false,
-}: {
-  label: string
-  value: string
-  icon: React.ReactNode
-  highlight?: boolean
-}) {
-  return (
-    <div
-      className={cx(
-        "rounded-2xl border px-4 py-3",
-        highlight
-          ? "border-brand-200 bg-brand-50/60 dark:border-brand-900 dark:bg-brand-900/20"
-          : "border-paper-200 bg-paper dark:border-ink-700 dark:bg-ink-900",
-      )}
-    >
-      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-paper-500">
-        {icon}
-        {label}
-      </div>
-      {/* key = valor: remonta e reanima quando o número muda (feedback do drop). */}
-      <motion.p
-        key={value}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={springSmooth}
-        className={cx(
-          "mt-1 text-xl font-bold tabular tracking-tight",
-          highlight ? "text-brand-700 dark:text-brand-300" : "text-ink dark:text-paper",
-        )}
-      >
-        {value}
-      </motion.p>
-    </div>
-  )
-}
-
 // ─── Coluna ──────────────────────────────────────────────────────────────────
 
 function StageColumn({
   stage,
   deals,
+  totals,
+  metrics,
   maxWeighted,
   onOpen,
   onCreate,
 }: {
   stage: PipelineStage
+  /** Negócios já filtrados — é o que a coluna renderiza. */
   deals: Deal[]
+  /** Totais da coluna inteira, sem filtro: o funil não encolhe com a busca. */
+  totals: { count: number; total: number; weighted: number }
+  metrics?: StageMetrics
   maxWeighted: number
   onOpen: (deal: Deal) => void
   onCreate: () => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
-  const { count, total, weighted } = columnTotals(deals)
+  const { count, total, weighted } = totals
   const ratio = maxWeighted > 0 ? weighted / maxWeighted : 0
 
   return (
@@ -337,6 +348,24 @@ function StageColumn({
             ~{formatMoney(weighted)}
           </span>
         </div>
+
+        {/* Sinais de saúde da coluna: idade média e negócios parados. */}
+        {metrics && stage.kind === "open" && metrics.count > 0 && (
+          <div className="mt-1 flex items-center gap-2 text-[10px] text-paper-500">
+            <span className="inline-flex items-center gap-1" title="Idade média sem movimentação">
+              <Timer className="size-3" />
+              {metrics.avg_age_days}d
+            </span>
+            {metrics.stale_count > 0 && (
+              <span
+                className="rounded bg-warning/15 px-1.5 py-0.5 font-medium text-warning"
+                title="Negócios parados há 14 dias ou mais"
+              >
+                {metrics.stale_count} parado{metrics.stale_count > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Barra de peso: quanto essa coluna representa da maior previsão. */}
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-paper-200 dark:bg-ink-800">

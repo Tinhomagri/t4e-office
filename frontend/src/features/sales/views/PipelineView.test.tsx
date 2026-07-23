@@ -94,9 +94,10 @@ describe("<PipelineView />", () => {
     expect(await screen.findByText("Lead")).toBeInTheDocument()
     expect(screen.getByText("Proposta")).toBeInTheDocument()
 
-    // Soma ponderada do funil: 10000×10% + 40000×50% = 21.000
-    expect(screen.getByText("Previsão ponderada")).toBeInTheDocument()
-    expect(screen.getAllByText(/21\.000/).length).toBeGreaterThan(0)
+    // Cada coluna mostra a soma do valor e a soma ponderada. Proposta:
+    // 40.000 de valor e 40.000×50% = 20.000 ponderados.
+    expect(screen.getAllByText(/40\.000/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/20\.000/).length).toBeGreaterThan(0)
   })
 
   it("renderiza os cards dos negócios em suas colunas", async () => {

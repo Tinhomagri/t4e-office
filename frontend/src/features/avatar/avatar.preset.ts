@@ -3,10 +3,16 @@
 // campo a campo, com mensagens específicas por erro.
 import {
   ACCESSORIES,
+  BEARDS,
   BOTTOMS,
+  BROWS,
+  BUILDS,
   DEFAULT_AVATAR,
+  EYE_SHAPES,
+  FACE_SHAPES,
   HAIR_STYLES,
   HANDHELDS,
+  MOUTHS,
   PAL,
   SHOES,
   TOPS,
@@ -37,6 +43,18 @@ const INDEX_LIMITS: Record<string, number> = {
   hand: HANDHELDS.length,
 }
 
+// Traços adicionados depois do formato v1. São OPCIONAIS: um preset salvo
+// antes deles continua válido e ganha o padrão via normalizeConfig.
+const OPTIONAL_INDEX_LIMITS: Record<string, number> = {
+  build: BUILDS.length,
+  faceShape: FACE_SHAPES.length,
+  eyes: EYE_SHAPES.length,
+  eyeColor: PAL.eye.length,
+  brow: BROWS.length,
+  mouth: MOUTHS.length,
+  beard: BEARDS.length,
+}
+
 export interface ValidationResult {
   ok: boolean
   errors: string[]
@@ -62,6 +80,13 @@ export function validateConfig(raw: unknown): ValidationResult {
       errors.push(`${field} deve ser inteiro entre 0 e ${limit - 1}`)
     }
   }
+  for (const [field, limit] of Object.entries(OPTIONAL_INDEX_LIMITS)) {
+    const v = obj[field]
+    if (v === undefined) continue
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v >= limit) {
+      errors.push(`${field} deve ser inteiro entre 0 e ${limit - 1}`)
+    }
+  }
   if (errors.length > 0) return { ok: false, errors }
 
   // Reconstrói só os campos conhecidos (descarta extras de versões futuras).
@@ -72,6 +97,11 @@ export function validateConfig(raw: unknown): ValidationResult {
   }
   for (const field of Object.keys(INDEX_LIMITS)) {
     ;(cfg as unknown as Record<string, number>)[field] = obj[field] as number
+  }
+  for (const field of Object.keys(OPTIONAL_INDEX_LIMITS)) {
+    if (obj[field] !== undefined) {
+      ;(cfg as unknown as Record<string, number>)[field] = obj[field] as number
+    }
   }
   return { ok: true, errors: [], config: cfg }
 }

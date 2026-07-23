@@ -1,6 +1,7 @@
 """Rotas do contexto sales (prefixo /api/sales/)."""
 from django.urls import path
 
+from contexts.sales.interface.api.metrics_views import PipelineMetricsView
 from contexts.sales.interface.api.views import (
     ContactDetailView,
     ContactListCreateView,
@@ -41,4 +42,5 @@ urlpatterns = [
     path("activities/<uuid:activity_id>/", DealActivityDetailView.as_view(), name="sales-activity-detail"),
     # Resumo do funil
     path("pipeline/summary/", PipelineSummaryView.as_view(), name="sales-pipeline-summary"),
+    path("pipeline/metrics/", PipelineMetricsView.as_view(), name="sales-pipeline-metrics"),
 ]

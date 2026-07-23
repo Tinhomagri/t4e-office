@@ -1,6 +1,11 @@
 """Rotas do contexto integrations — /api/integrations/."""
 from django.urls import path
 
+from contexts.integrations.interface.api.insight_views import (
+    AccountsHealthView,
+    AnalyticsTimeseriesView,
+    QueueStatsView,
+)
 from contexts.integrations.interface.api.oauth_views import (
     OAuthCallbackView,
     OAuthCredentialsView,
@@ -42,6 +47,17 @@ urlpatterns = [
         name="integrations-post-publish",
     ),
     path("analytics/", AnalyticsView.as_view(), name="integrations-analytics"),
+    path(
+        "analytics/timeseries/",
+        AnalyticsTimeseriesView.as_view(),
+        name="integrations-analytics-timeseries",
+    ),
+    path("queue/stats/", QueueStatsView.as_view(), name="integrations-queue-stats"),
+    path(
+        "accounts/health/",
+        AccountsHealthView.as_view(),
+        name="integrations-accounts-health",
+    ),
     path("import/preview/", ImportPreviewView.as_view(), name="integrations-import-preview"),
     path("import/execute/", ImportExecuteView.as_view(), name="integrations-import-execute"),
 ]

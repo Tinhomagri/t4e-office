@@ -22,9 +22,29 @@ import { decodeShare, encodeShare } from "./avatar.preset"
 import { CASCADE_FIELDS, randomAvatar } from "./avatar.random"
 import { useAvatarStore } from "./avatar.store"
 import {
-  ACCESSORIES, ANIM_LABELS, BOTTOMS, DIRS, HAIR_STYLES, HANDHELDS, PAL, SHOES, TOPS,
+  ACCESSORIES, ANIM_LABELS, BEARDS, BOTTOMS, BROWS, BUILDS, DIRS, EYE_SHAPES,
+  FACE_SHAPES, HAIR_STYLES, HANDHELDS, MOUTHS, PAL, SHOES, TOPS,
   type AvatarConfig, type Direction,
 } from "./avatar.types"
+
+// Abas do painel: com ~20 controles, uma lista única vira rolagem infinita.
+const TABS = [
+  { id: "corpo", label: "Corpo" },
+  { id: "rosto", label: "Rosto" },
+  { id: "cabelo", label: "Cabelo" },
+  { id: "roupa", label: "Roupas" },
+  { id: "extra", label: "Extras" },
+] as const
+type TabId = (typeof TABS)[number]["id"]
+
+// Quais campos cada aba sorteia no botão "aleatorizar esta aba".
+const TAB_FIELDS: Record<TabId, (keyof AvatarConfig)[]> = {
+  corpo: ["gender", "build", "skin"],
+  rosto: ["faceShape", "eyes", "eyeColor", "brow", "mouth", "beard"],
+  cabelo: ["hairStyle", "hair"],
+  roupa: ["top", "shirt", "bottom", "pants", "shoeType", "shoe"],
+  extra: ["acc", "hand"],
+}
 
 const ANIM_PREVIEW = ["idle", "walk", "run", "wave", "dance", "jamal", "type", "celebrate"]
 const ZOOMS = [1, 2, 4, 8] as const
@@ -58,6 +78,7 @@ export function AvatarLabPage() {
   const [savedFlash, setSavedFlash] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [tab, setTab] = useState<TabId>("corpo")
   const cascading = useRef(false)
 
   // ?avatar=<base64> — hidrata direto de um link compartilhado.
@@ -100,6 +121,13 @@ export function AvatarLabPage() {
         }
       }, i * 80)
     })
+  }
+
+  // Sorteia só os campos da aba aberta — mexer no rosto sem perder a roupa.
+  const randomizeTab = () => {
+    const target = randomAvatar(undefined, config.name)
+    for (const field of TAB_FIELDS[tab]) setTransient(field, target[field] as never)
+    commit()
   }
 
   const handleShare = async () => {
@@ -186,6 +214,17 @@ export function AvatarLabPage() {
             <AvatarCanvas config={config} anim={anim} dir={dir} scale={zoom} className="block" />
           </div>
 
+          {/* As 4 direções rodando ao mesmo tempo: é onde se percebe se o
+              cabelo fecha a nuca e se a passada bate nos dois perfis. */}
+          <div className="flex items-end justify-around rounded-2xl border border-ink/10 bg-ink px-2 py-3 dark:border-ink-700">
+            {DIRS.map((d) => (
+              <div key={d} className="flex flex-col items-center gap-1">
+                <AvatarCanvas config={config} anim={anim} dir={d} scale={3} className="block" />
+                <span className="text-[10px] capitalize text-paper-400">{d}</span>
+              </div>
+            ))}
+          </div>
+
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-paper-500">Zoom</p>
             <div className="flex gap-2">
@@ -247,41 +286,96 @@ export function AvatarLabPage() {
         </div>
 
         {/* Customização */}
-        <div className="grid grid-cols-1 gap-5 rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900 p-5 sm:grid-cols-2">
-          <Field label="Gênero">
-            <div className="flex gap-2">
-              {(["male", "female"] as const).map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setField("gender", g)}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                    config.gender === g ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
-                  }`}
-                >
-                  {g === "male" ? "Homem" : "Mulher"}
-                </button>
-              ))}
-            </div>
-          </Field>
-          <Field label="Nome do avatar">
-            <input
-              value={config.name}
-              onChange={(e) => setField("name", e.target.value)}
-              className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-ink/40"
-            />
-          </Field>
+        <div className="rounded-2xl border border-ink/10 bg-paper dark:bg-ink-900">
+          <div className="flex flex-wrap items-center gap-1 border-b border-ink/10 px-3 py-2 dark:border-ink-700">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                  tab === t.id
+                    ? "bg-ink text-paper"
+                    : "text-paper-600 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+            <button
+              onClick={randomizeTab}
+              title="Sortear apenas esta aba"
+              className="ml-auto flex items-center gap-1.5 rounded-lg border border-ink/15 px-2.5 py-1.5 text-xs text-paper-600 transition-colors hover:text-ink dark:hover:text-paper"
+            >
+              <Dices className="size-3.5" /> Sortear aba
+            </button>
+          </div>
 
-          <Swatches label="Tom de pele" colors={PAL.skin} value={config.skin} onPick={(i) => setField("skin", i)} />
-          <Swatches label="Cabelo · cor" colors={PAL.hair} value={config.hair} onPick={(i) => setField("hair", i)} />
-          <Opts label="Cabelo · estilo" items={HAIR_STYLES} value={config.hairStyle} onPick={(i) => setField("hairStyle", i)} />
-          <Opts label="Torso · tipo" items={TOPS} value={config.top} onPick={(i) => setField("top", i)} />
-          <Swatches label="Torso · cor" colors={PAL.shirt} value={config.shirt} onPick={(i) => setField("shirt", i)} />
-          <Opts label="Inferior · tipo" items={BOTTOMS} value={config.bottom} onPick={(i) => setField("bottom", i)} />
-          <Swatches label="Inferior · cor" colors={PAL.pants} value={config.pants} onPick={(i) => setField("pants", i)} />
-          <Opts label="Calçado · tipo" items={SHOES} value={config.shoeType} onPick={(i) => setField("shoeType", i)} />
-          <Swatches label="Calçado · cor" colors={PAL.shoe} value={config.shoe} onPick={(i) => setField("shoe", i)} />
-          <Opts label="Acessório" items={ACCESSORIES} value={config.acc} onPick={(i) => setField("acc", i)} />
-          <Opts label="Item na mão" items={HANDHELDS} value={config.hand} onPick={(i) => setField("hand", i)} />
+          <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
+            {tab === "corpo" && (
+              <>
+                <Field label="Gênero">
+                  <div className="flex gap-2">
+                    {(["male", "female"] as const).map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setField("gender", g)}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          config.gender === g ? "border-ink bg-ink text-paper" : "border-ink/15 text-paper-600 hover:text-ink dark:hover:text-paper"
+                        }`}
+                      >
+                        {g === "male" ? "Homem" : "Mulher"}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Nome do avatar">
+                  <input
+                    value={config.name}
+                    onChange={(e) => setField("name", e.target.value)}
+                    className="w-full rounded-lg border border-ink/15 bg-paper-100 dark:bg-ink-800 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-ink/40"
+                  />
+                </Field>
+                <Opts label="Compleição" items={BUILDS} value={config.build ?? 1} onPick={(i) => setField("build", i)} />
+                <Swatches label="Tom de pele" colors={PAL.skin} value={config.skin} onPick={(i) => setField("skin", i)} />
+              </>
+            )}
+
+            {tab === "rosto" && (
+              <>
+                <Opts label="Formato do rosto" items={FACE_SHAPES} value={config.faceShape ?? 0} onPick={(i) => setField("faceShape", i)} />
+                <Opts label="Olhos · formato" items={EYE_SHAPES} value={config.eyes ?? 0} onPick={(i) => setField("eyes", i)} />
+                <Swatches label="Olhos · cor" colors={PAL.eye} value={config.eyeColor ?? 0} onPick={(i) => setField("eyeColor", i)} />
+                <Opts label="Sobrancelha" items={BROWS} value={config.brow ?? 0} onPick={(i) => setField("brow", i)} />
+                <Opts label="Boca" items={MOUTHS} value={config.mouth ?? 0} onPick={(i) => setField("mouth", i)} />
+                <Opts label="Barba" items={BEARDS} value={config.beard ?? 0} onPick={(i) => setField("beard", i)} />
+              </>
+            )}
+
+            {tab === "cabelo" && (
+              <>
+                <Opts label="Estilo" items={HAIR_STYLES} value={config.hairStyle} onPick={(i) => setField("hairStyle", i)} />
+                <Swatches label="Cor" colors={PAL.hair} value={config.hair} onPick={(i) => setField("hair", i)} />
+              </>
+            )}
+
+            {tab === "roupa" && (
+              <>
+                <Opts label="Torso · tipo" items={TOPS} value={config.top} onPick={(i) => setField("top", i)} />
+                <Swatches label="Torso · cor" colors={PAL.shirt} value={config.shirt} onPick={(i) => setField("shirt", i)} />
+                <Opts label="Inferior · tipo" items={BOTTOMS} value={config.bottom} onPick={(i) => setField("bottom", i)} />
+                <Swatches label="Inferior · cor" colors={PAL.pants} value={config.pants} onPick={(i) => setField("pants", i)} />
+                <Opts label="Calçado · tipo" items={SHOES} value={config.shoeType} onPick={(i) => setField("shoeType", i)} />
+                <Swatches label="Calçado · cor" colors={PAL.shoe} value={config.shoe} onPick={(i) => setField("shoe", i)} />
+              </>
+            )}
+
+            {tab === "extra" && (
+              <>
+                <Opts label="Acessório" items={ACCESSORIES} value={config.acc} onPick={(i) => setField("acc", i)} />
+                <Opts label="Item na mão" items={HANDHELDS} value={config.hand} onPick={(i) => setField("hand", i)} />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
