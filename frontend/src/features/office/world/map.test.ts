@@ -35,11 +35,33 @@ describe("assentos", () => {
     for (const s of lounge) expect(s.kind).not.toBe("pc")
   })
 
-  it("nenhum assento cai em tile bloqueado", () => {
+  it("todo assento está dentro dos limites do mapa", () => {
+    for (const seat of map.seats) {
+      expect(seat.x).toBeGreaterThan(0)
+      expect(seat.y).toBeGreaterThan(0)
+      expect(seat.x).toBeLessThan(map.width)
+      expect(seat.y).toBeLessThan(map.height)
+    }
+  })
+
+  it("todo assento é alcançável a pé", () => {
+    // O tile do assento é sólido de propósito — é a cadeira, e cadeira atravessável
+    // seria pior. O que precisa valer é existir chão livre dentro do raio de
+    // interação (26px, engine.ts:298), senão a cadeira fica inacessível.
     for (const seat of map.seats) {
       const tx = Math.floor(seat.x / 16)
       const ty = Math.floor(seat.y / 16)
-      expect(map.collision[ty * map.cols + tx]).toBe(0)
+      let alcancavel = false
+      for (let dy = -2; dy <= 2 && !alcancavel; dy++) {
+        for (let dx = -2; dx <= 2 && !alcancavel; dx++) {
+          const x = tx + dx
+          const y = ty + dy
+          if (x < 0 || y < 0 || x >= map.cols || y >= map.rows) continue
+          if (map.collision[y * map.cols + x] !== 0) continue
+          if (Math.hypot(x * 16 + 8 - seat.x, y * 16 + 8 - seat.y) <= 26) alcancavel = true
+        }
+      }
+      expect(alcancavel, `assento ${seat.id} está inacessível`).toBe(true)
     }
   })
 })
