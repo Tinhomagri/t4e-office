@@ -300,6 +300,11 @@ export class OfficeEngine {
     if (this.me) this.me.seatIndex = -1
   }
 
+  /** O avatar do usuário está sentado? */
+  isSeated(): boolean {
+    return (this.me?.seatIndex ?? -1) >= 0
+  }
+
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
   tryInteract(): void {
     const me = this.me

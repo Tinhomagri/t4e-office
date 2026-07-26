@@ -13,6 +13,9 @@ import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
 import { useHeartbeat, useRoom } from "./office.hooks"
+import { isMyDesk } from "./pc/desk"
+import { usePcStore } from "./pc/pc.store"
+import { Win98Desktop } from "./pc/Win98Desktop"
 import { OfficeEngine } from "./world/engine"
 import { buildOfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
@@ -57,6 +60,12 @@ export function OfficeRoom({
   const [emoteOpen, setEmoteOpen] = useState(false)
   const [muted, setMuted] = useState(true)
 
+  const pcState = usePcStore((s) => s.state)
+  const bootPc = usePcStore((s) => s.boot)
+  const shutdownPc = usePcStore((s) => s.shutdown)
+  const expandedId = usePcStore((s) => s.expandedId)
+  const collapsePc = usePcStore((s) => s.collapse)
+
   const map = useMemo(() => buildOfficeMap(), [])
 
   // ── Motor ─────────────────────────────────────────────────────────────────
@@ -70,7 +79,13 @@ export function OfficeRoom({
       onMove: (x, y, facing) => {
         liveRef.current = { x, y, facing }
       },
-      onInteract: (seat) => setToast(seat ? seat.label : "De pé"),
+      onInteract: (seat) => {
+        setToast(seat ? seat.label : "De pé")
+        // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
+        // outro assento continua sendo só sentar.
+        if (seat && me?.id && isMyDesk(me.id, seat, map.seats)) bootPc(seat.id)
+        else if (!seat) shutdownPc()
+      },
     })
     engineRef.current = engine
 
@@ -129,6 +144,45 @@ export function OfficeRoom({
     return () => window.clearTimeout(t)
   }, [toast])
 
+  // O PC manda no teclado e na câmera: com a tela ligada, o mapa não recebe
+  // tecla, e a câmera trava na mesa.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    if (pcState === "off") {
+      engine.setInputEnabled(true)
+      engine.clearFocus()
+      return
+    }
+    const seatId = usePcStore.getState().seatId
+    const seat = map.seats.find((s) => s.id === seatId)
+    engine.setInputEnabled(false)
+    if (seat) engine.focusOn(seat.x, seat.y, 6)
+  }, [pcState, map])
+
+  // ESC: colapsa a janela expandida; se não houver, levanta e desliga.
+  useEffect(() => {
+    if (pcState === "off") return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      if (expandedId) collapsePc()
+      else {
+        shutdownPc()
+        engineRef.current?.tryInteract() // levanta de fato no mundo
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [pcState, expandedId, collapsePc, shutdownPc])
+
+  // Levantar pela taskbar também precisa levantar o avatar no mundo.
+  useEffect(() => {
+    if (pcState !== "off") return
+    const engine = engineRef.current
+    if (engine?.isSeated()) engine.tryInteract()
+  }, [pcState])
+
   const onCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     engineRef.current?.clickTo(e.clientX - rect.left, e.clientY - rect.top)
@@ -164,7 +218,7 @@ export function OfficeRoom({
   return (
     <div
       ref={wrapRef}
-      className="relative aspect-[16/10] w-full select-none overflow-hidden rounded-lg border border-paper-200 bg-[#1a1712] dark:border-ink-700"
+      className="relative size-full select-none overflow-hidden bg-[#1a1712]"
     >
       <canvas
         ref={canvasRef}
@@ -174,9 +228,11 @@ export function OfficeRoom({
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
 
-      {/* Rótulo da zona atual */}
+      <Win98Desktop />
+
+      {/* Rótulo da zona atual — só faz sentido com o PC desligado */}
       <AnimatePresence>
-        {zone && (
+        {pcState === "off" && zone && (
           <motion.div
             key={zone.label}
             initial={reduce ? false : { opacity: 0, y: -8 }}
@@ -191,9 +247,9 @@ export function OfficeRoom({
         )}
       </AnimatePresence>
 
-      {/* Toast de interação (sentar/levantar) */}
+      {/* Toast de interação (sentar/levantar) — só com o PC desligado */}
       <AnimatePresence>
-        {toast && (
+        {pcState === "off" && toast && (
           <motion.div
             key={toast}
             initial={reduce ? false : { opacity: 0, scale: 0.96 }}
@@ -207,35 +263,37 @@ export function OfficeRoom({
         )}
       </AnimatePresence>
 
-      <Minimap map={map} engineRef={engineRef} online={online} />
+      {pcState === "off" && <Minimap map={map} engineRef={engineRef} online={online} />}
 
-      {/* Barra de comandos */}
-      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-lg bg-ink-950/70 p-1.5 backdrop-blur-sm">
-        <HudButton onClick={() => setChatOpen((v) => !v)} active={chatOpen} title="Falar (Enter)">
-          <MessageSquare className="size-4" />
-        </HudButton>
-        <HudButton onClick={() => setEmoteOpen((v) => !v)} active={emoteOpen} title="Emotes">
-          <Smile className="size-4" />
-        </HudButton>
-        <HudButton
-          onClick={() => engineRef.current?.tryInteract()}
-          title="Sentar / levantar (E)"
-        >
-          <span className="text-[11px] font-bold">E</span>
-        </HudButton>
-        <HudButton onClick={() => setMuted((v) => !v)} title={muted ? "Sons desligados" : "Sons ligados"}>
-          {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-        </HudButton>
-        <span className="mx-1 h-5 w-px bg-white/15" />
-        <span className="hidden items-center gap-1.5 pr-1.5 text-[10px] text-white/60 sm:flex">
-          <Keyboard className="size-3.5" />
-          <Kbd>WASD</Kbd> andar · <Kbd>Shift</Kbd> correr · <Kbd>E</Kbd> sentar
-        </span>
-      </div>
+      {/* Barra de comandos — só com o PC desligado */}
+      {pcState === "off" && (
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-lg bg-ink-950/70 p-1.5 backdrop-blur-sm">
+          <HudButton onClick={() => setChatOpen((v) => !v)} active={chatOpen} title="Falar (Enter)">
+            <MessageSquare className="size-4" />
+          </HudButton>
+          <HudButton onClick={() => setEmoteOpen((v) => !v)} active={emoteOpen} title="Emotes">
+            <Smile className="size-4" />
+          </HudButton>
+          <HudButton
+            onClick={() => engineRef.current?.tryInteract()}
+            title="Sentar / levantar (E)"
+          >
+            <span className="text-[11px] font-bold">E</span>
+          </HudButton>
+          <HudButton onClick={() => setMuted((v) => !v)} title={muted ? "Sons desligados" : "Sons ligados"}>
+            {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          </HudButton>
+          <span className="mx-1 h-5 w-px bg-white/15" />
+          <span className="hidden items-center gap-1.5 pr-1.5 text-[10px] text-white/60 sm:flex">
+            <Keyboard className="size-3.5" />
+            <Kbd>WASD</Kbd> andar · <Kbd>Shift</Kbd> correr · <Kbd>E</Kbd> sentar
+          </span>
+        </div>
+      )}
 
-      {/* Roda de emotes */}
+      {/* Roda de emotes — só com o PC desligado */}
       <AnimatePresence>
-        {emoteOpen && (
+        {pcState === "off" && emoteOpen && (
           <motion.div
             key="emotes"
             initial={reduce ? false : { opacity: 0, y: 8 }}
@@ -262,9 +320,9 @@ export function OfficeRoom({
         )}
       </AnimatePresence>
 
-      {/* Caixa de fala */}
+      {/* Caixa de fala — só com o PC desligado */}
       <AnimatePresence>
-        {chatOpen && (
+        {pcState === "off" && chatOpen && (
           <motion.form
             key="chat"
             initial={reduce ? false : { opacity: 0, y: 8 }}
