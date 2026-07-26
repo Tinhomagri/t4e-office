@@ -72,3 +72,19 @@ describe("cameraTarget", () => {
     expect(cameraTarget(100, 100, 2000, 2000, 960, 608)).toEqual({ x: 0, y: 0 })
   })
 })
+
+describe("escala sob foco", () => {
+  it("com teto 8, uma tela média chega a mais zoom do que o normal", () => {
+    const cssW = 1400
+    const cssH = 900
+    expect(integerScale(cssW, cssH)).toBe(4)
+    expect(integerScale(cssW, cssH, 8)).toBe(4)
+    expect(integerScale(2600, 1700, 8)).toBe(8)
+  })
+
+  it("o teto não reduz a escala abaixo do normal", () => {
+    for (const [w, h] of [[600, 400], [1000, 700], [1920, 1080]] as const) {
+      expect(integerScale(w, h, 8)).toBeGreaterThanOrEqual(integerScale(w, h))
+    }
+  })
+})

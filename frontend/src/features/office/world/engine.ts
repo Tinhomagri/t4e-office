@@ -103,6 +103,11 @@ export class OfficeEngine {
   private viewW = 0
   private viewH = 0
 
+  /** Ponto travado da câmera enquanto o PC está aberto. */
+  private focus: { x: number; y: number; zoom: number } | null = null
+  private cssW = 320
+  private cssH = 200
+
   private currentZone: string | null = null
   private cb: EngineCallbacks
   private moveAccum = 0
@@ -574,26 +579,48 @@ export class OfficeEngine {
   }
 
   resize(cssW: number, cssH: number): void {
+    this.cssW = cssW
+    this.cssH = cssH
     const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1))
-    this.scale = integerScale(cssW, cssH)
-    const { viewW, viewH } = viewportFor(cssW, cssH, this.scale)
-    this.viewW = viewW
-    this.viewH = viewH
     this.canvas.width = cssW * dpr
     this.canvas.height = cssH * dpr
     this.canvas.style.width = `${cssW}px`
     this.canvas.style.height = `${cssH}px`
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     this.ctx.imageSmoothingEnabled = false
+    this.applyScale()
+  }
+
+  /** Recalcula escala e viewport. Escala inteira, sempre. */
+  private applyScale(): void {
+    this.scale = integerScale(this.cssW, this.cssH, this.focus ? 8 : 4)
+    if (this.focus) this.scale = Math.max(this.scale, this.focus.zoom)
+    const { viewW, viewH } = viewportFor(this.cssW, this.cssH, this.scale)
+    this.viewW = viewW
+    this.viewH = viewH
     this.lightBuf.width = Math.max(1, Math.ceil(this.viewW / 2))
     this.lightBuf.height = Math.max(1, Math.ceil(this.viewH / 2))
   }
 
+  /**
+   * Trava a câmera num ponto do mundo com zoom. `zoom` é piso, não alvo exato:
+   * a escala final continua inteira.
+   */
+  focusOn(x: number, y: number, zoom = 6): void {
+    this.focus = { x, y, zoom: Math.round(zoom) }
+    this.applyScale()
+  }
+
+  clearFocus(): void {
+    this.focus = null
+    this.applyScale()
+  }
+
   private updateCamera(): void {
-    const me = this.me
-    if (!me) return
+    const anchor = this.focus ?? this.me
+    if (!anchor) return
     const { x: cx, y: cy } = cameraTarget(
-      me.x, me.y, this.viewW, this.viewH, this.map.width, this.map.height,
+      anchor.x, anchor.y, this.viewW, this.viewH, this.map.width, this.map.height,
     )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
