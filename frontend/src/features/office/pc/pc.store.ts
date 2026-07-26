@@ -21,6 +21,8 @@ export interface PcWindow {
 
 /** Deslocamento entre janelas novas, para não empilharem no mesmo pixel. */
 export const CASCADE_STEP = 26
+/** Quantas posições a cascata usa antes de dar a volta — não sai da tela. */
+export const CASCADE_SLOTS = 6
 const FIRST_X = 40
 const FIRST_Y = 32
 const MIN_W = 320
@@ -53,6 +55,18 @@ interface PcStore {
 /** Maior z entre as janelas — o contador vive nos dados, não em variável solta. */
 function topZ(windows: PcWindow[]): number {
   return windows.reduce((max, w) => Math.max(max, w.z), 0)
+}
+
+/**
+ * Primeira posição de cascata livre. Contar janelas abertas não serve: fechar a
+ * primeira e abrir outra devolveria a posição de uma janela ainda aberta.
+ */
+function cascadeSlot(windows: PcWindow[]): number {
+  const ocupadas = new Set(windows.map((w) => `${w.x},${w.y}`))
+  for (let i = 0; i < CASCADE_SLOTS; i++) {
+    if (!ocupadas.has(`${FIRST_X + i * CASCADE_STEP},${FIRST_Y + i * CASCADE_STEP}`)) return i
+  }
+  return windows.length % CASCADE_SLOTS
 }
 
 /** Janela visível mais à frente: quem herda o foco. */
@@ -92,7 +106,7 @@ export const usePcStore = create<PcStore>((set, get) => ({
       get().restore(appId)
       return
     }
-    const step = s.windows.length * CASCADE_STEP
+    const step = cascadeSlot(s.windows) * CASCADE_STEP
     set({
       windows: [
         ...s.windows,
@@ -146,19 +160,27 @@ export const usePcStore = create<PcStore>((set, get) => ({
 
   restore: (id) => get().focus(id),
 
+  // Os guardas de id inexistente devolvem o mesmo estado de propósito: array novo
+  // sem mudança de valor faria todo assinante do store re-renderizar de graça.
   move: (id, x, y) =>
-    set((s) => ({
-      windows: s.windows.map((w) =>
-        w.id === id ? { ...w, x: Math.max(0, x), y: Math.max(0, y) } : w,
-      ),
-    })),
+    set((s) => {
+      if (!s.windows.some((w) => w.id === id)) return s
+      return {
+        windows: s.windows.map((w) =>
+          w.id === id ? { ...w, x: Math.max(0, x), y: Math.max(0, y) } : w,
+        ),
+      }
+    }),
 
-  resizeWindow: (id, w, h) =>
-    set((s) => ({
-      windows: s.windows.map((win) =>
-        win.id === id ? { ...win, w: Math.max(MIN_W, w), h: Math.max(MIN_H, h) } : win,
-      ),
-    })),
+  resizeWindow: (id, nextW, nextH) =>
+    set((s) => {
+      if (!s.windows.some((w) => w.id === id)) return s
+      return {
+        windows: s.windows.map((w) =>
+          w.id === id ? { ...w, w: Math.max(MIN_W, nextW), h: Math.max(MIN_H, nextH) } : w,
+        ),
+      }
+    }),
 
   expand: (id) => {
     if (!get().windows.some((w) => w.id === id)) return

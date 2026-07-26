@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
-import { CASCADE_STEP, usePcStore } from "./pc.store"
+import { CASCADE_SLOTS, CASCADE_STEP, usePcStore } from "./pc.store"
 
 const SIZE = { w: 900, h: 600 }
 const reset = () => usePcStore.getState().shutdown()
@@ -107,6 +107,32 @@ describe("abrir e fechar", () => {
     get().expand("boards")
     get().close("boards")
     expect(get().expandedId).toBeNull()
+  })
+
+  it("reabrir depois de fechar não cai sobre uma janela ainda aberta", () => {
+    get().openApp("boards", SIZE)
+    get().openApp("comercial", SIZE)
+    get().openApp("reports", SIZE)
+    get().close("boards")
+    get().openApp("myday", SIZE)
+    const pos = get().windows.map((w) => `${w.x},${w.y}`)
+    expect(new Set(pos).size).toBe(pos.length)
+  })
+
+  it("a cascata dá a volta em vez de andar para fora da tela", () => {
+    for (const id of ["boards", "comercial", "reports", "myday", "poker", "portfolio", "avatar"]) {
+      get().openApp(id, SIZE)
+    }
+    const maxX = Math.max(...get().windows.map((w) => w.x))
+    expect(maxX).toBeLessThanOrEqual(40 + (CASCADE_SLOTS - 1) * CASCADE_STEP)
+  })
+
+  it("move e resizeWindow em id inexistente não trocam a referência de windows", () => {
+    get().openApp("boards", SIZE)
+    const antes = get().windows
+    get().move("fantasma", 10, 10)
+    get().resizeWindow("fantasma", 500, 500)
+    expect(get().windows).toBe(antes)
   })
 
   it("ações em id inexistente são no-op, não crash", () => {
