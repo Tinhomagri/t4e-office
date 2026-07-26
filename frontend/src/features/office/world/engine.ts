@@ -13,6 +13,7 @@ import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/fe
 
 import { type OfficeMap, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
+import { cameraTarget, integerScale, screenToWorld, viewportFor } from "./camera"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
 
@@ -277,8 +278,7 @@ export class OfficeEngine {
 
   /** Clique na tela → alvo de caminhada no mundo. */
   clickTo(screenX: number, screenY: number): void {
-    const x = this.camX + screenX / this.scale
-    const y = this.camY + screenY / this.scale
+    const { x, y } = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
     if (isSolid(this.map, x, y)) return
     this.target = { x, y }
     if (this.me) this.me.seatIndex = -1
@@ -564,11 +564,10 @@ export class OfficeEngine {
 
   resize(cssW: number, cssH: number): void {
     const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1))
-    // Escala inteira: 4× quando cabe folgado, senão 3× (2× em telas apertadas).
-    const fit = Math.min(cssW / 320, cssH / 200)
-    this.scale = Math.max(2, Math.min(4, Math.floor(fit)))
-    this.viewW = Math.ceil(cssW / this.scale)
-    this.viewH = Math.ceil(cssH / this.scale)
+    this.scale = integerScale(cssW, cssH)
+    const { viewW, viewH } = viewportFor(cssW, cssH, this.scale)
+    this.viewW = viewW
+    this.viewH = viewH
     this.canvas.width = cssW * dpr
     this.canvas.height = cssH * dpr
     this.canvas.style.width = `${cssW}px`
@@ -582,13 +581,9 @@ export class OfficeEngine {
   private updateCamera(): void {
     const me = this.me
     if (!me) return
-    const targetX = me.x - this.viewW / 2
-    const targetY = me.y - this.viewH / 2
-    // Segue com folga e trava nas bordas do mapa.
-    const maxX = Math.max(0, this.map.width - this.viewW)
-    const maxY = Math.max(0, this.map.height - this.viewH)
-    const cx = Math.max(0, Math.min(maxX, targetX))
-    const cy = Math.max(0, Math.min(maxY, targetY))
+    const { x: cx, y: cy } = cameraTarget(
+      me.x, me.y, this.viewW, this.viewH, this.map.width, this.map.height,
+    )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
     this.camY += (cy - this.camY) * ease
