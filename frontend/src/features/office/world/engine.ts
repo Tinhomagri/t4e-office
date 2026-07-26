@@ -14,6 +14,7 @@ import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/fe
 import { type OfficeMap, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
 import { cameraTarget, integerScale, screenToWorld, viewportFor } from "./camera"
+import { keyAction } from "./input"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
 
@@ -105,6 +106,9 @@ export class OfficeEngine {
   private cb: EngineCallbacks
   private moveAccum = 0
   private reduceMotion = false
+
+  /** Desligado enquanto o PC do escritório está aberto. */
+  private inputEnabled = true
 
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
@@ -262,14 +266,20 @@ export class OfficeEngine {
 
   // ── Entrada ───────────────────────────────────────────────────────────────
 
+  /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
+  setInputEnabled(enabled: boolean): void {
+    this.inputEnabled = enabled
+    if (!enabled) this.keys.clear()
+  }
+
   onKeyDown = (e: KeyboardEvent): void => {
-    const k = e.key.toLowerCase()
-    if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"].includes(k)) {
-      this.keys.add(k)
+    const action = keyAction(e.key, this.inputEnabled)
+    if (action === "move") {
+      this.keys.add(e.key.toLowerCase())
       this.target = null
       e.preventDefault()
     }
-    if (k === "e") this.tryInteract()
+    if (action === "interact") this.tryInteract()
   }
 
   onKeyUp = (e: KeyboardEvent): void => {
