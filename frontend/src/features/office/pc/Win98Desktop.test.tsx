@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
 
 import { usePcStore } from "./pc.store"
@@ -77,5 +77,16 @@ describe("<Win98Desktop />", () => {
     expect(camada).toBeInTheDocument()
     expect(camada.style.transform).toBe("")
     expect(screen.getByTestId("win98-panel").contains(camada)).toBe(false)
+  })
+
+  it("expandida deixa exatamente uma taskbar no DOM", () => {
+    ligado()
+    usePcStore.getState().openApp("boards", { w: 600, h: 400 })
+    renderComQueryClient()
+    expect(screen.getAllByRole("button", { name: "Iniciar" })).toHaveLength(1)
+
+    act(() => usePcStore.getState().expand("boards"))
+    expect(screen.getAllByRole("button", { name: "Iniciar" })).toHaveLength(1)
+    expect(screen.getAllByRole("button", { name: "Levantar" })).toHaveLength(1)
   })
 })

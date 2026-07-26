@@ -42,7 +42,9 @@ export function Win98Desktop() {
               </Win98Window>
             ))}
         </div>
-        <Taskbar />
+        {/* Uma Taskbar por vez: duas montadas duplicariam "Iniciar"/"Levantar"
+            no DOM e tornariam qualquer busca por rótulo ambígua. */}
+        {!expanded && <Taskbar />}
       </div>
 
       {/* Camada expandida: fora do painel, tela cheia, sem transform. */}
