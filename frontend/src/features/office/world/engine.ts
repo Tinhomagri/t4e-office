@@ -13,7 +13,7 @@ import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/fe
 
 import { type OfficeMap, type Seat, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
-import { cameraTarget, integerScale, screenToWorld, viewportFor } from "./camera"
+import { cameraTarget, focusScale, integerScale, screenToWorld, viewportFor } from "./camera"
 import { keyAction } from "./input"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
@@ -593,8 +593,9 @@ export class OfficeEngine {
 
   /** Recalcula escala e viewport. Escala inteira, sempre. */
   private applyScale(): void {
-    this.scale = integerScale(this.cssW, this.cssH, this.focus ? 8 : 4)
-    if (this.focus) this.scale = Math.max(this.scale, this.focus.zoom)
+    this.scale = this.focus
+      ? focusScale(this.cssW, this.cssH, this.focus.zoom)
+      : integerScale(this.cssW, this.cssH)
     const { viewW, viewH } = viewportFor(this.cssW, this.cssH, this.scale)
     this.viewW = viewW
     this.viewH = viewH
@@ -604,10 +605,10 @@ export class OfficeEngine {
 
   /**
    * Trava a câmera num ponto do mundo com zoom. `zoom` é piso, não alvo exato:
-   * a escala final continua inteira.
+   * `focusScale` mantém a escala inteira e dentro do teto.
    */
   focusOn(x: number, y: number, zoom = 6): void {
-    this.focus = { x, y, zoom: Math.round(zoom) }
+    this.focus = { x, y, zoom }
     this.applyScale()
   }
 

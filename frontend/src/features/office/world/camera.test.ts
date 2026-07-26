@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   cameraTarget,
+  FOCUS_MAX,
+  focusScale,
   integerScale,
   screenToWorld,
   viewportFor,
@@ -86,5 +88,25 @@ describe("escala sob foco", () => {
     for (const [w, h] of [[600, 400], [1000, 700], [1920, 1080]] as const) {
       expect(integerScale(w, h, 8)).toBeGreaterThanOrEqual(integerScale(w, h))
     }
+  })
+})
+
+describe("focusScale", () => {
+  it("respeita o zoom pedido quando ele é maior que a escala normal", () => {
+    expect(focusScale(1400, 900, 6)).toBe(6)
+  })
+
+  it("nunca fica abaixo da escala normal daquela tela", () => {
+    expect(focusScale(2600, 1700, 3)).toBe(integerScale(2600, 1700, FOCUS_MAX))
+  })
+
+  it("clampa no teto — zoom absurdo não colapsa a viewport", () => {
+    expect(focusScale(1400, 900, 40)).toBe(FOCUS_MAX)
+    expect(focusScale(1400, 900, 999)).toBe(FOCUS_MAX)
+  })
+
+  it("arredonda zoom fracionário para inteiro", () => {
+    expect(focusScale(1400, 900, 5.6)).toBe(6)
+    expect(Number.isInteger(focusScale(1400, 900, 6.4))).toBe(true)
   })
 })

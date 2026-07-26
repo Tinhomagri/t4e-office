@@ -58,3 +58,15 @@ export function cameraTarget(
     y: Math.max(0, Math.min(maxY, cy - viewH / 2)),
   }
 }
+
+/** Teto de escala sob foco. Acima disso a viewport vira dois pixels de mundo. */
+export const FOCUS_MAX = 8
+
+/**
+ * Escala com a câmera travada: nunca menor que a escala normal daquela tela,
+ * nunca maior que FOCUS_MAX, sempre inteira.
+ */
+export function focusScale(cssW: number, cssH: number, zoom: number): number {
+  const base = integerScale(cssW, cssH, FOCUS_MAX)
+  return Math.max(base, Math.min(FOCUS_MAX, Math.round(zoom)))
+}
