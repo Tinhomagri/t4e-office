@@ -3,7 +3,7 @@
 // Posiciona por left/top/width/height, nunca por transform: transform num
 // ancestral vira containing block e faria os modais (position: fixed) das
 // páginas embutidas se posicionarem dentro da janela em vez da viewport.
-import { useRef, type ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 
 import { usePcStore, type PcWindow } from "./pc.store"
 
@@ -33,35 +33,39 @@ export function Win98Window({
   const expanded = expandedId === win.id
   const origin = useRef({ px: 0, py: 0, x: 0, y: 0, w: 0, h: 0 })
 
-  const startDrag = (e: React.PointerEvent) => {
+  // Os listeners ficam no window, não no elemento: arraste rápido sai de cima da
+  // titlebar e não pode perder o rastro. Guardar o teardown num ref é o que
+  // permite desligá-los se a janela fechar no meio do arraste.
+  const stopTracking = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopTracking.current?.(), [])
+
+  const track = (e: React.PointerEvent, onMove: (ev: PointerEvent) => void) => {
     focus(win.id)
     origin.current = { px: e.clientX, py: e.clientY, x: win.x, y: win.y, w: win.w, h: win.h }
-    const onMove = (ev: PointerEvent) => {
-      const o = origin.current
-      move(win.id, o.x + (ev.clientX - o.px), o.y + (ev.clientY - o.py))
-    }
-    const onUp = () => {
+    stopTracking.current?.()
+    const up = () => stopTracking.current?.()
+    stopTracking.current = () => {
       window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointerup", up)
+      stopTracking.current = null
     }
     window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointerup", up)
+  }
+
+  const startDrag = (e: React.PointerEvent) => {
+    track(e, (ev) => {
+      const o = origin.current
+      move(win.id, o.x + (ev.clientX - o.px), o.y + (ev.clientY - o.py))
+    })
   }
 
   const startResize = (e: React.PointerEvent) => {
     e.stopPropagation()
-    focus(win.id)
-    origin.current = { px: e.clientX, py: e.clientY, x: win.x, y: win.y, w: win.w, h: win.h }
-    const onMove = (ev: PointerEvent) => {
+    track(e, (ev) => {
       const o = origin.current
       resizeWindow(win.id, o.w + (ev.clientX - o.px), o.h + (ev.clientY - o.py))
-    }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    })
   }
 
   if (win.minimized) return null

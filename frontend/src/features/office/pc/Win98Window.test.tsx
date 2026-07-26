@@ -103,6 +103,17 @@ describe("<Win98Window />", () => {
     expect(janela()).toMatchObject({ w: 1000, h: 650 })
   })
 
+  it("desmontar no meio do arraste não deixa listener solto", () => {
+    const { unmount } = montar()
+    fireEvent.pointerDown(screen.getByTestId("win98-titlebar"), {
+      clientX: 100, clientY: 100, pointerId: 3,
+    })
+    unmount()
+    const antes = janela()
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 300, pointerId: 3 })
+    expect(janela()).toEqual(antes)
+  })
+
   it("clicar no corpo da janela foca", async () => {
     usePcStore.getState().openApp("comercial", { w: 800, h: 500 })
     montar()
