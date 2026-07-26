@@ -7,6 +7,11 @@
 //    do painel em vez da viewport.
 // 2. A janela expandida sai do painel e vira uma camada própria em tela cheia,
 //    para trabalhar de verdade sem o aperto do painel.
+// O CSS vem do componente, não de um @import no index.css: @import depois de
+// outras regras é descartado em silêncio pelo PostCSS e o bundle sai sem uma
+// linha do visual 98 — sem erro nenhum para avisar.
+import "./win98.css"
+
 import { appById, isEnabled } from "./apps.registry"
 import { BootScreen } from "./BootScreen"
 import { DesktopIcons } from "./DesktopIcons"
