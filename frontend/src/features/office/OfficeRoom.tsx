@@ -70,7 +70,7 @@ export function OfficeRoom({
       onMove: (x, y, facing) => {
         liveRef.current = { x, y, facing }
       },
-      onInteract: (label) => setToast(label),
+      onInteract: (seat) => setToast(seat ? seat.label : "De pé"),
     })
     engineRef.current = engine
 

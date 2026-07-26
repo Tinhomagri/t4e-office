@@ -11,7 +11,7 @@
 import { buildAvatarSheet } from "@/features/avatar/chibi"
 import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/features/avatar/avatar.types"
 
-import { type OfficeMap, isSolid, zoneAt } from "./map"
+import { type OfficeMap, type Seat, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
 import { cameraTarget, integerScale, screenToWorld, viewportFor } from "./camera"
 import { keyAction } from "./input"
@@ -67,7 +67,8 @@ const POOL = 240
 export interface EngineCallbacks {
   onZoneChange?(zoneId: string | null, label: string, hint: string): void
   onMove?(x: number, y: number, facing: Direction): void
-  onInteract?(label: string): void
+  /** Assento ao sentar, `null` ao levantar. */
+  onInteract?(seat: Seat | null): void
 }
 
 export class OfficeEngine {
@@ -301,7 +302,7 @@ export class OfficeEngine {
     if (me.seatIndex >= 0) {
       me.seatIndex = -1
       me.anim = "idle"
-      this.cb.onInteract?.("De pé")
+      this.cb.onInteract?.(null)
       return
     }
     let best = -1
@@ -321,9 +322,9 @@ export class OfficeEngine {
     me.x = seat.x
     me.y = seat.y
     me.facing = seat.facing
-    me.anim = seat.label.includes("Sofá") ? "idle" : "type"
+    me.anim = seat.kind === "lounge" ? "idle" : "type"
     this.target = null
-    this.cb.onInteract?.(seat.label)
+    this.cb.onInteract?.(seat)
   }
 
   // ── Física ────────────────────────────────────────────────────────────────

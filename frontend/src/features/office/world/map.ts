@@ -38,12 +38,21 @@ export interface LightSource {
   flicker?: number
 }
 
+export type SeatKind = "pc" | "meeting" | "lounge"
+
 export interface Seat {
+  /**
+   * Identificador estável, derivado do tile — não do índice do array. Índice
+   * quebraria na primeira mudança de planta, e a mesa pessoal precisa persistir.
+   */
+  id: string
   /** Onde o avatar fica ao sentar (pés), em pixels do mundo. */
   x: number
   y: number
   facing: "up" | "down" | "left" | "right"
   label: string
+  /** "pc" tem computador; só nesses o desktop pode abrir. */
+  kind: SeatKind
 }
 
 export interface OfficeMap {
@@ -290,23 +299,37 @@ export function buildOfficeMap(): OfficeMap {
     { x: 39 * TILE, y: 6 * TILE, radius: 40, color: "#8fd9b5", flicker: 0.1 },
   ]
 
+  // Id vem do tile onde o assento está: sobrevive a mudanças de planta que não
+  // movam a própria cadeira, ao contrário do índice do array.
+  const seatId = (prefix: string, x: number, y: number) =>
+    `${prefix}-${Math.floor(x / TILE)}-${Math.floor(y / TILE)}`
+
   const seats: Seat[] = []
+  const addSeat = (
+    prefix: string,
+    x: number,
+    y: number,
+    facing: Seat["facing"],
+    label: string,
+    kind: SeatKind,
+  ) => seats.push({ id: seatId(prefix, x, y), x, y, facing, label, kind })
+
   for (const [tx, ty] of islands) {
-    seats.push({ x: tx * TILE + 8, y: (ty + 3) * TILE + 14, facing: "up", label: "Estação de trabalho" })
-    seats.push({ x: (tx + 1) * TILE + 8, y: (ty + 3) * TILE + 14, facing: "up", label: "Estação de trabalho" })
+    addSeat("ws", tx * TILE + 8, (ty + 3) * TILE + 14, "up", "Estação de trabalho", "pc")
+    addSeat("ws", (tx + 1) * TILE + 8, (ty + 3) * TILE + 14, "up", "Estação de trabalho", "pc")
   }
   for (let i = 0; i < 3; i++) {
-    seats.push({ x: 5 * TILE + 8, y: (20 + i * 2) * TILE + 14, facing: "up", label: "Mesa individual" })
-    seats.push({ x: 5 * TILE + 8, y: (29 + i * 3) * TILE + 14, facing: "up", label: "Cabine de foco" })
+    addSeat("ws", 5 * TILE + 8, (20 + i * 2) * TILE + 14, "up", "Mesa individual", "pc")
+    addSeat("ws", 5 * TILE + 8, (29 + i * 3) * TILE + 14, "up", "Cabine de foco", "pc")
   }
   for (let i = 0; i < 3; i++) {
-    seats.push({ x: (8 + i * 2) * TILE + 8, y: 7 * TILE + 14, facing: "down", label: "Sala de reunião" })
-    seats.push({ x: (8 + i * 2) * TILE + 8, y: 12 * TILE + 14, facing: "up", label: "Sala de reunião" })
+    addSeat("mt", (8 + i * 2) * TILE + 8, 7 * TILE + 14, "down", "Sala de reunião", "meeting")
+    addSeat("mt", (8 + i * 2) * TILE + 8, 12 * TILE + 14, "up", "Sala de reunião", "meeting")
   }
-  seats.push({ x: 43 * TILE, y: 27 * TILE, facing: "down", label: "Sofá do lounge" })
-  seats.push({ x: 46 * TILE, y: 27 * TILE, facing: "down", label: "Sofá do lounge" })
-  seats.push({ x: 44 * TILE + 8, y: 10 * TILE + 14, facing: "up", label: "Mesa da copa" })
-  seats.push({ x: 46 * TILE + 8, y: 10 * TILE + 14, facing: "up", label: "Mesa da copa" })
+  addSeat("lg", 43 * TILE, 27 * TILE, "down", "Sofá do lounge", "lounge")
+  addSeat("lg", 46 * TILE, 27 * TILE, "down", "Sofá do lounge", "lounge")
+  addSeat("lg", 44 * TILE + 8, 10 * TILE + 14, "up", "Mesa da copa", "lounge")
+  addSeat("lg", 46 * TILE + 8, 10 * TILE + 14, "up", "Mesa da copa", "lounge")
 
   return {
     cols: COLS,
