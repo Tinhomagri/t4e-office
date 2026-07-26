@@ -1,0 +1,86 @@
+/* Visual do Windows 98 — tokens e chrome.
+   Escopado em .win98 para não vazar no resto do app. Nesta fatia estiliza só a
+   moldura; o conteúdo das páginas continua com o visual moderno (fatia 2). */
+.win98 {
+  --w98-face: #c0c0c0;
+  --w98-light: #ffffff;
+  --w98-shadow: #808080;
+  --w98-dark: #000000;
+  --w98-title: #000080;
+  --w98-title-text: #ffffff;
+  --w98-title-idle: #808080;
+  --w98-desktop: #008080;
+  --w98-font: "MS Sans Serif", "Pixelated MS Sans Serif", Tahoma, Verdana, sans-serif;
+
+  font-family: var(--w98-font);
+  font-size: 12px;
+  color: var(--w98-dark);
+  -webkit-font-smoothing: none;
+}
+
+/* Relevo padrão do 98: claro em cima/esquerda, escuro em baixo/direita. */
+.win98-raised {
+  background: var(--w98-face);
+  border-top: 2px solid var(--w98-light);
+  border-left: 2px solid var(--w98-light);
+  border-right: 2px solid var(--w98-dark);
+  border-bottom: 2px solid var(--w98-dark);
+  box-shadow: inset -1px -1px 0 var(--w98-shadow), inset 1px 1px 0 var(--w98-face);
+}
+
+.win98-sunken {
+  background: var(--w98-light);
+  border-top: 2px solid var(--w98-shadow);
+  border-left: 2px solid var(--w98-shadow);
+  border-right: 2px solid var(--w98-light);
+  border-bottom: 2px solid var(--w98-light);
+  box-shadow: inset 1px 1px 0 var(--w98-dark);
+}
+
+.win98-titlebar {
+  background: var(--w98-title-idle);
+  color: var(--w98-title-text);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: default;
+  user-select: none;
+}
+
+.win98-titlebar--active {
+  background: linear-gradient(90deg, var(--w98-title) 0%, #1084d0 100%);
+}
+
+.win98-btn {
+  min-width: 16px;
+  height: 14px;
+  background: var(--w98-face);
+  border-top: 1px solid var(--w98-light);
+  border-left: 1px solid var(--w98-light);
+  border-right: 1px solid var(--w98-dark);
+  border-bottom: 1px solid var(--w98-dark);
+  font-family: var(--w98-font);
+  font-size: 10px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.win98-btn:active {
+  border-top-color: var(--w98-dark);
+  border-left-color: var(--w98-dark);
+  border-right-color: var(--w98-light);
+  border-bottom-color: var(--w98-light);
+}
+
+.win98-resize {
+  cursor: nwse-resize;
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .win98 * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
