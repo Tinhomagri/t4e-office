@@ -4,7 +4,7 @@
 // agrupamento por área é o mesmo que a sidebar já usa.
 import { Folder, MonitorPlay } from "lucide-react"
 
-import { APP_GROUPS, appsOfGroup, isEnabled, type AppDef } from "./apps.registry"
+import { APP_GROUPS, appsOfGroup, isEnabled } from "./apps.registry"
 import { usePcStore } from "./pc.store"
 
 export function DesktopIcons() {
@@ -14,15 +14,18 @@ export function DesktopIcons() {
 
   if (openFolderId) {
     const group = APP_GROUPS.find((g) => g.id === openFolderId)
+    // Sem o grupo (id inválido) não há como montar a grade de apps: melhor
+    // não renderizar a pasta do que arriscar um cast para o tipo errado.
+    if (!group) return null
     return (
       <div className="win98 win98-raised absolute left-3 top-3 w-64 p-1">
         <div className="win98-titlebar win98-titlebar--active mb-2 flex items-center px-1 py-0.5">
-          <span className="flex-1 text-[11px]">{group?.label}</span>
+          <span className="flex-1 text-[11px]">{group.label}</span>
           <button type="button" className="win98-btn" aria-label="Fechar pasta"
             onClick={() => openFolder(null)}>✕</button>
         </div>
         <div className="grid grid-cols-3 gap-1 p-1">
-          {appsOfGroup(openFolderId as AppDef["group"]).map((app) => (
+          {appsOfGroup(group.id).map((app) => (
             <IconButton
               key={app.id}
               label={app.label}

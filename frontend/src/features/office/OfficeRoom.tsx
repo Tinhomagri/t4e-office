@@ -160,28 +160,33 @@ export function OfficeRoom({
     if (seat) engine.focusOn(seat.x, seat.y, 6)
   }, [pcState, map])
 
-  // ESC: colapsa a janela expandida; se não houver, levanta e desliga.
+  // ESC: colapsa a janela expandida; se não houver, só desliga o PC. Quem
+  // levanta o avatar no mundo é sempre o efeito abaixo — dois donos para o
+  // mesmo "levantar" já causou dessincronia com o motor (store sobrevive à
+  // navegação) e, se um assento cair perto do spawn, um loop liga→desliga→senta.
   useEffect(() => {
     if (pcState === "off") return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
       e.preventDefault()
       if (expandedId) collapsePc()
-      else {
-        shutdownPc()
-        engineRef.current?.tryInteract() // levanta de fato no mundo
-      }
+      else shutdownPc()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [pcState, expandedId, collapsePc, shutdownPc])
 
-  // Levantar pela taskbar também precisa levantar o avatar no mundo.
+  // Único caminho para levantar o avatar no mundo quando o PC desliga —
+  // seja pelo ESC acima, seja pela Taskbar.
   useEffect(() => {
     if (pcState !== "off") return
     const engine = engineRef.current
     if (engine?.isSeated()) engine.tryInteract()
   }, [pcState])
+
+  // O store do PC é global e sobrevive à navegação: sem isso, voltar para o
+  // Escritório remontaria com a tela ligada e o avatar de pé — teclado morto.
+  useEffect(() => () => usePcStore.getState().shutdown(), [])
 
   const onCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -198,6 +203,9 @@ export function OfficeRoom({
   // Enter abre o chat; Esc fecha. Fora de input, para não roubar digitação.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Com o PC ligado o teclado é da página embutida: engolir Enter aqui
+      // impediria ativar botão ou link por teclado dentro da janela.
+      if (pcState !== "off") return
       const target = e.target as HTMLElement | null
       const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA"
       if (e.key === "Enter" && !typing) {
@@ -211,7 +219,7 @@ export function OfficeRoom({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
+  }, [pcState])
 
   const online = room.data?.length ?? 1
 

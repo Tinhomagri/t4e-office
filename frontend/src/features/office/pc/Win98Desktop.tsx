@@ -35,7 +35,7 @@ export function Win98Desktop() {
       {/* Painel: 78% do canvas, centralizado. O escritório continua visível em volta. */}
       <div
         data-testid="win98-panel"
-        className="win98 win98-raised absolute left-1/2 top-1/2 flex h-[78%] w-[78%] -ml-[39%] -mt-[39%] flex-col overflow-hidden bg-[var(--w98-desktop)]"
+        className="win98 win98-raised absolute inset-[11%] flex flex-col overflow-hidden bg-[var(--w98-desktop)]"
       >
         <div className="relative flex-1 overflow-hidden">
           <DesktopIcons />
