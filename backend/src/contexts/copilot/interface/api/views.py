@@ -215,7 +215,10 @@ class CopilotChatView(APIView):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
         messages = [dict(m) for m in serializer.validated_data["messages"]]
         result = ai_config.agent_chat_for_workspace(
-            workspace_id, str(request.user.id), messages
+            workspace_id,
+            str(request.user.id),
+            messages,
+            space=serializer.validated_data["space"],
         )
         metrics.log_event(
             workspace_id=workspace_id, actor_id=str(request.user.id), kind="chat"
@@ -239,7 +242,7 @@ class AgentExecuteView(APIView):
         if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
 
-        from contexts.copilot.infrastructure.agent.dispatcher import AgentTools
+        from contexts.copilot.infrastructure.agent.registry import AgentTools
 
         tools = AgentTools(workspace_id=workspace_id, actor_id=str(request.user.id))
         results = [

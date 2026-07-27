@@ -3,3 +3,7 @@ dist/
 .vite/
 *.local
 .DS_Store
+
+# Harness visual do avatar — artefato local de validação, não vai pro repo.
+.harness/*.js
+.harness/ref/

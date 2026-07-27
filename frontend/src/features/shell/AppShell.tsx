@@ -1,38 +1,23 @@
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
   Bell,
-  Building2,
   Menu,
-  BarChart3,
   CalendarClock,
-  CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  LayoutDashboard,
-  LineChart,
-  ListChecks,
   LogOut,
   Moon,
-  type LucideIcon,
   Megaphone,
   Plus,
   Search,
   Settings,
-  Share2,
-  Smile,
-  Sparkles,
-  Spade,
   SquareKanban,
   Sun,
-  Target,
-  Upload,
-  UserPlus,
-  Users,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
@@ -54,62 +39,16 @@ import {
   cx,
 } from "@/shared/ui/primitives"
 import type { PresenceStatus } from "@/features/workspace/workspace.types"
-
-interface NavItem {
-  label: string
-  to: string
-  icon: LucideIcon
-  end?: boolean
-}
-
-// Menu espelha os pilares do doc de visão: trabalho, inteligência, equipe.
-// Nomenclatura de grupo alinhada ao padrão Jira (Para você / Projetos / Analytics / Pessoas).
-const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
-  {
-    heading: "Para você",
-    items: [{ label: "Meu Dia", to: "/app", icon: LayoutDashboard, end: true }],
-  },
-  {
-    heading: "Projetos",
-    // "Boards" ganha tratamento especial (submenu de projetos de software) — ver ProjectsNavLink.
-    items: [
-      { label: "Planning Poker", to: "/app/poker", icon: Spade },
-      { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
-      { label: "Importar Jira/Trello", to: "/app/importar", icon: Upload },
-    ],
-  },
-  {
-    heading: "Marketing",
-    // Menu próprio: "Campanhas" injeta o submenu dos projetos de marketing.
-    items: [
-      { label: "Calendário editorial", to: "/app/marketing/calendario", icon: CalendarDays },
-      { label: "Fila de publicação", to: "/app/marketing/fila", icon: ListChecks },
-      { label: "Analytics social", to: "/app/marketing/analytics", icon: BarChart3 },
-      { label: "Redes sociais", to: "/app/marketing/redes", icon: Share2 },
-    ],
-  },
-  {
-    // Comercial (CRM): funil de vendas, clientes e follow-ups.
-    heading: "Comercial",
-    items: [{ label: "Comercial", to: "/app/comercial", icon: Target }],
-  },
-  {
-    heading: "Analytics",
-    items: [
-      { label: "Relatórios", to: "/app/reports", icon: LineChart },
-      { label: "Portfólio", to: "/app/portfolio", icon: Building2 },
-      { label: "Copiloto", to: "/app/copilot", icon: Sparkles },
-    ],
-  },
-  {
-    heading: "Pessoas",
-    items: [
-      { label: "Membros", to: "/app/members", icon: UserPlus },
-      { label: "Escritório", to: "/app/office", icon: Users },
-      { label: "Avatar", to: "/app/avatar", icon: Smile },
-    ],
-  },
-]
+import { EASE, springSnappy } from "@/shared/lib/motion"
+import { useSpaceStore } from "./space.store"
+import {
+  COMMON_GROUP,
+  type NavGroup,
+  SPACES,
+  type SpaceId,
+  getSpace,
+  spaceFromPath,
+} from "./spaces"
 
 const PRESENCE_ORDER: PresenceStatus[] = ["available", "focus", "meeting", "away"]
 
@@ -147,6 +86,21 @@ export function AppShell() {
   const [agendaOpen, setAgendaOpen] = useState(false)
   const [collapsedRaw, setCollapsed] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+
+  const reduce = useReducedMotion()
+
+  // Space ativo: a rota manda quando pertence a um space; caso contrário vale o
+  // último escolhido (rotas neutras como /app e /app/office).
+  const storedSpace = useSpaceStore((s) => s.activeSpace)
+  const setActiveSpace = useSpaceStore((s) => s.setActiveSpace)
+  const routeSpace = spaceFromPath(location.pathname, location.search)
+  const spaceId = routeSpace ?? storedSpace
+  const space = useMemo(() => getSpace(spaceId), [spaceId])
+
+  // Mantém o store em sincronia quando a navegação veio de link/URL direta.
+  useEffect(() => {
+    if (routeSpace && routeSpace !== storedSpace) setActiveSpace(routeSpace)
+  }, [routeSpace, storedSpace, setActiveSpace])
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
   // No mobile a sidebar vira drawer full-width → nunca "colapsada".
@@ -198,11 +152,12 @@ export function AppShell() {
         )}
       >
         <WorkspaceSwitcher collapsed={collapsed} />
+        <SpaceSwitcher collapsed={collapsed} spaceId={spaceId} />
 
         {/* Botão "Criar" — âncora visual do Jira, sempre acessível */}
         <div className={cx("px-3 pt-3", collapsed && "px-2")}>
           <button
-            onClick={() => navigate("/app/boards")}
+            onClick={() => navigate(space.home)}
             title="Criar"
             className={cx(
               "flex items-center gap-2 rounded-full bg-brand-600 font-semibold text-white shadow-sm transition-colors hover:bg-brand-700",
@@ -215,60 +170,24 @@ export function AppShell() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4 scrollbar-slim">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.heading}>
-              {!collapsed && (
-                <div className="px-3 pb-1.5">
-                  <SectionLabel>{group.heading}</SectionLabel>
-                </div>
-              )}
-              <div className="flex flex-col gap-0.5">
-                {group.heading === "Projetos" && (
-                  <ProjectsNavLink collapsed={collapsed} kind="software" />
-                )}
-                {group.heading === "Marketing" && (
-                  <ProjectsNavLink collapsed={collapsed} kind="marketing" />
-                )}
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    title={collapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      cx(
-                        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors max-md:min-h-11",
-                        collapsed && "justify-center px-0 py-2.5",
-                        isActive
-                          ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                          : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {/* indicador de acento na borda esquerda */}
-                        <span
-                          className={cx(
-                            "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
-                            isActive ? "opacity-100" : "opacity-0",
-                          )}
-                        />
-                        <item.icon
-                          className={cx(
-                            "size-[18px] shrink-0 transition-colors",
-                            isActive ? "text-brand-600 dark:text-brand-300" : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
-                          )}
-                          strokeWidth={1.9}
-                        />
-                        {!collapsed && <span className="flex-1 truncate text-left">{item.label}</span>}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
+          <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
+
+          {/* Troca de space "vira a página": o bloco antigo sai para a esquerda
+              e o novo entra da direita. mode="wait" evita sobreposição. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={spaceId}
+              initial={reduce ? false : { opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, x: -12 }}
+              transition={{ duration: 0.22, ease: EASE }}
+              className="flex flex-col gap-5"
+            >
+              {space.groups.map((group) => (
+                <NavGroupBlock key={group.heading} group={group} collapsed={collapsed} />
+              ))}
+            </motion.div>
+          </AnimatePresence>
         </nav>
 
         {/* Footer de usuário */}
@@ -391,6 +310,208 @@ export function AppShell() {
 
       <CopilotChatWidget />
       <AgendaPanel open={agendaOpen} onClose={() => setAgendaOpen(false)} />
+    </div>
+  )
+}
+
+// Um grupo da sidebar: rótulo + itens (+ submenu de projetos, quando o grupo
+// declara `projects`).
+function NavGroupBlock({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
+  return (
+    <div>
+      {!collapsed && (
+        <div className="px-3 pb-1.5">
+          <SectionLabel>{group.heading}</SectionLabel>
+        </div>
+      )}
+      <div className="flex flex-col gap-0.5">
+        {group.projects && <ProjectsNavLink collapsed={collapsed} kind={group.projects} />}
+        {group.items.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            title={collapsed ? item.label : undefined}
+            className={({ isActive }) =>
+              cx(
+                "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors max-md:min-h-11",
+                collapsed && "justify-center px-0 py-2.5",
+                isActive
+                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                  : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {/* indicador de acento na borda esquerda */}
+                <span
+                  className={cx(
+                    "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
+                    isActive ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                <item.icon
+                  className={cx(
+                    "size-[18px] shrink-0 transition-colors",
+                    isActive
+                      ? "text-brand-600 dark:text-brand-300"
+                      : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
+                  )}
+                  strokeWidth={1.9}
+                />
+                {!collapsed && <span className="flex-1 truncate text-left">{item.label}</span>}
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Seletor de space — logo abaixo do workspace. Escolher aqui troca a sidebar
+// inteira e navega para a home do space. Colapsado, vira uma coluna de ícones
+// com a pílula ativa deslizando via layoutId.
+function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: SpaceId }) {
+  const navigate = useNavigate()
+  const reduce = useReducedMotion()
+  const setActiveSpace = useSpaceStore((s) => s.setActiveSpace)
+  const [open, setOpen] = useState(false)
+  const active = getSpace(spaceId)
+
+  const go = (id: SpaceId) => {
+    setActiveSpace(id)
+    setOpen(false)
+    navigate(getSpace(id).home)
+  }
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-1 border-b border-paper-100 px-2 py-2 dark:border-ink-800">
+        {SPACES.map((s) => {
+          const isActive = s.id === spaceId
+          return (
+            <button
+              key={s.id}
+              onClick={() => go(s.id)}
+              title={`${s.label} — ${s.tagline}`}
+              aria-current={isActive ? "page" : undefined}
+              className={cx(
+                "relative grid size-9 place-items-center rounded-lg transition-colors focus-ring",
+                isActive
+                  ? "text-brand-700 dark:text-brand-300"
+                  : "text-paper-400 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper",
+              )}
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="space-pill"
+                  transition={reduce ? { duration: 0 } : springSnappy}
+                  className="absolute inset-0 -z-10 rounded-lg bg-brand-50 dark:bg-brand-500/10"
+                />
+              )}
+              <s.icon className="size-[18px]" strokeWidth={1.9} />
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative border-b border-paper-100 px-3 py-2 dark:border-ink-800">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
+      >
+        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-brand-500/10 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+          <active.icon className="size-[15px]" strokeWidth={2} />
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-400">
+            Space
+          </span>
+          <span className="block truncate text-sm font-medium text-ink dark:text-paper">
+            {active.label}
+          </span>
+        </span>
+        <ChevronDown
+          className={cx(
+            "size-4 shrink-0 text-paper-400 transition-transform duration-200",
+            open && "rotate-180",
+          )}
+          strokeWidth={1.9}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              role="listbox"
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+              transition={{ duration: 0.18, ease: EASE }}
+              className="absolute left-3 right-3 top-[60px] z-20 origin-top rounded-xl border border-paper-200 bg-paper p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800"
+            >
+              {SPACES.map((s) => {
+                const isActive = s.id === spaceId
+                return (
+                  <button
+                    key={s.id}
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => go(s.id)}
+                    className={cx(
+                      "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
+                      isActive
+                        ? "bg-brand-50 dark:bg-brand-500/10"
+                        : "hover:bg-paper-100 dark:hover:bg-white/5",
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        "mt-0.5 grid size-6 shrink-0 place-items-center rounded-md",
+                        isActive
+                          ? "bg-brand-500/15 text-brand-700 dark:text-brand-300"
+                          : "bg-paper-100 text-paper-500 dark:bg-white/5",
+                      )}
+                    >
+                      <s.icon className="size-3.5" strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={cx(
+                          "block truncate text-sm",
+                          isActive
+                            ? "font-medium text-brand-700 dark:text-brand-300"
+                            : "text-ink dark:text-paper-200",
+                        )}
+                      >
+                        {s.label}
+                      </span>
+                      <span className="block text-[11px] leading-snug text-paper-500">
+                        {s.tagline}
+                      </span>
+                    </span>
+                    {isActive && (
+                      <Check
+                        className="mt-1 size-4 shrink-0 text-brand-600 dark:text-brand-300"
+                        strokeWidth={2.2}
+                      />
+                    )}
+                  </button>
+                )
+              })}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

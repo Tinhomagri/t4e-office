@@ -58,7 +58,14 @@ class AnthropicAnalyzer(AiAnalyzer):
         )
         return "".join(b.text for b in response.content if b.type == "text").strip()
 
-    def chat_agent(self, *, messages: list[dict], tools: list[dict], read_executor) -> dict:
+    def chat_agent(
+        self,
+        *,
+        messages: list[dict],
+        tools: list[dict],
+        read_executor,
+        system: str | None = None,
+    ) -> dict:
         if not self.api_key:
             raise ValidationError(
                 "Copiloto IA não configurado: informe a chave da Anthropic (Claude) "
@@ -66,16 +73,20 @@ class AnthropicAnalyzer(AiAnalyzer):
             )
         import anthropic
 
+        system = system or _prompt.CHAT_AGENT_SYSTEM
         client = anthropic.Anthropic(api_key=self.api_key)
         # A spec neutra de ferramentas já casa com o formato da Anthropic.
         convo = [{"role": m["role"], "content": m["content"]} for m in messages]
         pending_actions: list[dict] = []
+        # Ferramentas efetivamente consultadas — vira contexto na resposta de
+        # teto, para o usuário saber o que já foi olhado antes de desistir.
+        used_tools: list[str] = []
 
         for _ in range(_prompt.MAX_AGENT_STEPS):
             resp = client.messages.create(
                 model=self.model,
                 max_tokens=_prompt.MAX_CHAT_TOKENS,
-                system=_prompt.CHAT_AGENT_SYSTEM,
+                system=system,
                 tools=tools,
                 messages=convo,
             )
@@ -101,6 +112,7 @@ class AnthropicAnalyzer(AiAnalyzer):
                     )
                     stop_after = True
                 else:
+                    used_tools.append(tu.name)
                     out = read_executor(tu.name, tu.input or {})
                     results.append(
                         {
@@ -125,7 +137,13 @@ class AnthropicAnalyzer(AiAnalyzer):
                 ).strip()
                 return {"reply": reply, "pending_actions": pending_actions}
 
+        consulted = ", ".join(dict.fromkeys(used_tools)) or "nenhuma"
         return {
-            "reply": "Não consegui concluir o raciocínio dentro do limite de passos.",
+            "reply": (
+                "Não consegui concluir dentro do limite de "
+                f"{_prompt.MAX_AGENT_STEPS} consultas. Já olhei: {consulted}. "
+                "Refaça a pergunta mais específica (ex.: cite o projeto ou o "
+                "negócio) para eu chegar à resposta."
+            ),
             "pending_actions": pending_actions,
         }

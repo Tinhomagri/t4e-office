@@ -66,7 +66,14 @@ class OpenAiAnalyzer(AiAnalyzer):
         )
         return (response.choices[0].message.content or "").strip()
 
-    def chat_agent(self, *, messages: list[dict], tools: list[dict], read_executor) -> dict:
+    def chat_agent(
+        self,
+        *,
+        messages: list[dict],
+        tools: list[dict],
+        read_executor,
+        system: str | None = None,
+    ) -> dict:
         if not self.api_key:
             raise ValidationError(
                 "Copiloto IA não configurado: informe a chave da OpenAI "
@@ -77,10 +84,13 @@ class OpenAiAnalyzer(AiAnalyzer):
         client = OpenAI(api_key=self.api_key)
         oa_tools = _prompt.to_openai_tools(tools)
         convo = [
-            {"role": "system", "content": _prompt.CHAT_AGENT_SYSTEM},
+            {"role": "system", "content": system or _prompt.CHAT_AGENT_SYSTEM},
             *[{"role": m["role"], "content": m["content"]} for m in messages],
         ]
         pending_actions: list[dict] = []
+        # Ferramentas efetivamente consultadas — vira contexto na resposta de
+        # teto, para o usuário saber o que já foi olhado antes de desistir.
+        used_tools: list[str] = []
 
         for _ in range(_prompt.MAX_AGENT_STEPS):
             resp = client.chat.completions.create(
@@ -122,6 +132,7 @@ class OpenAiAnalyzer(AiAnalyzer):
                     out = "Ações registradas como proposta pendente de confirmação."
                     stop_after = True
                 else:
+                    used_tools.append(c.function.name)
                     out = json.dumps(
                         read_executor(c.function.name, args), ensure_ascii=False
                     )
@@ -141,7 +152,13 @@ class OpenAiAnalyzer(AiAnalyzer):
                     "pending_actions": pending_actions,
                 }
 
+        consulted = ", ".join(dict.fromkeys(used_tools)) or "nenhuma"
         return {
-            "reply": "Não consegui concluir o raciocínio dentro do limite de passos.",
+            "reply": (
+                "Não consegui concluir dentro do limite de "
+                f"{_prompt.MAX_AGENT_STEPS} consultas. Já olhei: {consulted}. "
+                "Refaça a pergunta mais específica (ex.: cite o projeto ou o "
+                "negócio) para eu chegar à resposta."
+            ),
             "pending_actions": pending_actions,
         }

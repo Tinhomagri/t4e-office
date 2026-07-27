@@ -1,16 +1,20 @@
-import { motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
   Calendar,
   Check,
   CheckSquare,
   ChevronDown,
+  ChevronRight,
   FileText,
   Link2,
   Loader2,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   Paperclip,
   Plus,
   Send,
+  Share2,
   Square,
   Tag,
   Trash2,
@@ -175,8 +179,10 @@ export function CardDrawer({
   onClose: () => void
 }) {
   const updateCard = useUpdateCard(projectId)
+  const { data: allCards } = useCards(projectId)
   const [draft, setDraft] = useState<Card | null>(card)
   const [savedHint, setSavedHint] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => setDraft(card), [card])
 
@@ -193,6 +199,18 @@ export function CardDrawer({
 
   const assignee = members.find((m) => m.user_id === draft.assignee_id)
   const reporter = members.find((m) => m.user_id === draft.reporter_id)
+  const parent = draft.parent_id ? (allCards ?? []).find((c) => c.id === draft.parent_id) : undefined
+  const createdAgo = timeAgo(card.created_at)
+  const updatedAgo = timeAgo(card.updated_at)
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?card=${card.id}`)
+      toast.success("Link copiado")
+    } catch {
+      toast.error("Não foi possível copiar o link")
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center p-0 sm:p-4">
@@ -213,62 +231,54 @@ export function CardDrawer({
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={{ opacity: 0, x: 48, scale: 0.985 }}
         transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
-        className="relative z-10 flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl will-change-transform">
-        {/* Cabeçalho */}
-        <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2.5 bg-white dark:bg-ink-900">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge tone="brand" className="font-mono">{card.ref}</Badge>
-
-              <span className={cx(
-                "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1",
-                draft.priority === "urgent"
-                  ? "bg-danger/15 ring-danger/30 text-danger"
-                  : draft.priority === "high"
-                    ? "bg-warning/15 ring-warning/30 text-warning"
-                    : draft.priority === "medium"
-                      ? "bg-brand-50 ring-brand-200 text-brand-700"
-                      : "bg-paper-100 dark:bg-ink-800 ring-paper-200 text-paper-600",
-              )}>
-                <span className={cx(
-                  "size-1.5 rounded-full",
-                  draft.priority === "urgent"
-                    ? "bg-danger"
-                    : draft.priority === "high"
-                      ? "bg-warning"
-                      : draft.priority === "medium"
-                        ? "bg-brand-500"
-                        : "bg-paper-400",
-                )} />
-                {PRIORITY_LABEL[draft.priority]}
+        className={cx(
+          "relative z-10 flex h-full w-full flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl will-change-transform",
+          expanded ? "max-w-[1400px]" : "max-w-5xl",
+        )}>
+        {/* Cabeçalho: trilha pai/filho à esquerda, ferramentas à direita */}
+        <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2 bg-white dark:bg-ink-900">
+            <nav aria-label="Trilha" className="flex min-w-0 items-center gap-1.5 text-xs">
+              {parent ? (
+                <>
+                  <span className="flex items-center gap-1 truncate text-paper-500">
+                    <span aria-hidden>{TYPE_ICON[parent.type]}</span>
+                    <span className="font-mono">{parent.ref}</span>
+                  </span>
+                  <span className="text-paper-300" aria-hidden>/</span>
+                </>
+              ) : draft.epic_id ? (
+                <>
+                  <EpicBadge projectId={projectId} epicId={draft.epic_id} />
+                  <span className="text-paper-300" aria-hidden>/</span>
+                </>
+              ) : null}
+              <span className="flex items-center gap-1 font-medium text-ink dark:text-paper">
+                <span aria-hidden>{TYPE_ICON[draft.type]}</span>
+                <span className="font-mono">{card.ref}</span>
               </span>
 
-              <Badge tone="outline" className="rounded-full">
-                <span className="mr-0.5">{TYPE_ICON[draft.type]}</span>
-                {TYPE_LABEL[draft.type]}
-              </Badge>
-
-              {draft.sprint_id && (
-                <Badge tone="outline" className="rounded-full">
-                  Sprint
-                </Badge>
-              )}
-
-              {draft.epic_id && <EpicBadge projectId={projectId} epicId={draft.epic_id} />}
-
               {savedHint && (
-                <span className="flex items-center gap-1 text-xs font-medium text-success animate-fade-in">
+                <span className="ml-2 flex items-center gap-1 text-xs font-medium text-success animate-fade-in">
                   ✓ salvo
                 </span>
               )}
+              {updateCard.isPending && <Loader2 className="ml-2 size-3.5 animate-spin text-paper-400" />}
+            </nav>
 
-              {updateCard.isPending && <Loader2 className="size-3.5 animate-spin text-paper-400" />}
-            </div>
-          <button
-            onClick={onClose}
-            className="grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper ml-2 shrink-0"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <ToolbarButton label="Copiar link" onClick={copyLink}>
+              <Share2 className="size-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label={expanded ? "Recolher" : "Expandir"}
+              onClick={() => setExpanded((e) => !e)}
+            >
+              {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </ToolbarButton>
+            <ToolbarButton label="Fechar" onClick={onClose}>
+              <X className="size-4" />
+            </ToolbarButton>
+          </div>
         </div>
 
         {/* Corpo: 2 colunas */}
@@ -279,7 +289,7 @@ export function CardDrawer({
               value={draft.title}
               onChange={(e) => set("title", e.target.value)}
               onBlur={() => draft.title !== card.title && persist({ title: draft.title })}
-              className="w-full rounded-lg border border-transparent bg-transparent text-xl font-semibold text-ink dark:text-paper outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
+              className="-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent text-2xl font-semibold leading-snug text-ink dark:text-paper outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
             />
 
             <Section title="Descrição">
@@ -322,17 +332,21 @@ export function CardDrawer({
 
             <CustomFields cardId={card.id} projectId={projectId} />
 
-            <GithubDevPanel cardId={card.id} projectId={projectId} />
-
             <Activity cardId={card.id} members={members} />
           </div>
 
           {/* Painel lateral de detalhes */}
-          <aside className="space-y-3 border-t border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/50 p-4 lg:border-l lg:border-t-0">
-            <div className="flex items-center gap-2 pb-2 border-b border-paper-200 dark:border-ink-700">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-paper-400 flex-1">
-                Detalhes
-              </p>
+          <aside className="space-y-2.5 border-t border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/50 p-3 lg:border-l lg:border-t-0">
+            {/* Ação primária: status sólido, como no Jira */}
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusDropdown
+                variant="solid"
+                value={draft.status}
+                onChange={(v) => {
+                  set("status", v)
+                  persist({ status: v })
+                }}
+              />
               {card.points != null && (
                 <span className="flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700 ring-1 ring-brand-200">
                   🃏 {card.points} pts
@@ -340,16 +354,7 @@ export function CardDrawer({
               )}
             </div>
 
-            <DetailRow label="Status">
-              <StatusDropdown
-                value={draft.status}
-                onChange={(v) => {
-                  set("status", v)
-                  persist({ status: v })
-                }}
-              />
-            </DetailRow>
-
+            <SidePanel title="Informações">
             <DetailRow label="Responsável">
               <PersonSelect
                 value={draft.assignee_id}
@@ -372,6 +377,21 @@ export function CardDrawer({
                   persist({ reporter_id: v })
                 }}
               />
+            </DetailRow>
+
+            <DetailRow label="Pai">
+              {parent ? (
+                <span
+                  className="inline-flex max-w-full items-center gap-1 truncate rounded px-1.5 py-0.5 text-xs font-medium text-white"
+                  style={{ backgroundColor: parent.epic_color || "#6b7280" }}
+                  title={parent.title}
+                >
+                  <span className="font-mono">{parent.ref}</span>
+                  <span className="truncate">{parent.title}</span>
+                </span>
+              ) : (
+                <span className="pt-1.5 text-sm text-paper-400">Nenhum</span>
+              )}
             </DetailRow>
 
             <DetailSelect
@@ -469,6 +489,18 @@ export function CardDrawer({
                 persist({ labels: next })
               }}
             />
+            </SidePanel>
+
+            <SidePanel title="Desenvolvimento" defaultOpen={false}>
+              <GithubDevPanel cardId={card.id} projectId={projectId} />
+            </SidePanel>
+
+            {(createdAgo || updatedAgo) && (
+              <div className="px-1 pt-1 text-[11px] leading-relaxed text-paper-400">
+                {createdAgo && <p>Criado {createdAgo}</p>}
+                {updatedAgo && <p>Atualizado {updatedAgo}</p>}
+              </div>
+            )}
           </aside>
         </div>
       </motion.div>
@@ -1699,20 +1731,31 @@ const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"
 function StatusDropdown({
   value,
   onChange,
+  variant = "outline",
 }: {
   value: CardStatus
   onChange: (v: CardStatus) => void
+  /** "solid" = botão azul cheio no topo da lateral (padrão Jira). */
+  variant?: "outline" | "solid"
 }) {
   const [open, setOpen] = useState(false)
+  const solid = variant === "solid"
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1 transition-colors hover:border-paper-300 dark:hover:border-ink-600 focus-ring"
+        aria-expanded={open}
+        aria-label={`Status: ${STATUS_LABEL[value]}`}
+        className={cx(
+          "inline-flex items-center gap-1.5 transition-colors focus-ring",
+          solid
+            ? "rounded bg-brand-500 px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-brand-600"
+            : "rounded border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1 hover:border-paper-300 dark:hover:border-ink-600",
+        )}
       >
-        <StatusLozenge status={value} />
-        <ChevronDown className="size-3.5 text-paper-400" />
+        {solid ? STATUS_LABEL[value] : <StatusLozenge status={value} />}
+        <ChevronDown className={cx("size-3.5", solid ? "text-white/80" : "text-paper-400")} />
       </button>
       {open && (
         <>
@@ -1765,13 +1808,127 @@ function MentionText({ text, members }: { text: string; members: Member[] }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// Conteúdo que abre/fecha com chevron — usado pelas seções da coluna principal
+// e pelos painéis da lateral. Respeita prefers-reduced-motion.
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const reduce = useReducedMotion()
+  return (
+    <AnimatePresence initial={false}>
+      {open && (
+        <motion.div
+          key="body"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={
+            reduce
+              ? { duration: 0 }
+              : { height: { duration: 0.18, ease: [0.2, 0, 0, 1] }, opacity: { duration: 0.12 } }
+          }
+          className="overflow-hidden"
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// Chevron que gira 90° ao abrir (150ms) — transform puro, sem reflow.
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <ChevronRight
+      aria-hidden
+      className={cx(
+        "size-3.5 shrink-0 text-paper-400 transition-transform duration-150 motion-reduce:transition-none",
+        open && "rotate-90",
+      )}
+    />
+  )
+}
+
+// Seção colapsável da coluna principal (Descrição, Subtarefas, Atividade…).
+function Section({
+  title,
+  children,
+  action,
+  defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  action?: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <div>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-paper-500">{title}</h3>
-      {children}
+      <div className="mb-2 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="-ml-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-sm font-semibold text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 focus-ring"
+        >
+          <Chevron open={open} />
+          {title}
+        </button>
+        {action && <div className="ml-auto flex items-center gap-1">{action}</div>}
+      </div>
+      <Collapse open={open}>{children}</Collapse>
     </div>
   )
+}
+
+// Painel com borda da coluna lateral (Informações, Desenvolvimento…).
+function SidePanel({
+  title,
+  children,
+  action,
+  defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  action?: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section className="rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900">
+      <div className="flex items-center gap-1.5 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex flex-1 items-center gap-1.5 rounded text-left text-sm font-semibold text-ink dark:text-paper focus-ring"
+        >
+          <Chevron open={open} />
+          {title}
+        </button>
+        {action}
+      </div>
+      <Collapse open={open}>
+        <div className="px-3 pb-3">{children}</div>
+      </Collapse>
+    </section>
+  )
+}
+
+// "há 3 dias", "há 1 hora" — para o rodapé de criado/atualizado.
+function timeAgo(iso: string | null): string | null {
+  if (!iso) return null
+  const diff = Date.now() - new Date(iso).getTime()
+  if (Number.isNaN(diff)) return null
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return "agora"
+  if (min < 60) return `há ${min} ${min === 1 ? "minuto" : "minutos"}`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `há ${h} ${h === 1 ? "hora" : "horas"}`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `há ${d} ${d === 1 ? "dia" : "dias"}`
+  const mo = Math.floor(d / 30)
+  if (mo < 12) return `há ${mo} ${mo === 1 ? "mês" : "meses"}`
+  const y = Math.floor(mo / 12)
+  return `há ${y} ${y === 1 ? "ano" : "anos"}`
 }
 
 function EpicBadge({ projectId, epicId }: { projectId: string; epicId: string }) {
@@ -1830,10 +1987,33 @@ function EpicSelect({
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[96px_1fr] items-start gap-2 py-1">
-      <span className="pt-1.5 text-[11px] font-medium text-paper-500 leading-tight">{label}</span>
+    <div className="grid grid-cols-[90px_1fr] items-start gap-2 py-1">
+      <span className="pt-1.5 text-xs font-medium text-paper-500 leading-tight">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
+  )
+}
+
+// Ícone-ação do cabeçalho do drawer (copiar link, expandir, fechar).
+function ToolbarButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper focus-ring"
+    >
+      {children}
+    </button>
   )
 }
 

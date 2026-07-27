@@ -1,7 +1,6 @@
 """Views da Planning Poker API."""
 
 from django.db.models import Avg
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -9,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.estimation.application import read_services
 from contexts.estimation.domain.entities.poker_session import (
     PokerParticipant,
     PokerSession,
@@ -18,7 +18,6 @@ from contexts.estimation.domain.entities.poker_session import (
 from contexts.estimation.infrastructure.django.models import (
     PokerParticipantModel,
     PokerRoundModel,
-    PokerSessionModel,
 )
 from contexts.estimation.infrastructure.django.repositories_impl import (
     DjangoPokerParticipantRepository,
@@ -38,7 +37,7 @@ _participant_repo = DjangoPokerParticipantRepository()
 _vote_repo = DjangoPokerVoteRepository()
 
 # Valores válidos de pontuação final — mesmo deck usado na votação (sem "?").
-DECK_POINTS = {1, 2, 3, 5, 8, 13, 21}
+DECK_POINTS = read_services.DECK_POINTS
 
 
 def _initials(name: str) -> str:
@@ -388,47 +387,7 @@ class PokerWorkspaceSummaryView(APIView):
 
     @extend_schema(responses={200: dict})
     def get(self, request: Request, workspace_id: str) -> Response:
-        sessions_qs = PokerSessionModel.objects.filter(workspace_id=workspace_id)
-        rounds_qs = PokerRoundModel.objects.filter(session__workspace_id=workspace_id).select_related(
-            "session", "decided_by"
-        )
-
-        today = timezone.localdate()
-        rounds_today = [r for r in rounds_qs if timezone.localtime(r.decided_at).date() == today]
-        sessions_today = [s for s in sessions_qs if timezone.localtime(s.created_at).date() == today]
-
-        avg = rounds_qs.aggregate(avg=Avg("final_points"))["avg"]
-
-        distribution: dict[int, int] = {v: 0 for v in sorted(DECK_POINTS)}
-        estimator_counts: dict[str, int] = {}
-        for r in rounds_qs:
-            distribution[r.final_points] = distribution.get(r.final_points, 0) + 1
-            for v in r.votes:
-                if v.get("value") is not None:
-                    name = v.get("participant_name") or "?"
-                    estimator_counts[name] = estimator_counts.get(name, 0) + 1
-
-        top_estimators = sorted(estimator_counts.items(), key=lambda kv: kv[1], reverse=True)[:6]
-
-        recent = sorted(rounds_qs, key=lambda r: r.decided_at, reverse=True)[:10]
-
-        return Response({
-            "sessions_total": sessions_qs.count(),
-            "sessions_active": sessions_qs.exclude(status="done").count(),
-            "sessions_today": len(sessions_today),
-            "rounds_total": rounds_qs.count(),
-            "rounds_today": len(rounds_today),
-            "avg_points": round(avg, 1) if avg is not None else None,
-            "points_distribution": [{"points": k, "count": v} for k, v in distribution.items()],
-            "top_estimators": [{"name": n, "votes": c} for n, c in top_estimators],
-            "recent_rounds": [
-                {
-                    **_round_dict(r),
-                    "session_name": r.session.name,
-                }
-                for r in recent
-            ],
-        })
+        return Response(read_services.workspace_summary(workspace_id))
 
 
 class PokerRoundListView(APIView):

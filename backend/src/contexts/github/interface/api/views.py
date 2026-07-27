@@ -9,6 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.github.application import read_services
 from contexts.github.infrastructure import github_api, linking
 from contexts.github.infrastructure.django import crypto
 from contexts.github.infrastructure.django.models import (
@@ -224,52 +225,7 @@ class ProjectDevMetricsView(APIView):
 
     def get(self, request: Request, project_id: str) -> Response:
         _project_or_403(project_id, str(request.user.id))
-        repos = GithubRepoLinkModel.objects.filter(project_id=project_id)
-        links = CardDevLinkModel.objects.filter(project_id=project_id)
-
-        prs = links.filter(kind="pull_request")
-        pr_open = prs.filter(state="open").count()
-        pr_merged = prs.filter(state="merged").count()
-        pr_closed = prs.filter(state="closed").count()
-
-        recent_prs = [
-            {
-                "id": str(link.id),
-                "title": link.title,
-                "url": link.url,
-                "state": link.state,
-                "number": link.number,
-                "branch": link.branch,
-                "author_login": link.author_login,
-                "author_avatar": link.author_avatar,
-                "updated_at": link.updated_at.isoformat(),
-            }
-            for link in prs.order_by("-updated_at")[:15]
-        ]
-
-        return Response(
-            {
-                "repos": [
-                    {
-                        "id": str(r.id),
-                        "full_name": r.full_name,
-                        "default_branch": r.default_branch,
-                        "webhook_active": r.webhook_id is not None,
-                    }
-                    for r in repos
-                ],
-                "prs": {
-                    "open": pr_open,
-                    "merged": pr_merged,
-                    "closed": pr_closed,
-                    "total": pr_open + pr_merged + pr_closed,
-                },
-                "branches": links.filter(kind="branch").count(),
-                "commits": links.filter(kind="commit").count(),
-                "linked_cards": links.values("card_id").distinct().count(),
-                "recent_prs": recent_prs,
-            }
-        )
+        return Response(read_services.project_dev_metrics(project_id))
 
 
 class CardDevLinksView(APIView):

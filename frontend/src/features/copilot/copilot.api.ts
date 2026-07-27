@@ -1,5 +1,6 @@
 import { api } from "@/shared/api/client"
 
+import type { SpaceId } from "@/features/shell/spaces"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 
 export interface SuggestedTask {
@@ -275,9 +276,26 @@ export interface ChatMessage {
 }
 
 // Ação de escrita proposta pela IA (preview antes de confirmar).
+// Os nomes vêm do registry do backend — um por domínio de ferramentas.
+export type PendingActionKind =
+  // entrega
+  | "create_card"
+  | "update_card"
+  | "create_sprint"
+  | "update_sprint"
+  // comercial
+  | "create_deal"
+  | "update_deal"
+  | "move_deal_stage"
+  | "win_deal"
+  | "lose_deal"
+  | "schedule_activity"
+  | "create_customer"
+
 export interface PendingAction {
-  action: "create_card" | "update_card" | "create_sprint" | "update_sprint"
+  action: PendingActionKind
   reason: string
+  // entrega
   project_id?: string
   card_id?: string
   title?: string
@@ -291,6 +309,30 @@ export interface PendingAction {
   goal?: string
   start_date?: string
   end_date?: string
+  // comercial
+  deal_id?: string
+  customer_id?: string
+  contact_id?: string
+  stage_id?: string
+  deal_title?: string
+  amount?: number
+  currency?: string
+  probability?: number
+  expected_close_date?: string
+  owner_id?: string
+  deal_source?: string
+  create_delivery_project?: boolean
+  lost_reason?: string
+  lost_notes?: string
+  activity_kind?: "note" | "task" | "meeting"
+  activity_content?: string
+  due_date?: string
+  end_date_time?: string
+  attendees?: string[]
+  customer_name?: string
+  customer_kind?: "company" | "person"
+  customer_email?: string
+  customer_phone?: string
 }
 
 export interface ChatResult {
@@ -301,10 +343,14 @@ export interface ChatResult {
 export async function sendChat(
   workspaceId: string,
   messages: ChatMessage[],
+  // Space ativo: o backend usa como dica de por onde começar a olhar. Não
+  // restringe ferramentas — perguntas que cruzam domínios continuam válidas.
+  space?: SpaceId,
 ): Promise<ChatResult> {
   const { data } = await api.post<ChatResult>("/copilot/chat/", {
     workspace_id: workspaceId,
     messages,
+    ...(space ? { space } : {}),
   })
   return { reply: data.reply, pending_actions: data.pending_actions ?? [] }
 }

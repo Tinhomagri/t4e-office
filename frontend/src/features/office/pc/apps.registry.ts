@@ -6,7 +6,7 @@
 import type { ComponentType } from "react"
 
 import { BoardsPage } from "@/features/boards/BoardsPage"
-import { SalesPage } from "@/features/sales/SalesPage"
+import { DashboardDeck } from "@/features/sales/deck/DashboardDeck"
 
 export type AppGroupId = "trabalho" | "comercial" | "marketing" | "sistema"
 
@@ -40,7 +40,7 @@ export const APPS: AppDef[] = [
   { id: "myday", label: "Meu Dia", group: "trabalho", size: MED, component: null },
   { id: "poker", label: "Planning Poker", group: "trabalho", size: BIG, component: null },
 
-  { id: "comercial", label: "Comercial", group: "comercial", size: BIG, component: SalesPage },
+  { id: "comercial", label: "Comercial", group: "comercial", size: BIG, component: DashboardDeck },
   { id: "reports", label: "Relatórios", group: "comercial", size: BIG, component: null },
   { id: "portfolio", label: "Portfólio", group: "comercial", size: MED, component: null },
 

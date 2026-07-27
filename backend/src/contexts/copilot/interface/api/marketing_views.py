@@ -1,48 +1,26 @@
-"""Habilidades de marketing do Copiloto: geração de copy por canal.
+"""Endpoints de marketing do Copiloto: copy, campanha, repurpose, marca e contas.
 
 POST /api/copilot/generate-copy/
   body: {workspace_id, title, description?, channel}
   → {"variations": [str, str, str]}
 
-Usa a IA já configurada do workspace (Anthropic/OpenAI) com um prompt de
-copywriting calibrado por canal. Sem escrita no banco — o usuário escolhe a
-variação e cola/salva no card.
+A lógica de prompt e parsing vive em `infrastructure/marketing_skills.py`,
+compartilhada com as ferramentas `mkt_*` do agente — as views aqui só validam
+entrada, checam acesso e registram a métrica.
 """
-import json
-import re
-
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from contexts.copilot.infrastructure import ai_config, brand_kit, metrics
+from contexts.copilot.infrastructure import brand_kit, marketing_skills, metrics
 from contexts.copilot.infrastructure.django.repositories_impl import (
     DjangoWorkspaceAccess,
 )
 from shared.domain.errors import PermissionDeniedError, ValidationError
 
-_CHANNEL_TONE = {
-    "instagram": "leve, direto, com gancho forte na primeira linha e CTA; até 3 hashtags relevantes",
-    "facebook": "conversacional e próximo, foco em engajamento",
-    "linkedin": "profissional e informativo, sem hashtags em excesso, storytelling corporativo",
-    "tiktok": "descontraído, jovem, frases curtas com gancho imediato",
-    "youtube": "descrição clara com palavras-chave e CTA de inscrição",
-    "blog": "título SEO + meta descrição de até 155 caracteres",
-    "email": "assunto curto que gera abertura + preview text complementar",
-    "site": "texto institucional claro e objetivo",
-}
-
-
-_TONE_HINT = {
-    "": "",
-    "institucional": "tom institucional, sério e confiável",
-    "descontraido": "tom descontraído e bem-humorado",
-    "urgente": "tom de urgência/escassez com CTA forte",
-    "educativo": "tom educativo, didático, que ensina algo",
-    "inspirador": "tom inspirador e aspiracional",
-}
+_TONE_HINT = marketing_skills.TONE_HINT
 
 
 class GenerateCopySerializer(serializers.Serializer):
@@ -59,22 +37,6 @@ class GenerateCopySerializer(serializers.Serializer):
     source_copy = serializers.CharField(required=False, allow_blank=True, default="")
 
 
-def _extract_variations(raw: str, limit: int = 3) -> list[str]:
-    """Extrai a lista de variações da resposta da IA (JSON, com fallback)."""
-    match = re.search(r"\[.*\]", raw, flags=re.DOTALL)
-    if match:
-        try:
-            parsed = json.loads(match.group(0))
-            variations = [str(v).strip() for v in parsed if str(v).strip()]
-            if variations:
-                return variations[:limit]
-        except (json.JSONDecodeError, TypeError):
-            pass
-    # Fallback: blocos separados por linha em branco
-    blocks = [b.strip() for b in raw.split("\n\n") if b.strip()]
-    return blocks[:limit] if blocks else [raw.strip()]
-
-
 class GenerateCopyView(APIView):
     """Gera 3 variações de copy/legenda para um card de marketing."""
 
@@ -89,57 +51,20 @@ class GenerateCopyView(APIView):
         if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
 
-        channel = v["channel"].lower()
-        tone = _CHANNEL_TONE.get(channel, "adequado ao canal informado")
-        count = v["count"]
-
-        parts = [
-            "Você é um copywriter sênior de marketing digital escrevendo em "
-            "português do Brasil.",
-            f"Canal: {channel} — tom {tone}.",
-        ]
-        if v["tone"]:
-            parts.append(f"Tom de voz obrigatório: {_TONE_HINT[v['tone']]}.")
-        if v["include_hashtags"] is True:
-            parts.append("Inclua hashtags relevantes ao final de cada variação.")
-        elif v["include_hashtags"] is False:
-            parts.append("NÃO use hashtags em nenhuma variação.")
-        parts.append(f"Tema/título do conteúdo: {v['title']}")
-        if v["description"]:
-            parts.append(f"Briefing/descrição: {v['description']}")
-        if v["source_copy"]:
-            # Modo adaptação: reescreve uma copy existente para o canal de destino
-            parts.append(
-                "Copy original a ser ADAPTADA para o canal acima (preserve a "
-                f"mensagem central, ajuste formato e linguagem):\n{v['source_copy']}"
-            )
-            parts.append(
-                f"\nEscreva {count} adaptações prontas para publicar nesse canal."
-            )
-        else:
-            parts.append(
-                f"\nEscreva {count} variações de copy prontas para publicar nesse "
-                "canal, com abordagens diferentes entre si (ex.: emocional, "
-                "informativa, CTA agressivo)."
-            )
-        parts.append(
-            f"Responda APENAS com um array JSON de {count} strings, sem nenhum "
-            "texto fora do JSON."
-        )
-        brand = brand_kit.brand_prompt_snippet(workspace_id)
-        if brand:
-            parts.insert(1, brand)
-        prompt = "\n".join(parts)
-
-        raw = ai_config.chat_for_workspace(
-            workspace_id, [{"role": "user", "content": prompt}]
+        result = marketing_skills.generate_copy(
+            workspace_id=workspace_id,
+            title=v["title"],
+            description=v["description"],
+            channel=v["channel"],
+            tone=v["tone"],
+            include_hashtags=v["include_hashtags"],
+            count=v["count"],
+            source_copy=v["source_copy"],
         )
         metrics.log_event(
             workspace_id=workspace_id, actor_id=str(request.user.id), kind="generate_copy"
         )
-        return Response(
-            {"channel": channel, "variations": _extract_variations(raw, limit=count)}
-        )
+        return Response(result)
 
 
 class GenerateCampaignSerializer(serializers.Serializer):
@@ -161,33 +86,6 @@ class GenerateCampaignSerializer(serializers.Serializer):
                 "A data final deve ser igual ou posterior à inicial."
             )
         return attrs
-
-
-def _extract_pieces(raw: str) -> list[dict]:
-    """Extrai a lista de peças da campanha (array JSON de objetos)."""
-    match = re.search(r"\[.*\]", raw, flags=re.DOTALL)
-    if not match:
-        return []
-    try:
-        parsed = json.loads(match.group(0))
-    except (json.JSONDecodeError, TypeError):
-        return []
-    if not isinstance(parsed, list):
-        return []
-    pieces = []
-    for item in parsed:
-        if not isinstance(item, dict):
-            continue
-        pieces.append(
-            {
-                "channel": str(item.get("channel", "")).lower().strip(),
-                "title": str(item.get("title", "")).strip(),
-                "copy": str(item.get("copy", "")).strip(),
-                "publish_date": str(item.get("publish_date", "")).strip() or None,
-                "format_hint": str(item.get("format_hint", "")).strip(),
-            }
-        )
-    return [p for p in pieces if p["title"] and p["channel"]]
 
 
 class RepurposeSerializer(serializers.Serializer):
@@ -224,39 +122,17 @@ class RepurposeView(APIView):
         if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
 
-        channels = [c.lower().strip() for c in v["channels"] if c.strip()]
-        channel_lines = "\n".join(
-            f"- {ch}: tom {_CHANNEL_TONE.get(ch, 'adequado ao canal')}"
-            for ch in channels
-        )
-        parts = [
-            "Você é um copywriter sênior de marketing digital escrevendo em "
-            "português do Brasil.",
-            f"Peça original (título: {v['title']}):\n{v['source_copy']}",
-            "\nAdapte essa MESMA mensagem central para cada canal abaixo, ajustando "
-            f"formato e linguagem:\n{channel_lines}",
-        ]
-        if v["tone"]:
-            parts.append(f"Tom de voz obrigatório: {_TONE_HINT[v['tone']]}.")
-        parts.append(
-            "Responda APENAS com um array JSON de objetos, um por canal, sem texto "
-            "fora do JSON. Cada objeto: {\"channel\": <um dos canais>, \"title\": "
-            "<título curto da peça>, \"copy\": <copy adaptada pronta para publicar>, "
-            "\"format_hint\": <formato sugerido>}."
-        )
-        brand = brand_kit.brand_prompt_snippet(workspace_id)
-        if brand:
-            parts.insert(1, brand)
-        prompt = "\n".join(parts)
-
-        raw = ai_config.chat_for_workspace(
-            workspace_id, [{"role": "user", "content": prompt}]
+        result = marketing_skills.repurpose(
+            workspace_id=workspace_id,
+            title=v["title"],
+            source_copy=v["source_copy"],
+            channels=v["channels"],
+            tone=v["tone"],
         )
         metrics.log_event(
             workspace_id=workspace_id, actor_id=str(request.user.id), kind="repurpose"
         )
-        pieces = [p for p in _extract_pieces(raw) if p["channel"] in channels]
-        return Response({"pieces": pieces})
+        return Response(result)
 
 
 class GenerateCampaignView(APIView):
@@ -281,58 +157,21 @@ class GenerateCampaignView(APIView):
         if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
 
-        channels = [c.lower().strip() for c in v["channels"] if c.strip()]
-        per_channel = v["per_channel"]
-        start = v["start_date"].isoformat()
-        end = v["end_date"].isoformat()
-        total = len(channels) * per_channel
-
-        channel_lines = "\n".join(
-            f"- {ch}: tom {_CHANNEL_TONE.get(ch, 'adequado ao canal')}"
-            for ch in channels
-        )
-        parts = [
-            "Você é um estrategista de marketing digital sênior escrevendo em "
-            "português do Brasil.",
-            "A partir do briefing abaixo, monte um plano de campanha multicanal.",
-            f"\nBriefing:\n{v['brief']}",
-            f"\nCanais e tom de cada um:\n{channel_lines}",
-            f"\nGere exatamente {per_channel} peça(s) por canal ({total} no total).",
-            f"Distribua as datas de publicação entre {start} e {end} (inclusive), "
-            "seguindo boa prática de cadência: não empilhe duas peças do mesmo "
-            "canal no mesmo dia e escalone ao longo da janela.",
-        ]
-        if v["tone"]:
-            parts.append(f"Tom de voz geral obrigatório: {_TONE_HINT[v['tone']]}.")
-        parts.append(
-            "Responda APENAS com um array JSON de objetos, sem texto fora do JSON. "
-            "Cada objeto: {\"channel\": <um dos canais>, \"title\": <título curto "
-            "da peça>, \"copy\": <copy pronta para publicar no canal>, "
-            "\"publish_date\": <YYYY-MM-DD dentro da janela>, \"format_hint\": "
-            "<formato sugerido, ex.: Reels, Carrossel, Newsletter>}."
-        )
-        brand = brand_kit.brand_prompt_snippet(workspace_id)
-        if brand:
-            parts.insert(1, brand)
-        prompt = "\n".join(parts)
-
-        raw = ai_config.chat_for_workspace(
-            workspace_id, [{"role": "user", "content": prompt}]
+        result = marketing_skills.generate_campaign(
+            workspace_id=workspace_id,
+            brief=v["brief"],
+            channels=v["channels"],
+            start_date=v["start_date"].isoformat(),
+            end_date=v["end_date"].isoformat(),
+            per_channel=v["per_channel"],
+            tone=v["tone"],
         )
         metrics.log_event(
             workspace_id=workspace_id,
             actor_id=str(request.user.id),
             kind="generate_campaign",
         )
-        pieces = _extract_pieces(raw)
-        # Mantém só peças em canais pedidos e datas dentro da janela.
-        valid = [
-            p
-            for p in pieces
-            if p["channel"] in channels
-            and (p["publish_date"] is None or start <= p["publish_date"] <= end)
-        ]
-        return Response({"pieces": valid})
+        return Response(result)
 
 
 class BrandKitSerializer(serializers.Serializer):
