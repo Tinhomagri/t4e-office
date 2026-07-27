@@ -13,8 +13,11 @@ import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/fe
 
 import { type OfficeMap, type Seat, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
-import { cameraTarget, focusScale, integerScale, screenToWorld, viewportFor } from "./camera"
+import {
+  cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
+} from "./camera"
 import { keyAction } from "./input"
+import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
 
@@ -80,6 +83,9 @@ export class OfficeEngine {
   private lightCtx: CanvasRenderingContext2D
   private props: Record<string, PropSprite>
   private shadow: PropSprite
+  private sky: SkyLayers
+  /** Offset ativo da câmera (apoiado no guarda-corpo). */
+  private viewOffset = { dx: 0, dy: 0 }
 
   private actors = new Map<string, Actor>()
   private me: Actor | null = null
@@ -128,6 +134,7 @@ export class OfficeEngine {
 
     this.props = buildPropSprites()
     this.shadow = buildShadowSprite()
+    this.sky = buildSky()
     this.bakeGround()
 
     // Buffer de luz em 1/4 da resolução do mundo visível: o desfoque natural
@@ -312,6 +319,7 @@ export class OfficeEngine {
     if (me.seatIndex >= 0) {
       me.seatIndex = -1
       me.anim = "idle"
+      this.viewOffset = { dx: 0, dy: 0 }
       this.cb.onInteract?.(null)
       return
     }
@@ -332,7 +340,10 @@ export class OfficeEngine {
     me.x = seat.x
     me.y = seat.y
     me.facing = seat.facing
-    me.anim = seat.kind === "lounge" ? "idle" : "type"
+    me.anim =
+      seat.kind === "view" ? "lean" : seat.kind === "lounge" ? "idle" : "type"
+    this.viewOffset =
+      seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
     this.cb.onInteract?.(seat)
   }
@@ -625,8 +636,12 @@ export class OfficeEngine {
   private updateCamera(): void {
     const anchor = this.focus ?? this.me
     if (!anchor) return
-    const { x: cx, y: cy } = cameraTarget(
+    const base = cameraTarget(
       anchor.x, anchor.y, this.viewW, this.viewH, this.map.width, this.map.height,
+    )
+    const { x: cx, y: cy } = offsetCamera(
+      base, this.viewOffset.dx, this.viewOffset.dy,
+      this.viewW, this.viewH, this.map.width, this.map.height,
     )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
@@ -643,8 +658,32 @@ export class OfficeEngine {
     const camY = Math.round(this.camY)
     const s = this.scale
 
-    ctx.fillStyle = "#1a1712"
-    ctx.fillRect(0, 0, this.viewW * s, this.viewH * s)
+    // Céu primeiro: o piso é blitado por cima com alfa, então vidro,
+    // guarda-corpo e o vazio fora do prédio revelam estas faixas.
+    const vw = this.viewW
+    const vh = this.viewH
+    const blit = (layer: HTMLCanvasElement, factor: number, extraX = 0) => {
+      const r = layerRect(factor, camX + extraX, camY, vw, vh)
+      ctx.drawImage(layer, r.sx, r.sy, r.sw, r.sh, 0, 0, vw * s, vh * s)
+      // Segunda passada quando o recorte cruza o fim da faixa — sem ela
+      // aparece uma coluna vazia a cada volta do loop.
+      const over = r.sx + r.sw - layer.width
+      if (over > 0) {
+        ctx.drawImage(
+          layer, 0, r.sy, over, r.sh,
+          (r.sw - over) * s, 0, over * s, vh * s,
+        )
+      }
+    }
+
+    blit(this.sky.sky, 0)
+    blit(this.sky.far, SKY_PARALLAX.far)
+    blit(this.sky.near, SKY_PARALLAX.near)
+    ctx.drawImage(
+      this.sky.clouds,
+      cloudOffset(camX, this.time), 0, vw, vh,
+      0, 0, vw * s, vh * s,
+    )
 
     // Piso e paredes: um único blit da região visível.
     ctx.drawImage(
