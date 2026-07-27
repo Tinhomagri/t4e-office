@@ -8,7 +8,7 @@ const map = buildFloor1()
 describe("pcSeats", () => {
   it("devolve só assentos com computador", () => {
     const seats = pcSeats(map.seats)
-    expect(seats).toHaveLength(14)
+    expect(seats).toHaveLength(16)
     for (const s of seats) expect(s.kind).toBe("pc")
   })
 
@@ -65,9 +65,9 @@ describe("isMyDesk", () => {
     expect(isMyDesk(userId, outra, map.seats)).toBe(false)
   })
 
-  it("falso para sofá, copa e sala de reunião", () => {
+  it("falso para o guarda-corpo da varanda — não tem computador", () => {
     const userId = "bruno-456"
-    for (const kind of ["lounge", "meeting"] as const) {
+    for (const kind of ["view"] as const) {
       const seat = map.seats.find((s) => s.kind === kind)!
       expect(isMyDesk(userId, seat, map.seats)).toBe(false)
     }

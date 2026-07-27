@@ -11,28 +11,24 @@ describe("assentos", () => {
   })
 
   it("id deriva do tile do assento, não do índice do array", () => {
-    // Ilha em (26,6): o assento da esquerda cai no tile (26,9).
-    expect(map.seats.some((s) => s.id === "ws-26-9")).toBe(true)
-    // Cabine de foco mais alta: assento no tile (5,29).
-    expect(map.seats.some((s) => s.id === "ws-5-29")).toBe(true)
+    // Cluster de baia em (16,6): a cadeira "up" cai no tile (17,9), a "down" em (18,9).
+    expect(map.seats.some((s) => s.id === "ws-17-9")).toBe(true)
+    expect(map.seats.some((s) => s.id === "ws-18-9")).toBe(true)
   })
 
-  it("estações, mesas individuais e cabines são kind 'pc' — 14 no total", () => {
+  it("baias são kind 'pc' — 16 no total", () => {
     const pc = map.seats.filter((s) => s.kind === "pc")
-    expect(pc).toHaveLength(14)
+    expect(pc).toHaveLength(16)
     for (const s of pc) expect(s.id.startsWith("ws-")).toBe(true)
   })
 
-  it("sala de reunião é kind 'meeting'", () => {
-    const meeting = map.seats.filter((s) => s.kind === "meeting")
-    expect(meeting).toHaveLength(6)
-    for (const s of meeting) expect(s.label).toBe("Sala de reunião")
-  })
-
-  it("sofá e copa são kind 'lounge' — não abrem PC", () => {
-    const lounge = map.seats.filter((s) => s.kind === "lounge")
-    expect(lounge).toHaveLength(4)
-    for (const s of lounge) expect(s.kind).not.toBe("pc")
+  it("guarda-corpo da varanda é kind 'view' — não abre PC", () => {
+    const view = map.seats.filter((s) => s.kind === "view")
+    expect(view.length).toBeGreaterThanOrEqual(3)
+    for (const s of view) {
+      expect(s.kind).not.toBe("pc")
+      expect(s.label).toBe("Vista da varanda")
+    }
   })
 
   it("todo assento está dentro dos limites do mapa", () => {

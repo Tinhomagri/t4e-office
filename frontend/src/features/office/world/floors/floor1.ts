@@ -1,24 +1,39 @@
-// Planta do andar 1. Nesta task é a planta antiga movida sem alteração; a
-// Task 8 substitui o corpo pelo bullpen novo.
+// Andar 1 — bullpen.
+//
+// Galpão de trabalho único, no espírito de The Office: duas fileiras de baias
+// em U em pares encostados de costas, hall do elevador a oeste e fachada de
+// vidro em L (sul e leste) do piso ao teto. A varanda em deck fecha a quina
+// sudeste, e o que está fora do envelope do prédio é T.VOID — ali só se vê a
+// camada de céu.
+//
+// A planta é dado, não desenho: o motor lê tile, prop, zona, luz e assento sem
+// saber o que é "baia".
+import type { LightSource, OfficeMap, PlacedProp, Seat, SeatKind, Zone } from "../map"
 import { PROPS, type PropKind } from "../props"
 import { SOLID_TILES, T, TILE } from "../tiles"
-import type { LightSource, OfficeMap, PlacedProp, Seat, SeatKind, Zone } from "../map"
 
-const COLS = 60
-const ROWS = 38
+const COLS = 72
+const ROWS = 46
+
+// Envelope do prédio. Fora daqui é céu.
+const B = { x: 0, y: 0, w: 56, h: 38 }
+
+// Deck em L, fechando a quina sudeste.
+const DECK_S = { x: 20, y: 38, w: 36, h: 6 }
+const DECK_E = { x: 56, y: 20, w: 8, h: 24 }
+
+// Porta de vidro na fachada sul.
+const DOOR = { x: 28, w: 3 }
+
+// Clusters de baia: 2 fileiras × 4 colunas, passo 8 em x e 14 em y.
+const CUBICLE_COLS = [16, 24, 32, 40]
+const CUBICLE_ROWS = [6, 20]
 
 function idx(x: number, y: number): number {
   return y * COLS + x
 }
 
-function fill(
-  grid: Uint8Array,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  value: number,
-): void {
+function fill(grid: Uint8Array, x: number, y: number, w: number, h: number, value: number): void {
   for (let j = y; j < y + h; j++) {
     for (let i = x; i < x + w; i++) {
       if (i >= 0 && i < COLS && j >= 0 && j < ROWS) grid[idx(i, j)] = value
@@ -26,13 +41,12 @@ function fill(
   }
 }
 
-/** Paredes de um cômodo: contorno em WALL com o topo em WALL_TOP. */
+/** Casca de cômodo: piso + contorno de parede, topo em WALL_TOP. */
 function room(grid: Uint8Array, x: number, y: number, w: number, h: number, floor: number): void {
   fill(grid, x, y, w, h, floor)
   fill(grid, x, y, w, 1, T.WALL_TOP)
   fill(grid, x, y + 1, w, 1, T.WALL)
   fill(grid, x, y + h - 1, w, 1, T.WALL)
-  // Laterais usam o tile vertical; a linha do topo continua sendo WALL_TOP.
   fill(grid, x, y + 1, 1, h - 1, T.WALL_V)
   fill(grid, x + w - 1, y + 1, 1, h - 1, T.WALL_V)
 }
@@ -40,35 +54,45 @@ function room(grid: Uint8Array, x: number, y: number, w: number, h: number, floo
 export function buildFloor1(): OfficeMap {
   const floor = new Uint8Array(COLS * ROWS).fill(T.VOID)
 
-  // ── Casca do andar ────────────────────────────────────────────────────────
-  room(floor, 0, 0, COLS, ROWS, T.WOOD)
+  // ── Envelope ──────────────────────────────────────────────────────────────
+  room(floor, B.x, B.y, B.w, B.h, T.WOOD)
 
-  // Open space ocupa o miolo; os outros ambientes encostam nas bordas.
-  fill(floor, 1, 2, COLS - 2, ROWS - 3, T.WOOD)
+  // Hall do elevador: ladrilho, encostado na parede oeste.
+  fill(floor, 1, 2, 10, 12, T.TILEFLOOR)
 
-  // Sala de reunião (topo esquerdo) — carpete.
-  room(floor, 2, 2, 22, 14, T.CARPET)
-  fill(floor, 12, 15, 3, 1, T.DOORWAY) // porta para o open space
+  // Fachada de vidro sul (do piso ao teto) com a porta no meio.
+  fill(floor, 6, B.h - 1, 48, 1, T.GLASS)
+  fill(floor, DOOR.x, B.h - 1, DOOR.w, 1, T.GLASS_DOOR)
 
-  // Copa (topo direito) — ladrilho.
-  room(floor, 36, 2, 22, 12, T.TILEFLOOR)
-  fill(floor, 44, 13, 3, 1, T.DOORWAY)
+  // Fachada de vidro leste.
+  fill(floor, B.w - 1, 4, 1, 32, T.GLASS)
 
-  // Área de foco (base esquerda) — carpete, cabines.
-  room(floor, 2, 24, 18, 12, T.CARPET)
-  fill(floor, 10, 24, 3, 1, T.DOORWAY)
+  // ── Varanda ───────────────────────────────────────────────────────────────
+  fill(floor, DECK_S.x, DECK_S.y, DECK_S.w, DECK_S.h, T.DECK)
+  fill(floor, DECK_E.x, DECK_E.y, DECK_E.w, DECK_E.h, T.DECK)
 
-  // Lounge social (base direita) — assoalho; o tapete é prop, não piso. Tile
-  // de tapete repetido pelo cômodo inteiro vira estampa de papel de parede.
-  room(floor, 38, 22, 20, 14, T.WOOD)
-  fill(floor, 46, 22, 3, 1, T.DOORWAY)
+  // Guarda-corpo em todo o perímetro externo do deck. Fazer isto por varredura,
+  // e não à mão, é o que garante que não sobra vão para cair — testado.
+  const isDeck = (x: number, y: number) =>
+    x >= 0 && y >= 0 && x < COLS && y < ROWS && floor[idx(x, y)] === T.DECK
+  const railing: [number, number][] = []
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (!isDeck(x, y)) continue
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx
+        const ny = y + dy
+        const fora =
+          nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS || floor[idx(nx, ny)] === T.VOID
+        if (fora) railing.push([nx, ny])
+      }
+    }
+  }
+  for (const [x, y] of railing) {
+    if (x >= 0 && y >= 0 && x < COLS && y < ROWS) floor[idx(x, y)] = T.RAILING
+  }
 
-  // Janelas: parede superior e a lateral direita do lounge.
-  for (let x = 4; x < 20; x += 3) floor[idx(x, 2)] = T.GLASS
-  for (let x = 38; x < 56; x += 3) floor[idx(x, 2)] = T.GLASS
-  for (let x = 26; x < 34; x += 3) floor[idx(x, 1)] = T.GLASS
-
-  // ── Colisão ───────────────────────────────────────────────────────────────
+  // ── Colisão a partir do tile ──────────────────────────────────────────────
   const collision = new Uint8Array(COLS * ROWS)
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
@@ -78,84 +102,42 @@ export function buildFloor1(): OfficeMap {
 
   // ── Móveis ────────────────────────────────────────────────────────────────
   const props: PlacedProp[] = []
-  const add = (kind: PropKind, tx: number, ty: number, ox = 0, oy = 0) =>
-    props.push({ kind, x: tx * TILE + ox, y: ty * TILE + oy })
-  /** Posiciona em pixels — usado onde o móvel precisa encostar em outro. */
-  const addPx = (kind: PropKind, x: number, y: number) => props.push({ kind, x, y })
+  const add = (kind: PropKind, tx: number, ty: number) =>
+    props.push({ kind, x: tx * TILE, y: ty * TILE })
 
-  // Sala de reunião: mesa oval com as cadeiras ENCOSTADAS nela. Cadeira longe
-  // da mesa é o detalhe que denuncia cenário montado no olho.
-  addPx("meetingTable", 128, 128) // ocupa x128..208, y128..172
-  for (const x of [138, 162, 186]) {
-    addPx("chair", x, 112) // encosto some atrás do tampo
-    addPx("chair", x, 166)
-  }
-  addPx("chair", 110, 138)
-  addPx("chair", 208, 138)
-  add("whiteboard", 5, 3)
-  add("plant", 21, 3)
-  add("plant", 3, 13)
-  add("bookshelf", 19, 12)
-  add("waterCooler", 3, 4)
-  add("lamp", 21, 5) // encostada na parede — luminária solta no meio do piso
-  //                    é o tipo de detalhe que entrega cenário montado
-
-  // Open space: quatro ilhas de trabalho com divisórias.
-  const islands: [number, number][] = [
-    [26, 6],
-    [30, 6],
-    [26, 12],
-    [30, 12],
-  ]
-  for (const [tx, ty] of islands) {
-    add("deskIsland", tx, ty)
-    add("chair", tx, ty + 3)
-    add("chair", tx + 1, ty + 3)
-  }
-  // Divisória contínua entre as duas fileiras de ilhas. Painéis avulsos ficam
-  // com cara de porta solta no meio da sala; em fileira, viram baia.
-  for (let i = 0; i < 8; i++) add("partition", 26 + i, 10)
-  add("bookshelf", 24, 18)
-  add("plant", 34, 17)
-  add("lamp", 34, 5)
-
-  // Fileira de mesas individuais encostada na parede esquerda do open space.
-  for (let i = 0; i < 3; i++) {
-    add("desk", 4, 18 + i * 2)
-    add("chair", 5, 20 + i * 2)
+  // Baias: cada cluster são duas baias de costas. `cubicle` (3 tiles de
+  // altura, colisão de 34px) ocupa as linhas [ty, ty+3) inteiras — o
+  // arredondamento do retângulo de colisão para a grade consome a linha
+  // toda, então a "abertura ao sul" é o corredor FORA do retângulo do prop,
+  // não uma fresta dentro dele. Por isso a `cubicleFlip` de baixo começa em
+  // ty+4, não ty+3: a linha ty+3 fica livre como corredor único,
+  // compartilhado pelas duas baias (uma olha para cima, a outra para baixo).
+  for (const ty of CUBICLE_ROWS) {
+    for (const tx of CUBICLE_COLS) {
+      add("cubicle", tx, ty)
+      add("cubicleFlip", tx, ty + 4)
+    }
   }
 
-  // Copa: cafeteira, bebedouro, balcão com banquetas e uma mesa.
-  add("coffeeMachine", 38, 4)
-  add("waterCooler", 41, 4)
-  add("coffeeTable", 44, 6)
-  add("chair", 44, 9)
-  add("chair", 46, 9)
-  add("plant", 55, 4)
-  add("bookshelf", 50, 3)
+  // Hall e recepção.
+  add("elevatorDoors", 2, 2)
+  add("receptionDesk", 7, 7)
+  add("coatRack", 1, 11)
+  add("noticeBoard", 8, 2)
 
-  // Foco: cabines silenciosas, cada uma com divisória e planta.
-  for (let i = 0; i < 3; i++) {
-    add("desk", 4, 27 + i * 3)
-    add("chair", 5, 29 + i * 3)
-    add("partition", 8, 27 + i * 3)
-  }
-  add("plant", 17, 26)
-  add("lamp", 17, 33)
+  // Serviço do bullpen, encostado nas paredes.
+  add("copier", 50, 3)
+  add("filingCabinet", 49, 6)
+  add("filingCabinet", 50, 6)
+  add("waterCooler", 13, 3)
+  add("plant", 12, 34)
+  add("plant", 52, 33)
+  add("plant", 14, 16)
+  add("bookshelf", 47, 33)
+  add("lamp", 30, 3)
+  add("lamp", 30, 33)
 
-  // Lounge: sofá, mesa de centro, arcade, tapete e verde.
-  // Ordem importa: o tapete entra antes e com baseline 0, então fica sob o
-  // sofá e a mesa de centro na ordenação por profundidade.
-  addPx("rugRound", 672, 428) // encostado na base do sofá
-  add("sofa", 42, 25)
-  addPx("coffeeTable", 680, 438) // centralizado sobre o tapete
-  add("arcade", 55, 24)
-  add("arcade", 53, 24)
-  add("plant", 39, 24)
-  add("plant", 39, 33)
-  add("bookshelf", 50, 33)
-
-  // Props gravam colisão na grade — arredondando para o tile que ocupam.
+  // Props gravam colisão pelo retângulo que ocupam.
   for (const p of props) {
     const def = PROPS[p.kind]
     if (!def.solid) continue
@@ -170,70 +152,54 @@ export function buildFloor1(): OfficeMap {
     }
   }
 
-  // Portas voltam a ser passáveis mesmo se um prop encostou nelas.
-  const doorways: [number, number, number][] = [
-    [12, 15, 3],
-    [44, 13, 3],
-    [10, 24, 3],
-    [46, 22, 3],
-  ]
-  for (const [x, y, w] of doorways) fill(collision, x, y, w, 1, 0)
+  // A porta de vidro volta a ser passável mesmo se um prop encostou nela.
+  fill(collision, DOOR.x, B.h - 1, DOOR.w, 1, 0)
 
-  // ── Zonas, luzes e assentos ───────────────────────────────────────────────
+  // ── Zonas ─────────────────────────────────────────────────────────────────
   const zones: Zone[] = [
     {
-      id: "meeting",
-      label: "Sala de reunião",
-      x: 3, y: 3, w: 20, h: 12,
-      accent: "#4a6fa5",
-      hint: "Entrou em reunião",
+      id: "elevator",
+      label: "Elevador",
+      x: 2, y: 2, w: 4, h: 4,
+      accent: "#8a93a0",
+      hint: "Aperte E para escolher o andar",
     },
     {
-      id: "focus",
-      label: "Área de foco",
-      x: 3, y: 25, w: 16, h: 10,
-      accent: "#7a6ba0",
-      hint: "Modo foco — silêncio",
-    },
-    {
-      id: "kitchen",
-      label: "Copa",
-      x: 37, y: 3, w: 20, h: 10,
+      id: "reception",
+      label: "Recepção",
+      x: 6, y: 6, w: 6, h: 6,
       accent: "#c9a04a",
-      hint: "Pausa para o café",
+      hint: "Entrada do andar",
     },
     {
-      id: "lounge",
-      label: "Lounge",
-      x: 39, y: 23, w: 18, h: 12,
-      accent: "#a55f4e",
-      hint: "Social — dá para jogar",
-    },
-    {
-      id: "openspace",
-      label: "Open space",
-      x: 22, y: 4, w: 14, h: 16,
+      id: "bullpen",
+      label: "Bullpen",
+      x: 13, y: 2, w: 40, h: 34,
       accent: "#5d8a52",
       hint: "Estação de trabalho",
     },
+    {
+      id: "terrace",
+      label: "Varanda",
+      x: DECK_S.x, y: DECK_S.y, w: DECK_S.w, h: DECK_S.h,
+      accent: "#4a90a8",
+      hint: "Ar fresco — E para olhar a vista",
+    },
   ]
 
+  // ── Luzes ─────────────────────────────────────────────────────────────────
   const lights: LightSource[] = [
-    // Cada luminária tem sua luz — as coordenadas seguem os props "lamp".
-    { x: 34 * TILE + 8, y: 5 * TILE + 8, radius: 74, color: "#ffd9a0", flicker: 0 },
-    { x: 21 * TILE + 8, y: 5 * TILE + 8, radius: 74, color: "#ffd9a0", flicker: 0 },
-    { x: 17 * TILE + 8, y: 33 * TILE + 8, radius: 74, color: "#ffd9a0", flicker: 0 },
-    { x: 14 * TILE, y: 9 * TILE, radius: 120, color: "#ffe6bd", flicker: 0 },
-    { x: 46 * TILE, y: 8 * TILE, radius: 110, color: "#ffe0b0", flicker: 0 },
-    { x: 48 * TILE, y: 29 * TILE, radius: 130, color: "#ffcf9a", flicker: 0 },
-    // Telas e arcade piscam de leve — o único movimento na camada de luz.
-    { x: 54 * TILE + 8, y: 26 * TILE, radius: 46, color: "#c07ad9", flicker: 0.16 },
-    { x: 56 * TILE + 8, y: 26 * TILE, radius: 46, color: "#7ab2d9", flicker: 0.2 },
-    { x: 39 * TILE, y: 6 * TILE, radius: 40, color: "#8fd9b5", flicker: 0.1 },
+    { x: 30 * TILE + 8, y: 3 * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
+    { x: 30 * TILE + 8, y: 33 * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
+    { x: 6 * TILE, y: 8 * TILE, radius: 110, color: "#ffe0b0", flicker: 0 },
+    // Luz fria entrando pelas duas fachadas de vidro.
+    { x: 30 * TILE, y: 36 * TILE, radius: 150, color: "#cfe0ea", flicker: 0 },
+    { x: 54 * TILE, y: 20 * TILE, radius: 140, color: "#cfe0ea", flicker: 0 },
+    // Indicador do elevador pisca de leve.
+    { x: 4 * TILE, y: 2 * TILE, radius: 36, color: "#e8d24a", flicker: 0.14 },
   ]
 
-  // Id vem do tile onde o assento está: sobrevive a mudanças de planta que não
-  // movam a própria cadeira, ao contrário do índice do array.
+  // ── Assentos ──────────────────────────────────────────────────────────────
   const seatId = (prefix: string, x: number, y: number) =>
     `${prefix}-${Math.floor(x / TILE)}-${Math.floor(y / TILE)}`
 
@@ -247,22 +213,25 @@ export function buildFloor1(): OfficeMap {
     kind: SeatKind,
   ) => seats.push({ id: seatId(prefix, x, y), x, y, facing, label, kind })
 
-  for (const [tx, ty] of islands) {
-    addSeat("ws", tx * TILE + 8, (ty + 3) * TILE + 14, "up", "Estação de trabalho", "pc")
-    addSeat("ws", (tx + 1) * TILE + 8, (ty + 3) * TILE + 14, "up", "Estação de trabalho", "pc")
+  // Um assento por baia, os dois no corredor livre entre o par (ty+3): a
+  // cadeira da baia de cima fica encostada no lado norte do corredor,
+  // olhando para cima (para a mesa); a de baixo, encostada no lado sul,
+  // olhando para baixo. Colunas diferentes (tx+1 e tx+2) — o id do assento
+  // deriva do tile, então duas cadeiras no mesmo tile colidiriam de id.
+  for (const ty of CUBICLE_ROWS) {
+    for (const tx of CUBICLE_COLS) {
+      addSeat("ws", (tx + 1) * TILE, (ty + 3) * TILE + 4, "up", "Baia", "pc")
+      addSeat("ws", (tx + 2) * TILE, (ty + 3) * TILE + 12, "down", "Baia", "pc")
+    }
   }
-  for (let i = 0; i < 3; i++) {
-    addSeat("ws", 5 * TILE + 8, (20 + i * 2) * TILE + 14, "up", "Mesa individual", "pc")
-    addSeat("ws", 5 * TILE + 8, (29 + i * 3) * TILE + 14, "up", "Cabine de foco", "pc")
+
+  // Guarda-corpo: assentos de vista espalhados pelo deck sul e pelo leste.
+  for (const tx of [24, 30, 36, 44]) {
+    addSeat("vw", tx * TILE + 8, (DECK_S.y + DECK_S.h - 1) * TILE, "down", "Vista da varanda", "view")
   }
-  for (let i = 0; i < 3; i++) {
-    addSeat("mt", (8 + i * 2) * TILE + 8, 7 * TILE + 14, "down", "Sala de reunião", "meeting")
-    addSeat("mt", (8 + i * 2) * TILE + 8, 12 * TILE + 14, "up", "Sala de reunião", "meeting")
+  for (const ty of [26, 34]) {
+    addSeat("vw", (DECK_E.x + DECK_E.w - 1) * TILE, ty * TILE + 8, "right", "Vista da varanda", "view")
   }
-  addSeat("lg", 43 * TILE, 27 * TILE, "down", "Sofá do lounge", "lounge")
-  addSeat("lg", 46 * TILE, 27 * TILE, "down", "Sofá do lounge", "lounge")
-  addSeat("lg", 44 * TILE + 8, 10 * TILE + 14, "up", "Mesa da copa", "lounge")
-  addSeat("lg", 46 * TILE + 8, 10 * TILE + 14, "up", "Mesa da copa", "lounge")
 
   return {
     cols: COLS,
@@ -275,6 +244,7 @@ export function buildFloor1(): OfficeMap {
     zones,
     lights,
     seats,
-    spawn: { x: 29 * TILE, y: 21 * TILE },
+    // Spawn no hall, em frente ao elevador.
+    spawn: { x: 8 * TILE, y: 4 * TILE },
   }
 }
