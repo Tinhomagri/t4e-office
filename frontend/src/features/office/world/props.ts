@@ -4,7 +4,7 @@
 // "pé" (baseline) usado para ordenar profundidade: quem tem o pé mais abaixo na
 // tela é desenhado por cima. É o truque clássico de top-down 2.5D.
 import { COLORS, INK, TILE } from "./tiles"
-import { type Ctx, chamfer, makeCanvas, mix, outline, px, rect, shade, tint } from "./pixels"
+import { type Ctx, chamfer, hash2, makeCanvas, mix, outline, px, rect, shade, tint } from "./pixels"
 
 export interface PropSprite {
   canvas: HTMLCanvasElement
@@ -78,6 +78,66 @@ function mug(ctx: Ctx, x: number, y: number, color = "#c85a4a"): void {
   rect(ctx, x + 4, y + 1, 1, 2, color)
   rect(ctx, x + 1, y + 1, 2, 1, "#4a342a") // café
   outline(ctx, x, y, 4, 4, INK)
+}
+
+/**
+ * Corpo da baia em U: divisória de três lados na altura do peito + tampo em L
+ * com monitor, teclado, caneca e a bagunça de mesa. `cubicle` e `cubicleFlip`
+ * são o mesmo desenho espelhado no eixo Y — a abertura para o corredor troca
+ * de lado (sul ↔ norte) para que o par encoste de costas na planta.
+ *
+ * `my(y, h)` reflete um bloco de altura `h` no eixo Y do sprite (48px): a
+ * banda do fundo/laterais e o mobiliário usam a mesma reflexão, então a
+ * geometria inteira vira de cabeça para baixo de uma vez só — sem duplicar os
+ * ~15 comandos de desenho entre os dois props.
+ */
+function drawCubicleBody(ctx: Ctx, flip: boolean): void {
+  const H = 48
+  const my = (y: number, h: number) => (flip ? H - y - h : y)
+
+  // Divisória: banda do fundo (lado oposto à abertura) + duas laterais.
+  const bandY = my(0, 12)
+  rect(ctx, 0, bandY, 64, 12, COLORS.panel)
+  rect(ctx, 0, bandY, 64, 1, tint(COLORS.panel, 1.15))
+  rect(ctx, 0, bandY + 10, 64, 2, COLORS.panelDark)
+  outline(ctx, 0, bandY, 64, 12, INK)
+  for (let x = 6; x < 58; x += 4) rect(ctx, x, bandY + 2, 1, 8, shade(COLORS.panel, 0.9))
+
+  const wallY = my(0, 40)
+  rect(ctx, 0, wallY, 4, 40, COLORS.panel)
+  rect(ctx, 60, wallY, 4, 40, COLORS.panel)
+  if (!flip) {
+    // Pé das laterais escurecido — só faz sentido do lado que não foi
+    // espelhado sobre a própria banda do fundo.
+    rect(ctx, 0, 38, 4, 2, COLORS.panelDark)
+    rect(ctx, 60, 38, 4, 2, COLORS.panelDark)
+  }
+
+  // Tampo em L encostado na divisória do fundo, com monitor, teclado e caneca.
+  tabletop(ctx, 5, my(12, 20), 54, 20)
+  legs(ctx, 8, my(30, 6), 48, 6)
+  monitor(ctx, flip ? 38 : 12, my(4, 11), true)
+  keyboard(ctx, 14, my(22, 3))
+  mug(ctx, flip ? 30 : 44, my(20, 4), flip ? "#5a8a6b" : undefined)
+
+  // Bagunça de mesa determinística por hash — cada baia sorteia algo
+  // diferente, e a semente muda entre as duas versões.
+  const seed = flip ? 11 : 7
+  if (hash2(seed, 31, 5) > 0.4) {
+    const w = flip ? 8 : 7
+    rect(ctx, flip ? 20 : 38, my(24, 5), w, 5, "#e8e2d2")
+    rect(ctx, flip ? 20 : 38, my(24, 5), w, 1, "#cfc7b4")
+  }
+  if (hash2(seed, 9, 41) > 0.5) {
+    rect(ctx, 50, my(22, 6), 4, 6, "#6b5540")
+    rect(ctx, 51, my(20, 3), 1, 3, "#c8a24a")
+    rect(ctx, 53, my(20, 3), 1, 3, "#4a6fa5")
+  }
+  rect(ctx, 30, my(3, 4), 5, 4, "#e8d24a")
+  rect(ctx, 24, my(5, 3), 4, 3, "#9ad2c0")
+
+  // Sombra de contato no chão, do lado da abertura.
+  rect(ctx, 4, my(39, 1), 56, 1, "rgba(43,30,26,0.25)")
 }
 
 // ── Definições ──────────────────────────────────────────────────────────────
@@ -419,6 +479,157 @@ export const PROPS: Record<string, PropDef> = {
       outline(ctx, 0, 0, 16, 17, INK)
       for (let x = 2; x < 15; x += 3) rect(ctx, x, 3, 1, 10, shade("#8f9a8c", 0.88))
       rect(ctx, 1, 19, 14, 1, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  /**
+   * Baia em U: mesa em L com divisória de três lados na altura do peito e
+   * abertura para o corredor ao SUL. Desenho no helper `drawCubicleBody`,
+   * compartilhado com `cubicleFlip`.
+   */
+  cubicle: {
+    w: 64,
+    h: 48,
+    // A faixa de baixo (14 px) fica livre: é a entrada da baia.
+    solid: { x: 0, y: 0, w: 64, h: 34 },
+    baseline: 46,
+    draw(ctx) {
+      drawCubicleBody(ctx, false)
+    },
+  },
+
+  /** Mesma baia com a abertura ao NORTE — forma o par encostado de costas. */
+  cubicleFlip: {
+    w: 64,
+    h: 48,
+    solid: { x: 0, y: 14, w: 64, h: 34 },
+    baseline: 47,
+    draw(ctx) {
+      drawCubicleBody(ctx, true)
+    },
+  },
+
+  copier: {
+    w: 32,
+    h: 32,
+    solid: { x: 0, y: 8, w: 32, h: 20 },
+    baseline: 30,
+    draw(ctx) {
+      chamfer(ctx, 2, 6, 28, 22, COLORS.steel)
+      outline(ctx, 2, 6, 28, 22, INK)
+      rect(ctx, 4, 8, 24, 5, shade(COLORS.steel, 0.72)) // tampa
+      rect(ctx, 5, 9, 22, 1, tint(COLORS.steel, 1.15))
+      rect(ctx, 6, 15, 20, 4, "#3b444d") // painel
+      rect(ctx, 8, 16, 3, 2, "#7fb2d9")
+      rect(ctx, 13, 16, 2, 2, "#8fd9b5")
+      rect(ctx, 5, 21, 22, 5, shade(COLORS.steel, 0.84)) // gaveta de papel
+      rect(ctx, 12, 23, 8, 1, INK)
+      rect(ctx, 22, 20, 7, 3, "#e8e2d2") // folha saindo
+      rect(ctx, 3, 29, 26, 1, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  filingCabinet: {
+    w: 16,
+    h: 28,
+    solid: { x: 0, y: 10, w: 16, h: 14 },
+    baseline: 26,
+    draw(ctx) {
+      chamfer(ctx, 1, 6, 14, 20, shade(COLORS.steel, 0.9))
+      outline(ctx, 1, 6, 14, 20, INK)
+      for (const y of [8, 14, 20]) {
+        rect(ctx, 2, y, 12, 5, COLORS.steel)
+        rect(ctx, 2, y, 12, 1, tint(COLORS.steel, 1.12))
+        rect(ctx, 6, y + 2, 4, 1, "#3b444d")
+      }
+      rect(ctx, 2, 26, 12, 1, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  coatRack: {
+    w: 16,
+    h: 28,
+    solid: { x: 5, y: 20, w: 6, h: 4 },
+    baseline: 26,
+    draw(ctx) {
+      rect(ctx, 7, 4, 2, 20, "#6b5540")
+      rect(ctx, 4, 4, 8, 1, "#6b5540")
+      px(ctx, 3, 5, "#6b5540")
+      px(ctx, 12, 5, "#6b5540")
+      rect(ctx, 3, 6, 4, 9, "#4a6fa5") // casaco
+      rect(ctx, 3, 6, 4, 1, tint("#4a6fa5", 1.2))
+      rect(ctx, 10, 6, 3, 7, "#a55f4e") // cachecol
+      rect(ctx, 5, 23, 6, 2, "#5a4636")
+      rect(ctx, 5, 25, 6, 1, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  noticeBoard: {
+    w: 32,
+    h: 20,
+    solid: null,
+    baseline: 20,
+    draw(ctx) {
+      chamfer(ctx, 0, 0, 32, 18, "#8a6440")
+      rect(ctx, 2, 2, 28, 14, "#c9b48c") // cortiça
+      outline(ctx, 0, 0, 32, 18, INK)
+      // Papéis pregados, em posições fixas — nunca alinhados.
+      const notes: [number, number, number, number, string][] = [
+        [4, 4, 7, 5, "#e8e2d2"],
+        [13, 3, 6, 6, "#e8d24a"],
+        [21, 5, 8, 5, "#9ad2c0"],
+        [7, 10, 9, 4, "#e8e2d2"],
+        [19, 11, 6, 4, "#d98f6b"],
+      ]
+      for (const [x, y, w, h, c] of notes) {
+        rect(ctx, x, y, w, h, c)
+        px(ctx, x + Math.floor(w / 2), y, "#a55f4e")
+      }
+    },
+  },
+
+  receptionDesk: {
+    w: 64,
+    h: 32,
+    solid: { x: 0, y: 6, w: 64, h: 20 },
+    baseline: 30,
+    draw(ctx) {
+      legs(ctx, 4, 24, 56, 6)
+      tabletop(ctx, 0, 10, 64, 16)
+      // Balcão alto na frente do tampo — o que faz ler "recepção" e não "mesa".
+      rect(ctx, 0, 4, 64, 8, mix(DESK, "#ffffff", 0.12))
+      rect(ctx, 0, 4, 64, 1, tint(DESK, 1.2))
+      rect(ctx, 0, 11, 64, 1, shade(DESK, 0.7))
+      outline(ctx, 0, 4, 64, 8, INK)
+      monitor(ctx, 6, 0, true)
+      rect(ctx, 40, 6, 9, 4, "#3b444d") // telefone
+      rect(ctx, 42, 5, 5, 1, "#4a545e")
+      mug(ctx, 54, 6)
+      rect(ctx, 4, 31, 56, 1, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  elevatorDoors: {
+    w: 64,
+    h: 40,
+    solid: { x: 0, y: 0, w: 64, h: 36 },
+    baseline: 38,
+    draw(ctx) {
+      // Moldura + duas folhas com junta no meio.
+      rect(ctx, 0, 0, 64, 36, shade(COLORS.steel, 0.7))
+      rect(ctx, 3, 3, 58, 30, COLORS.steel)
+      rect(ctx, 3, 3, 58, 1, tint(COLORS.steel, 1.2))
+      rect(ctx, 31, 3, 2, 30, shade(COLORS.steel, 0.62))
+      for (let x = 7; x < 60; x += 5) {
+        if (x > 28 && x < 36) continue
+        rect(ctx, x, 6, 1, 24, shade(COLORS.steel, 0.86))
+      }
+      outline(ctx, 0, 0, 64, 36, INK)
+      // Indicador aceso acima da porta.
+      rect(ctx, 26, 0, 12, 3, "#2f363d")
+      rect(ctx, 29, 1, 2, 1, "#e8d24a")
+      rect(ctx, 33, 1, 2, 1, "#3b444d")
+      rect(ctx, 2, 37, 60, 1, "rgba(43,30,26,0.25)")
     },
   },
 }

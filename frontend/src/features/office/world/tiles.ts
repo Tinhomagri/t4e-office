@@ -10,6 +10,9 @@ export const TILE = 16
 
 export const INK = "#2b1e1a"
 
+// Cores das divisórias/equipamento de escritório do bullpen (task 6).
+const PANEL_BASE = "#8f9a8c"
+
 export const COLORS = {
   woodLight: "#c19a68",
   wood: "#a87d51",
@@ -32,6 +35,9 @@ export const COLORS = {
   glassFrame: "#6b727a",
   glassTint: "rgba(190,222,240,0.16)",
   deck: "#b98d5f",
+  panel: PANEL_BASE,
+  panelDark: shade(PANEL_BASE, 0.78),
+  steel: "#9aa0a8",
 } as const
 
 // Identificadores de tile do piso/parede. A ordem define o índice no atlas.
