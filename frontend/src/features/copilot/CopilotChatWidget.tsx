@@ -17,6 +17,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 
 import { cx } from "@/shared/ui/primitives"
+import { useSpaceStore } from "@/features/shell/space.store"
+import type { SpaceId } from "@/features/shell/spaces"
 import { useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { Markdown } from "./Markdown"
 import {
@@ -53,6 +55,26 @@ const ACTION_LABEL: Record<PendingAction["action"], string> = {
   update_card: "Editar card",
   create_sprint: "Criar sprint",
   update_sprint: "Editar sprint",
+  create_deal: "Criar negócio",
+  update_deal: "Editar negócio",
+  move_deal_stage: "Mover negócio de estágio",
+  win_deal: "Marcar negócio como ganho",
+  lose_deal: "Marcar negócio como perdido",
+  schedule_activity: "Registrar atividade no negócio",
+  create_customer: "Cadastrar cliente",
+}
+
+// Texto que identifica a ação no preview — cada domínio nomeia o alvo de um
+// jeito, então caímos no primeiro campo preenchido.
+function actionTarget(a: PendingAction): string {
+  return (
+    a.title ??
+    a.sprint_name ??
+    a.deal_title ??
+    a.customer_name ??
+    a.activity_content ??
+    ""
+  )
 }
 
 function errText(e: unknown): string {
@@ -60,11 +82,29 @@ function errText(e: unknown): string {
   return anyE?.response?.data?.error ?? anyE?.response?.data?.detail ?? "Não foi possível responder agora."
 }
 
-const SUGGESTIONS = [
-  "Leia a última transcrição e crie os cards",
-  "O que devo priorizar hoje?",
-  "Resuma o board e aponte riscos",
-]
+// Sugestões por space: é assim que o time descobre o que o Copiloto sabe
+// fazer. Cada lista termina com uma pergunta que cruza domínios, para deixar
+// claro que ele enxerga o workspace inteiro e não só a tela atual.
+const SUGGESTIONS_BY_SPACE: Record<SpaceId, string[]> = {
+  boards: [
+    "Leia a última transcrição e crie os cards",
+    "O que devo priorizar hoje?",
+    "Como estamos entregando? Mostre velocity e o que está travado",
+    "Quais projetos vieram de negócios ganhos este mês?",
+  ],
+  comercial: [
+    "Como está o funil? Aponte os negócios parados",
+    "Quais negócios fecham nas próximas duas semanas?",
+    "Sugira o próximo passo para o negócio mais valioso em aberto",
+    "Os negócios que ganhamos já viraram projeto de entrega?",
+  ],
+  marketing: [
+    "Como está o calendário editorial desta semana?",
+    "Monte uma campanha multicanal a partir deste briefing",
+    "Adapte esta peça aprovada para os outros canais",
+    "Que conteúdo faz sentido para os clientes que estamos prospectando?",
+  ],
+}
 
 const chatStorageKey = (ws: string) => `copilot-chat:${ws}`
 
@@ -82,6 +122,10 @@ function loadMessages(ws: string): ChatItem[] {
 
 export function CopilotChatWidget() {
   const { activeWorkspaceId } = useWorkspaces()
+  // O Copiloto é comum a todos os spaces; mandar o space ativo faz o agente
+  // começar pelo domínio que o usuário está olhando.
+  const activeSpace = useSpaceStore((s) => s.activeSpace)
+  const suggestions = SUGGESTIONS_BY_SPACE[activeSpace] ?? SUGGESTIONS_BY_SPACE.boards
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatItem[]>([])
@@ -159,7 +203,11 @@ export function CopilotChatWidget() {
         role: m.role,
         content: i === next.length - 1 ? wireContent : m.content,
       }))
-      const { reply, pending_actions } = await sendChat(activeWorkspaceId, wire)
+      const { reply, pending_actions } = await sendChat(
+        activeWorkspaceId,
+        wire,
+        activeSpace,
+      )
       setMessages([
         ...next,
         { role: "assistant", content: reply, actions: pending_actions },
@@ -289,7 +337,7 @@ export function CopilotChatWidget() {
                   </span>
                   <p className="text-sm text-paper-500">Como posso ajudar no seu trabalho hoje?</p>
                   <div className="flex flex-wrap justify-center gap-1.5">
-                    {SUGGESTIONS.map((s) => (
+                    {suggestions.map((s) => (
                       <button
                         key={s}
                         onClick={() => send(s)}
@@ -474,7 +522,7 @@ function ActionPreview({
                 )}
                 <span>
                   <span className="font-medium">{ACTION_LABEL[a.action]}</span>
-                  {a.title || a.sprint_name ? `: ${a.title ?? a.sprint_name}` : ""}
+                  {actionTarget(a) ? `: ${actionTarget(a)}` : ""}
                   {res?.ref ? ` → ${res.ref}` : ""}
                   {a.reason && !res ? (
                     <span className="block text-[11px] text-paper-500">{a.reason}</span>

@@ -1,6 +1,8 @@
 """Serializers do contexto copilot."""
 from rest_framework import serializers
 
+from contexts.copilot.infrastructure import ai_prompt
+
 
 class SuggestedTaskSerializer(serializers.Serializer):
     title = serializers.CharField()
@@ -49,13 +51,20 @@ class ChatMessageSerializer(serializers.Serializer):
 class ChatSerializer(serializers.Serializer):
     workspace_id = serializers.CharField()
     messages = ChatMessageSerializer(many=True)
+    # Space em que o usuário está na interface. Não restringe ferramentas —
+    # só orienta por qual domínio o agente começa a olhar.
+    space = serializers.ChoiceField(
+        choices=list(ai_prompt.SPACES),
+        required=False,
+        default=ai_prompt.DEFAULT_SPACE,
+    )
 
 
 class AgentExecuteSerializer(serializers.Serializer):
     """Confirmação: executa as ações que a IA propôs no chat."""
 
     workspace_id = serializers.CharField()
-    # Cada ação é um dict livre validado pelo dispatcher (schema conhecido).
+    # Cada ação é um dict livre validado pelo registry (schema conhecido).
     actions = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
 

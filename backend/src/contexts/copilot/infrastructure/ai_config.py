@@ -4,6 +4,7 @@ Guarda o provedor + a chave (cifrada) que cada workspace usa, e constrói o
 `AiAnalyzer` correspondente na hora de analisar um documento.
 """
 from contexts.copilot.domain.ports.ai_analyzer import AiAnalyzer
+from contexts.copilot.infrastructure import ai_prompt
 from contexts.copilot.infrastructure.anthropic_analyzer import AnthropicAnalyzer
 from contexts.copilot.infrastructure.django import crypto
 from contexts.copilot.infrastructure.django.models import WorkspaceAiConfigModel
@@ -103,16 +104,26 @@ def chat_for_workspace(workspace_id: str, messages: list[dict]) -> str:
 
 
 def agent_chat_for_workspace(
-    workspace_id: str, actor_id: str, messages: list[dict]
+    workspace_id: str,
+    actor_id: str,
+    messages: list[dict],
+    *,
+    space: str = ai_prompt.DEFAULT_SPACE,
 ) -> dict:
-    """Chat agêntico: a IA lê o board e propõe ações (preview p/ confirmação).
+    """Chat agêntico: a IA lê o workspace e propõe ações (preview p/ confirmação).
+
+    O catálogo de ferramentas cobre todos os domínios; `space` só diz por onde
+    o agente deve começar a olhar.
 
     Retorna {"reply": str, "pending_actions": list[dict]}.
     """
-    from contexts.copilot.infrastructure.agent.dispatcher import ALL_TOOLS, AgentTools
+    from contexts.copilot.infrastructure.agent.registry import AgentTools
 
     analyzer = build_analyzer_for_workspace(workspace_id)
     tools = AgentTools(workspace_id=workspace_id, actor_id=actor_id)
     return analyzer.chat_agent(
-        messages=messages, tools=ALL_TOOLS, read_executor=tools.execute_read
+        messages=messages,
+        tools=tools.all_tools(),
+        read_executor=tools.execute_read,
+        system=ai_prompt.build_agent_system(space=space),
     )

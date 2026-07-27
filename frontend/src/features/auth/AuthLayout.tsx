@@ -39,16 +39,20 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           }}
         />
 
-        {/* Branding sobreposto */}
-        <div className="relative z-10 flex h-full flex-col justify-between p-12">
+        {/* Branding sobreposto. `pointer-events-none` é essencial: este bloco
+            cobre o painel inteiro e, sem isso, engole o cursor antes que ele
+            chegue nas partículas. */}
+        <div className="pointer-events-none relative z-10 flex h-full flex-col p-12">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-md border border-paper/30 bg-paper/5 backdrop-blur" />
             <span className="text-sm font-semibold tracking-[0.3em] text-paper-300">
               T4E OFFICE
             </span>
           </div>
+          {/* `mt-auto` empurra o texto para a base: o glifo fica com todo o
+              espaço acima e o painel deixa de ter um vão morto no rodapé. */}
           <motion.div
-            className="max-w-md"
+            className="mt-auto max-w-md"
             initial="hidden"
             animate="show"
             variants={{ show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } } }}
@@ -58,7 +62,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
                 hidden: { opacity: 0, y: 16 },
                 show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: EASE } },
               }}
-              className="text-4xl font-extrabold leading-tight text-paper"
+              className="text-[42px] font-extrabold leading-[1.08] tracking-[-0.02em] text-paper"
             >
               O trabalho e a equipe{" "}
               <span className="text-shimmer animate-shimmer">no mesmo espaço.</span>
@@ -68,13 +72,13 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
                 hidden: { opacity: 0, y: 12 },
                 show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
               }}
-              className="mt-4 text-sm leading-relaxed text-paper-400"
+              className="mt-5 max-w-sm text-[15px] leading-relaxed text-paper-400"
             >
               Gestão de projetos com presença real e uma camada de inteligência
               que reduz o trabalho sobre o trabalho.
             </motion.p>
           </motion.div>
-          <span className="text-xs text-paper-500">© T4E Group</span>
+          <span className="mt-10 text-xs text-paper-500">© T4E Group</span>
         </div>
       </div>
 

@@ -233,13 +233,70 @@ export function drawChibi(ctx: Ctx, raw: AvatarConfig, dir: Direction, pose: Pos
     return { hx: ax, hy: handY }
   }
 
+  /**
+   * Antebraço cruzado sobre o peito/rosto: ombro → cotovelo colado ao tronco →
+   * antebraço atravessando na horizontal, mão na ponta.
+   *
+   * Existe porque o rig só tinha dois estados de braço — caído ao lado do corpo
+   * ou erguido reto ao lado da cabeça. O gesto que carrega o Passinho do Jamal
+   * é justamente este terceiro, e sem ele o passo não tem como ficar parecido.
+   *
+   * `from` = ombro de origem (-1 esquerdo, +1 direito). `y` = altura do
+   * antebraço a partir do topo do tronco: 0 na altura do ombro, negativo sobe
+   * até o rosto. `reach` = quanto o antebraço atravessa, em pixels.
+   */
+  const drawArmCross = (from: number, y: number, reach: number) => {
+    const half = Math.floor(torsoW / 2)
+    const shoulderX = from < 0 ? tx - half - 1 : tx + half + (torsoW % 2 === 0 ? 0 : 1)
+    const armY = tTop + y
+    // Braço superior: liga o ombro à altura do antebraço.
+    const upTop = Math.min(tTop, armY)
+    rect(ctx, shoulderX, upTop, 1, Math.abs(armY - tTop) + 1, sleeveC)
+    // Antebraço atravessando em direção ao outro ombro.
+    const endX = shoulderX - from * reach
+    const x0 = Math.min(shoulderX, endX)
+    const w = Math.abs(endX - shoulderX) + 1
+    // Manga cobre a metade colada ao ombro; o resto é pele (antebraço nu).
+    const sleeveW = sleeveLong ? w : Math.max(1, Math.round(w / 2))
+    rect(ctx, x0, armY, w, 1, skin)
+    rect(ctx, from < 0 ? x0 : x0 + w - sleeveW, armY, sleeveW, 1, sleeveC)
+    px(ctx, endX, armY, skin) // mão
+    px(ctx, endX + from, armY, INK) // punho, do lado de dentro
+    return { hx: endX, hy: armY }
+  }
+
+  // Atenção: 0 é uma altura válida (antebraço na linha do ombro), então o teste
+  // tem de ser "existe a chave?", não "é truthy?". Com `crossR ? ... : ...` o
+  // frame de altura 0 caía silenciosamente no braço comum.
+  const crossL = pose.crossL == null ? null : num(pose, "crossL")
+  const crossR = pose.crossR == null ? null : num(pose, "crossR")
+  const reachL = num(pose, "reachL") || 5
+  const reachR = num(pose, "reachR") || 5
+
+  // A cabeça e o cabelo são pintados DEPOIS dos braços. Um antebraço na altura
+  // do rosto (y < 0) desenhado aqui seria coberto por eles e sumiria — que é
+  // exatamente o gesto do passinho. Por isso ele fica pendurado e é executado
+  // no fim, sobre a cabeça.
+  const overHead: (() => void)[] = []
+  const cross = (from: number, y: number, reach: number) => {
+    if (y < 0) {
+      overHead.push(() => drawArmCross(from, y, reach))
+      return { hx: 0, hy: 0 }
+    }
+    return drawArmCross(from, y, reach)
+  }
+
   let handL = { hx: 0, hy: 0 }
   if (side) {
     // Um braço só: o da frente. Quando levanta, usa o valor do braço direito.
-    handL = drawArm(face, aR !== 0 ? aR : aL)
+    // Cruzado no perfil vira um antebraço curto à frente do peito.
+    const c = crossR ?? crossL
+    if (c != null) handL = cross(face, c, 3)
+    else handL = drawArm(face, aR !== 0 ? aR : aL)
   } else {
-    handL = drawArm(-1, aL)
-    drawArm(1, aR)
+    handL = crossL != null ? cross(-1, crossL, reachL) : drawArm(-1, aL)
+    if (crossR != null) cross(1, crossR, reachR)
+    else drawArm(1, aR)
   }
   if (s.acc === 6) px(ctx, handL.hx, handL.hy - 1, "#33302c") // smartwatch
 
@@ -274,6 +331,9 @@ export function drawChibi(ctx: Ctx, raw: AvatarConfig, dir: Direction, pose: Pos
   drawBeard(ctx, hx, hy, dir, s.beard, hair, hairD)
   drawHair(ctx, hx, hy + hairDrag, dir, hair, hairD, hairL, female, s.hairStyle)
   drawAccessory(ctx, hx, hy, dir, s.acc)
+  // Antebraço cruzado na altura do rosto: vai por cima da cabeça e do cabelo,
+  // senão o gesto some. Ver o comentário em `overHead`.
+  for (const draw of overHead) draw()
   if (showHandItem) drawHandItem(ctx, handName, tx, tTop, dir, aR)
   const fx = pose.fx as string | undefined
   if (fx) drawFx(ctx, fx, hx, hy, tx, tTop, dir)
@@ -660,6 +720,66 @@ function drawAccessory(ctx: Ctx, hx: number, hy: number, dir: Direction, acc: nu
 // ── Tabela de poses ─────────────────────────────────────────────────────────
 const T = Math.PI * 2
 
+// Passinho do Jamal — decalcado de vídeo de referência, não inventado.
+//
+// Medição do período: auto-similaridade de POSE (distância entre o frame de
+// referência e cada frame vizinho, corpo inteiro, 24fps). Os mínimos caem em
+// Δ ≈ 1,04–1,33s → a frase é de 32 frames = 1,333s.
+//
+// Cuidado: autocorrelar o *sinal de movimento* (diferença entre frames
+// consecutivos) dá 0,667s. Aquilo é o quique, meia frase — usar esse número faz
+// o boneco dançar no dobro da velocidade e perder metade da coreografia.
+//
+// O gesto (trecho a partir de 5s, onde o passo é ensinado): o antebraço varre
+// na HORIZONTAL cruzado sobre o peito/rosto, cotovelo dobrado, mão indo de um
+// ombro ao outro — e alterna de braço. Não é braço erguido ao lado da cabeça:
+// essa foi a leitura errada das duas primeiras versões, e é por isso que o
+// canal `crossL`/`crossR` teve de ser criado no rig (ver drawArmCross).
+//
+// As pernas ficam quase juntas: quique curto e pivô de pé, sem elevação de
+// joelho. Levantar joelho foi outro erro das versões anteriores.
+//
+// Estrutura da frase (16 poses a 12fps = 1,333s):
+//   0-4    antebraço direito varre do rosto para o peito, abrindo o alcance
+//   5      braços soltos, quique no contratempo
+//   6-7    recarrega para o outro lado
+//   8-15   a mesma coisa espelhada, antebraço esquerdo
+//
+// Tradução para 16×32: o boneco não tem cotovelo, então o "antebraço no rosto"
+// vira braço rente ao corpo (armR ≥ -3) e o lançamento vira braço erguido ao
+// lado da cabeça (armR ≤ -5) somado ao `lean` — é o `lean` que desenha a
+// diagonal, o braço sozinho só sobe reto. `squash` marca os tempos fortes: o
+// corpo afunda em f0/f8 e estica no topo do braço.
+// Amplitudes: `squash` fica em ±1. Com ±2 o corpo percorre 4px verticais num
+// sprite de 32 — vira pogo, não dança. Quem carrega o desenho é o `lean`
+// (torso 0,5× · cabeça 0,8× · pernas 0,15×), que é o que dá a diagonal.
+// crossR/crossL: altura do antebraço a partir do topo do tronco (negativo sobe
+// até o rosto). reachR/reachL: quantos pixels ele atravessa.
+const JAMAL: Pose[] = [
+  // ── Antebraço direito varrendo para a esquerda ────────────────────────────
+  // O antebraço fica ALTO, na linha do rosto (tTop-4 ≈ meio da cabeça), e
+  // sustentado — não é uma varrida contínua descendo. Foi o erro da versão
+  // anterior, que deixava o braço na altura do peito o tempo todo.
+  { squash: -1, lean: 1, crossR: -4, reachR: 7, armL: 1, footL: -1, headBob: 1, face: "happy" },
+  { squash: 0, lean: 1, crossR: -4, reachR: 6, armL: 1, face: "happy", fx: "note" },
+  { squash: 0, lean: 0, crossR: -3, reachR: 6, armL: 1, footR: 1, face: "happy" },
+  { squash: -1, lean: 0, crossR: -2, reachR: 5, armL: 0, footR: 1, hairDrag: 1, face: "happy" },
+  { squash: 0, lean: -1, crossR: 0, reachR: 4, armL: 0, face: "happy" },
+  // Contratempo: braços soltos, o corpo é que marca o tempo.
+  { squash: 1, lean: -1, armR: 0, armL: 0, footL: -1, hairDrag: -1, face: "happy" },
+  { squash: 0, lean: 0, crossR: -2, reachR: 5, armL: 1, footL: -1, legL: 1, face: "happy" },
+  { squash: -1, lean: 1, crossR: -4, reachR: 7, armL: 1, headBob: 1, face: "happy" },
+  // ── Espelhado: antebraço esquerdo varrendo para a direita ─────────────────
+  { squash: -1, lean: -1, crossL: -4, reachL: 7, armR: 1, footR: 1, headBob: 1, face: "happy" },
+  { squash: 0, lean: -1, crossL: -4, reachL: 6, armR: 1, face: "happy", fx: "note" },
+  { squash: 0, lean: 0, crossL: -3, reachL: 6, armR: 1, footL: -1, face: "happy" },
+  { squash: -1, lean: 0, crossL: -2, reachL: 5, armR: 0, footL: -1, hairDrag: 1, face: "happy" },
+  { squash: 0, lean: 1, crossL: 0, reachL: 4, armR: 0, face: "happy" },
+  { squash: 1, lean: 1, armR: 0, armL: 0, footR: 1, hairDrag: -1, face: "happy" },
+  { squash: 0, lean: 0, crossL: -2, reachL: 5, armR: 1, footR: 1, legR: 1, face: "happy" },
+  { squash: -1, lean: -1, crossL: -4, reachL: 7, armR: 1, headBob: 1, face: "happy" },
+]
+
 export function poseFor(anim: string, f: number): Pose {
   switch (anim) {
     case "idle": {
@@ -715,16 +835,7 @@ export function poseFor(anim: string, f: number): Pose {
       { lean: 2, armL: 1, armR: 2, body: 1 },
     ][f % 4]
     case "floss": return [{ lean: -2, armL: 2, armR: -2, legL: 1, face: "happy" }, { body: 1, lean: -1, armL: 1, armR: -1, face: "happy", fx: "note" }, { lean: 2, armL: -2, armR: 2, legR: 1, face: "happy" }, { body: 1, lean: 1, armL: -1, armR: 1, face: "happy", fx: "note" }, { lean: -2, armL: 2, armR: -2, legL: 1, face: "happy" }, { body: 1, lean: 2, armL: -2, armR: 2, legR: 1, face: "happy", fx: "note" }][f % 6]
-    case "jamal": return [
-      { squash: -2, headBob: 1, hairDrag: 1 },
-      { lean: 1, footR: 1, armL: -1, armR: 1 },
-      { squash: 2, lean: 3, footR: 3, armL: -3, armR: 2, hairDrag: -1, fx: "note" },
-      { squash: 1, lean: 3, footR: 3, legR: 1, armL: -4, armR: 1 },
-      { squash: -2, headBob: 1, hairDrag: 1 },
-      { lean: -1, footL: -1, armL: 1, armR: -1 },
-      { squash: 2, lean: -3, footL: -3, armL: 2, armR: -3, hairDrag: -1, fx: "note" },
-      { squash: 1, lean: -3, footL: -3, legL: 1, armL: 1, armR: -4 },
-    ][f % 8]
+    case "jamal": return JAMAL[f % JAMAL.length]
   }
   return { body: 0 }
 }

@@ -10,6 +10,7 @@ import { GoogleCallbackPage } from "@/features/auth/GoogleCallbackPage"
 import { IntegrationsPage } from "@/features/integrations/IntegrationsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
+import { MarketingDeck } from "@/features/marketing/MarketingDeck"
 import { ImportBoardPage } from "@/features/marketing/ImportBoardPage"
 import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
 import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
@@ -24,7 +25,16 @@ import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage"
-import { SalesPage } from "@/features/sales/SalesPage"
+import { DashboardDeck } from "@/features/sales/deck/DashboardDeck"
+import { SalesLayout } from "@/features/sales/SalesLayout"
+import {
+  ActivitiesRoute,
+  CustomersRoute,
+  GoalsRoute,
+  LeadsRoute,
+  PipelineRoute,
+  ProposalsRoute,
+} from "@/features/sales/sales.routes"
 import { VerifyEmailPage } from "@/features/auth/VerifyEmailPage"
 import type { ReactNode } from "react"
 
@@ -90,12 +100,33 @@ export const router = createBrowserRouter([
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
       { path: "poker/:sessionId", element: <PokerPage /> },
-      { path: "comercial", element: <SalesPage /> },
+      // O deck é a página inicial do comercial e fica FORA do SalesLayout: ele
+      // tem casca escura e cabeçalho próprios. `/comercial/dashboard` continua
+      // resolvendo para não quebrar link salvo de antes da mudança.
+      { path: "comercial", element: <DashboardDeck /> },
+      {
+        path: "comercial/dashboard",
+        element: <Navigate to="/app/comercial" replace />,
+      },
+      {
+        path: "comercial",
+        element: <SalesLayout />,
+        children: [
+          { path: "leads", element: <LeadsRoute /> },
+          { path: "pipeline", element: <PipelineRoute /> },
+          { path: "clientes", element: <CustomersRoute /> },
+          { path: "atividades", element: <ActivitiesRoute /> },
+          { path: "propostas", element: <ProposalsRoute /> },
+          { path: "metas", element: <GoalsRoute /> },
+        ],
+      },
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
       { path: "office", element: <OfficePage /> },
       { path: "integrations", element: <IntegrationsPage /> },
+      // Marketing também abre no deck; o calendário passa a ser uma rota interna.
+      { path: "marketing", element: <MarketingDeck /> },
       { path: "marketing/calendario", element: <EditorialCalendarPage /> },
       { path: "marketing/fila", element: <PublishQueuePage /> },
       { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
