@@ -5,7 +5,10 @@ import {
   FOCUS_MAX,
   focusScale,
   integerScale,
+  offsetCamera,
   screenToWorld,
+  VIEW_OFFSET_PX,
+  viewOffsetFor,
   viewportFor,
   worldToScreen,
 } from "./camera"
@@ -108,5 +111,59 @@ describe("focusScale", () => {
   it("arredonda zoom fracionário para inteiro", () => {
     expect(focusScale(1400, 900, 5.6)).toBe(6)
     expect(Number.isInteger(focusScale(1400, 900, 6.4))).toBe(true)
+  })
+})
+
+describe("viewOffsetFor", () => {
+  it("empurra a câmera no sentido em que o avatar olha", () => {
+    expect(viewOffsetFor("down")).toEqual({ dx: 0, dy: VIEW_OFFSET_PX })
+    expect(viewOffsetFor("up")).toEqual({ dx: 0, dy: -VIEW_OFFSET_PX })
+    expect(viewOffsetFor("right")).toEqual({ dx: VIEW_OFFSET_PX, dy: 0 })
+    expect(viewOffsetFor("left")).toEqual({ dx: -VIEW_OFFSET_PX, dy: 0 })
+  })
+})
+
+describe("offsetCamera", () => {
+  const view = { w: 320, h: 200 }
+  const world = { w: 1152, h: 736 }
+
+  it("desloca quando há folga", () => {
+    const base = { x: 400, y: 300 }
+    const out = offsetCamera(base, 0, 40, view.w, view.h, world.w, world.h)
+    expect(out.y).toBe(340)
+    expect(out.x).toBe(400)
+  })
+
+  it("não passa da borda inferior do mapa", () => {
+    const base = { x: 0, y: world.h - view.h }
+    const out = offsetCamera(base, 0, 400, view.w, view.h, world.w, world.h)
+    expect(out.y).toBe(world.h - view.h)
+  })
+
+  it("não passa da borda superior", () => {
+    const out = offsetCamera({ x: 0, y: 0 }, 0, -400, view.w, view.h, world.w, world.h)
+    expect(out.y).toBe(0)
+  })
+
+  it("não passa das bordas laterais em nenhuma quina", () => {
+    for (const base of [
+      { x: 0, y: 0 },
+      { x: world.w - view.w, y: 0 },
+      { x: 0, y: world.h - view.h },
+      { x: world.w - view.w, y: world.h - view.h },
+    ]) {
+      for (const [dx, dy] of [[400, 0], [-400, 0], [0, 400], [0, -400]]) {
+        const out = offsetCamera(base, dx, dy, view.w, view.h, world.w, world.h)
+        expect(out.x).toBeGreaterThanOrEqual(0)
+        expect(out.y).toBeGreaterThanOrEqual(0)
+        expect(out.x).toBeLessThanOrEqual(world.w - view.w)
+        expect(out.y).toBeLessThanOrEqual(world.h - view.h)
+      }
+    }
+  })
+
+  it("mapa menor que a viewport não gera coordenada negativa", () => {
+    const out = offsetCamera({ x: 0, y: 0 }, 0, 40, 800, 600, 400, 300)
+    expect(out).toEqual({ x: 0, y: 0 })
   })
 })

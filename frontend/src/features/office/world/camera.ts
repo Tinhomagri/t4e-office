@@ -70,3 +70,40 @@ export function focusScale(cssW: number, cssH: number, zoom: number): number {
   const base = integerScale(cssW, cssH, FOCUS_MAX)
   return Math.max(base, Math.min(FOCUS_MAX, Math.round(zoom)))
 }
+
+/** Quanto a câmera abre para fora quando o avatar se apoia no guarda-corpo. */
+export const VIEW_OFFSET_PX = 40
+
+/** Direção em que a câmera abre, a partir do lado para onde o avatar olha. */
+export function viewOffsetFor(facing: "up" | "down" | "left" | "right"): {
+  dx: number
+  dy: number
+} {
+  switch (facing) {
+    case "up": return { dx: 0, dy: -VIEW_OFFSET_PX }
+    case "down": return { dx: 0, dy: VIEW_OFFSET_PX }
+    case "left": return { dx: -VIEW_OFFSET_PX, dy: 0 }
+    default: return { dx: VIEW_OFFSET_PX, dy: 0 }
+  }
+}
+
+/**
+ * Soma um offset ao alvo da câmera e reaplica o clamp de borda. É o clamp que
+ * impede o offset de mostrar a faixa preta fora do andar.
+ */
+export function offsetCamera(
+  target: { x: number; y: number },
+  dx: number,
+  dy: number,
+  viewW: number,
+  viewH: number,
+  mapW: number,
+  mapH: number,
+): { x: number; y: number } {
+  const maxX = Math.max(0, mapW - viewW)
+  const maxY = Math.max(0, mapH - viewH)
+  return {
+    x: Math.max(0, Math.min(maxX, target.x + dx)),
+    y: Math.max(0, Math.min(maxY, target.y + dy)),
+  }
+}
