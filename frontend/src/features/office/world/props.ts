@@ -95,13 +95,17 @@ function drawCubicleBody(ctx: Ctx, flip: boolean): void {
   const H = 48
   const my = (y: number, h: number) => (flip ? H - y - h : y)
 
-  // Divisória: banda do fundo (lado oposto à abertura) + duas laterais.
+  // Divisória: banda do fundo (lado oposto à abertura) + duas laterais. Cada
+  // sub-linha (destaque, sombra, ranhuras) espelha o próprio par (y, altura),
+  // em vez de somar um offset fixo sobre `bandY` — somar offset não-espelhado
+  // sobre um `y` já espelhado inverte a posição relativa da sub-linha dentro
+  // do bloco quando `flip` é `true`.
   const bandY = my(0, 12)
   rect(ctx, 0, bandY, 64, 12, COLORS.panel)
-  rect(ctx, 0, bandY, 64, 1, tint(COLORS.panel, 1.15))
-  rect(ctx, 0, bandY + 10, 64, 2, COLORS.panelDark)
+  rect(ctx, 0, my(0, 1), 64, 1, tint(COLORS.panel, 1.15))
+  rect(ctx, 0, my(10, 2), 64, 2, COLORS.panelDark)
   outline(ctx, 0, bandY, 64, 12, INK)
-  for (let x = 6; x < 58; x += 4) rect(ctx, x, bandY + 2, 1, 8, shade(COLORS.panel, 0.9))
+  for (let x = 6; x < 58; x += 4) rect(ctx, x, my(2, 8), 1, 8, shade(COLORS.panel, 0.9))
 
   const wallY = my(0, 40)
   rect(ctx, 0, wallY, 4, 40, COLORS.panel)
@@ -126,7 +130,7 @@ function drawCubicleBody(ctx: Ctx, flip: boolean): void {
   if (hash2(seed, 31, 5) > 0.4) {
     const w = flip ? 8 : 7
     rect(ctx, flip ? 20 : 38, my(24, 5), w, 5, "#e8e2d2")
-    rect(ctx, flip ? 20 : 38, my(24, 5), w, 1, "#cfc7b4")
+    rect(ctx, flip ? 20 : 38, my(24, 1), w, 1, "#cfc7b4")
   }
   if (hash2(seed, 9, 41) > 0.5) {
     rect(ctx, 50, my(22, 6), 4, 6, "#6b5540")
