@@ -10,6 +10,7 @@ import { saveAvatarConfig } from "./office.api"
 import { useMyAvatar, useRoom } from "./office.hooks"
 import { OfficeRoom } from "./OfficeRoom"
 import { PresenceBar, StatusLegend } from "./PresenceBar"
+import { useWorldStore } from "./world.store"
 
 export function OfficePage() {
   const { data: workspaces, isLoading, activeWorkspaceId } = useWorkspaces()
@@ -38,7 +39,8 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
   const backendAvatar = useMyAvatar()
   const localConfig = useAvatarStore((s) => s.config)
   const localCreated = useAvatarStore((s) => s.created)
-  const room = useRoom(workspaceId)
+  const floor = useWorldStore((s) => s.floor)
+  const room = useRoom(workspaceId, floor)
 
   // Se o avatar existe local mas ainda não no servidor, persiste para que os
   // outros consigam te ver na sala.

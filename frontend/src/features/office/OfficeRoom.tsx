@@ -12,13 +12,16 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
+import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
 import { isMyDesk } from "./pc/desk"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
 import { OfficeEngine } from "./world/engine"
-import { buildFloor1 } from "./world/floors/floor1"
+import { buildFloor } from "./world/floors"
+import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
+import { useWorldStore } from "./world.store"
 
 const KEEPALIVE_MS = 3000
 
@@ -40,7 +43,8 @@ export function OfficeRoom({
   myConfig: AvatarConfig
 }) {
   const me = useAuthStore((s) => s.user)
-  const room = useRoom(workspaceId)
+  const floor = useWorldStore((s) => s.floor)
+  const room = useRoom(workspaceId, floor)
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
 
@@ -52,6 +56,9 @@ export function OfficeRoom({
     y: 0.5,
     facing: "down",
   })
+  // Id da zona atual (não o rótulo): é o que diferencia "elevador" de
+  // qualquer outra zona no onInteract, sem esperar o próximo render.
+  const zoneIdRef = useRef<string | null>(null)
 
   const [zone, setZone] = useState<{ label: string; hint: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -66,7 +73,16 @@ export function OfficeRoom({
   const expandedId = usePcStore((s) => s.expandedId)
   const collapsePc = usePcStore((s) => s.collapse)
 
-  const map = useMemo(() => buildFloor1(), [])
+  // buildFloor lança para andar inexistente ou em obras. O store só deixa ir
+  // a andar liberado, mas se o estado vier inconsistente (ex.: hot reload),
+  // cai de volta para o térreo em vez de explodir a tela toda.
+  const map = useMemo(() => {
+    try {
+      return buildFloor(floor)
+    } catch {
+      return buildFloor(1)
+    }
+  }, [floor])
 
   // ── Motor ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -75,11 +91,22 @@ export function OfficeRoom({
     if (!canvas || !wrap) return
 
     const engine = new OfficeEngine(canvas, map, {
-      onZoneChange: (_id, label, hint) => setZone(label ? { label, hint } : null),
+      onZoneChange: (id, label, hint) => {
+        zoneIdRef.current = id
+        setZone(label ? { label, hint } : null)
+      },
       onMove: (x, y, facing) => {
         liveRef.current = { x, y, facing }
       },
       onInteract: (seat) => {
+        // Dentro da cabine, E chama o painel do elevador em vez de procurar
+        // assento. useWorldStore.getState() em vez de fechar sobre `floor`:
+        // este efeito só remonta quando `map` muda, então uma closure sobre
+        // `floor` ficaria presa no valor de quando o engine foi criado.
+        if (!seat && zoneIdRef.current === "elevator") {
+          useWorldStore.getState().openPanel()
+          return
+        }
         setToast(seat ? seat.label : "De pé")
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
         // outro assento continua sendo só sentar.
@@ -130,6 +157,10 @@ export function OfficeRoom({
         x: liveRef.current.x,
         y: liveRef.current.y,
         facing: liveRef.current.facing,
+        // getState() em vez de fechar sobre `floor`: este efeito só depende
+        // de `workspaceId`, então o closure sobre `floor` ficaria velho após
+        // trocar de andar sem remontar o keepalive.
+        floor: useWorldStore.getState().floor,
       })
     send()
     const t = window.setInterval(send, KEEPALIVE_MS)
@@ -238,6 +269,8 @@ export function OfficeRoom({
 
       <Win98Desktop />
 
+      <ElevatorPanel />
+
       {/* Rótulo da zona atual — só faz sentido com o PC desligado */}
       <AnimatePresence>
         {pcState === "off" && zone && (
@@ -251,6 +284,7 @@ export function OfficeRoom({
           >
             <p className="text-[13px] font-semibold text-white">{zone.label}</p>
             <p className="text-[11px] text-white/70">{zone.hint}</p>
+            <p className="text-[11px] text-white/50">Andar {floor}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -397,7 +431,7 @@ function Minimap({
   engineRef,
   online,
 }: {
-  map: ReturnType<typeof buildFloor1>
+  map: OfficeMap
   engineRef: React.MutableRefObject<OfficeEngine | null>
   online: number
 }) {

@@ -12,9 +12,9 @@ export async function heartbeat(input: HeartbeatInput): Promise<{ status: Presen
   return data
 }
 
-export async function getRoom(workspaceId: string): Promise<OfficeMember[]> {
+export async function getRoom(workspaceId: string, floor: number): Promise<OfficeMember[]> {
   const { data } = await api.get<OfficeMember[]>("/presence/room/", {
-    params: { workspace_id: workspaceId },
+    params: { workspace_id: workspaceId, floor },
   })
   return data
 }

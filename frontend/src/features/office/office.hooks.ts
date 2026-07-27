@@ -7,10 +7,12 @@ import type { HeartbeatInput } from "./office.types"
 
 // Sala em tempo (quase) real: poll a cada 1s. A suavização do movimento é
 // feita no cliente (transição CSS entre amostras).
-export function useRoom(workspaceId: string | null) {
+export function useRoom(workspaceId: string | null, floor: number) {
   return useQuery({
-    queryKey: ["office-room", workspaceId],
-    queryFn: () => officeApi.getRoom(workspaceId!),
+    // O andar entra na queryKey: sem isso, ao trocar de andar aparece por um
+    // instante o cache da sala do andar anterior.
+    queryKey: ["office-room", workspaceId, floor],
+    queryFn: () => officeApi.getRoom(workspaceId!, floor),
     enabled: !!workspaceId,
     refetchInterval: 1000,
     refetchIntervalInBackground: false,
