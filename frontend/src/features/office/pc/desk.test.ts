@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { buildOfficeMap } from "../world/map"
+import { buildFloor1 } from "../world/floors/floor1"
 import { isMyDesk, myDeskId, pcSeats } from "./desk"
 
-const map = buildOfficeMap()
+const map = buildFloor1()
 
 describe("pcSeats", () => {
   it("devolve só assentos com computador", () => {

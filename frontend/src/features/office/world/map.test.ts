@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import { buildOfficeMap } from "./map"
+import { buildFloor1 } from "./floors/floor1"
 
-const map = buildOfficeMap()
+const map = buildFloor1()
 
 describe("assentos", () => {
   it("todo assento tem id único", () => {

@@ -17,7 +17,7 @@ import { isMyDesk } from "./pc/desk"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
 import { OfficeEngine } from "./world/engine"
-import { buildOfficeMap } from "./world/map"
+import { buildFloor1 } from "./world/floors/floor1"
 import { TILE } from "./world/tiles"
 
 const KEEPALIVE_MS = 3000
@@ -66,7 +66,7 @@ export function OfficeRoom({
   const expandedId = usePcStore((s) => s.expandedId)
   const collapsePc = usePcStore((s) => s.collapse)
 
-  const map = useMemo(() => buildOfficeMap(), [])
+  const map = useMemo(() => buildFloor1(), [])
 
   // ── Motor ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -397,7 +397,7 @@ function Minimap({
   engineRef,
   online,
 }: {
-  map: ReturnType<typeof buildOfficeMap>
+  map: ReturnType<typeof buildFloor1>
   engineRef: React.MutableRefObject<OfficeEngine | null>
   online: number
 }) {
