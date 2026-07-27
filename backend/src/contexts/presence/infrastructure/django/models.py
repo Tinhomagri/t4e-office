@@ -30,6 +30,10 @@ class PresenceModel(models.Model):
     y = models.FloatField(default=0.5)  # normalizado 0..1 (altura da sala)
     facing = models.CharField(max_length=8, choices=FACING_CHOICES, default="down")
 
+    # Em que andar a pessoa está. Sem isto, os avatares de todos os andares se
+    # acumulam sobre a planta de quem está olhando.
+    floor = models.PositiveSmallIntegerField(default=1)
+
     manual_status = models.CharField(max_length=16, null=True, blank=True)
     manual_status_at = models.DateTimeField(null=True, blank=True)
 

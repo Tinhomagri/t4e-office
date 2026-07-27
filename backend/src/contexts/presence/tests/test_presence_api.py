@@ -7,6 +7,7 @@ from contexts.identity.infrastructure.django.models import (
     UserModel,
     WorkspaceModel,
 )
+from contexts.presence.infrastructure.django.models import PresenceModel
 
 
 @pytest.fixture
@@ -137,3 +138,60 @@ def test_avatar_aparece_na_sala(scenario):
     room = _client(scenario["owner"]).get(f"/api/presence/room/?workspace_id={ws_id}")
     bob = next(m for m in room.data if m["name"] == "Bob Dev")
     assert bob["avatar_config"]["hair"] == 3
+
+
+def test_heartbeat_grava_o_andar(scenario):
+    ws_id = str(scenario["ws"].id)
+    c = _client(scenario["owner"])
+
+    r = c.post(
+        "/api/presence/heartbeat/",
+        {"workspace_id": ws_id, "x": 0.4, "y": 0.6, "floor": 3},
+        format="json",
+    )
+    assert r.status_code == 200
+    presence = PresenceModel.objects.get(workspace_id=ws_id, user_id=scenario["owner"].id)
+    assert presence.floor == 3
+
+
+def test_heartbeat_sem_andar_assume_o_primeiro(scenario):
+    ws_id = str(scenario["ws"].id)
+    c = _client(scenario["owner"])
+    c.post("/api/presence/heartbeat/", {"workspace_id": ws_id}, format="json")
+    presence = PresenceModel.objects.get(workspace_id=ws_id, user_id=scenario["owner"].id)
+    assert presence.floor == 1
+
+
+def test_heartbeat_recusa_andar_absurdo(scenario):
+    ws_id = str(scenario["ws"].id)
+    c = _client(scenario["owner"])
+    c.post(
+        "/api/presence/heartbeat/",
+        {"workspace_id": ws_id, "floor": 999},
+        format="json",
+    )
+    # Fora da faixa cai no andar 1 em vez de gravar lixo.
+    presence = PresenceModel.objects.get(workspace_id=ws_id, user_id=scenario["owner"].id)
+    assert presence.floor == 1
+
+
+def test_sala_nao_mistura_andares(scenario):
+    ws_id = str(scenario["ws"].id)
+    owner = scenario["owner"]
+    other = scenario["other"]
+    c = _client(owner)
+
+    c.post(
+        "/api/presence/heartbeat/",
+        {"workspace_id": ws_id, "floor": 1},
+        format="json",
+    )
+    PresenceModel.objects.create(workspace_id=ws_id, user_id=other.id, floor=2)
+
+    andar1 = c.get("/api/presence/room/", {"workspace_id": ws_id, "floor": 1})
+    assert [r["floor"] for r in andar1.data] == [1]
+    assert str(other.id) not in [r["user_id"] for r in andar1.data]
+
+    andar2 = c.get("/api/presence/room/", {"workspace_id": ws_id, "floor": 2})
+    assert [r["user_id"] for r in andar2.data] == [str(other.id)]
+    assert andar2.data[0]["floor"] == 2
