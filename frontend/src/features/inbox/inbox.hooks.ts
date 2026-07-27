@@ -7,7 +7,7 @@
 //    e é substituída pela resposta real — atendimento sem eco imediato parece
 //    travado.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { toast } from "@/shared/ui/toast"
 
@@ -330,6 +330,10 @@ export function useUpdateContact(workspaceId: string | null, contactId: number |
 export function useInboxRealtime(workspaceId: string | null, enabled = true) {
   const qc = useQueryClient()
   const cursor = useRef<string | null>(null)
+  // Conversas em que o contato está digitando agora. Vive fora do cache do
+  // react-query porque é estado efêmero: expira sozinho, não é dado do servidor.
+  const [typing, setTyping] = useState<Set<number>>(new Set())
+  const typingTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
 
   const { data } = useQuery({
     queryKey: ["chatwoot-events", workspaceId],
@@ -340,17 +344,36 @@ export function useInboxRealtime(workspaceId: string | null, enabled = true) {
     gcTime: 0,
   })
 
+  // Limpa os timers pendentes ao desmontar — senão o setState roda depois.
+  useEffect(() => {
+    const timers = typingTimers.current
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
+
   useEffect(() => {
     if (!data || data.events.length === 0) return
     cursor.current = data.cursor ?? cursor.current
 
     const touchedConversations = new Set<number>()
+    const typingOn: number[] = []
+    const typingOff: number[] = []
     let listChanged = false
+
     for (const event of data.events) {
-      if (event.conversation_id) touchedConversations.add(event.conversation_id)
-      if (event.event !== "conversation_typing_on" && event.event !== "conversation_typing_off") {
-        listChanged = true
+      const id = event.conversation_id
+      if (event.event === "conversation_typing_on") {
+        if (id) typingOn.push(id)
+        continue
       }
+      if (event.event === "conversation_typing_off") {
+        if (id) typingOff.push(id)
+        continue
+      }
+      if (id) touchedConversations.add(id)
+      listChanged = true
     }
 
     for (const id of touchedConversations) {
@@ -361,5 +384,36 @@ export function useInboxRealtime(workspaceId: string | null, enabled = true) {
       qc.invalidateQueries({ queryKey: ["chatwoot-conversations", workspaceId] })
       qc.invalidateQueries({ queryKey: inboxKeys.counts(workspaceId) })
     }
+
+    // Chegar mensagem encerra o "digitando" — o texto virou mensagem.
+    const stopped = [...typingOff, ...touchedConversations]
+    if (typingOn.length === 0 && stopped.length === 0) return
+
+    setTyping((current) => {
+      const next = new Set(current)
+      for (const id of typingOn) next.add(id)
+      for (const id of stopped) next.delete(id)
+      return next
+    })
+
+    // O Chatwoot nem sempre manda o `typing_off`. Sem expiração própria, o
+    // indicador ficaria pulsando para sempre.
+    for (const id of typingOn) {
+      clearTimeout(typingTimers.current.get(id))
+      typingTimers.current.set(
+        id,
+        setTimeout(() => {
+          typingTimers.current.delete(id)
+          setTyping((current) => {
+            if (!current.has(id)) return current
+            const next = new Set(current)
+            next.delete(id)
+            return next
+          })
+        }, 8_000),
+      )
+    }
   }, [data, qc, workspaceId])
+
+  return { typingConversations: typing }
 }

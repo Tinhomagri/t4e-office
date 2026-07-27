@@ -3,12 +3,14 @@
 // Aparece quando ainda não há conexão (ou quando ela quebrou). Além do
 // formulário, entrega a URL de webhook pronta para colar no Chatwoot — sem ela
 // o tempo real não funciona e o usuário não teria como adivinhar o endereço.
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useState } from "react"
 import { AlertTriangle, CheckCircle2, Copy, Plug, RefreshCw, Trash2 } from "lucide-react"
 
-import { Badge, Button, Field, Input } from "@/shared/ui/primitives"
+import { Button, Field, Input, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 
+import { DUR } from "./inbox.motion"
 import type { ChatwootConnection } from "./inbox.types"
 
 interface Props {
@@ -28,6 +30,7 @@ export function ConnectionSetup({
   saving,
   testing,
 }: Props) {
+  const reduced = useReducedMotion()
   const [baseUrl, setBaseUrl] = useState(connection?.base_url ?? "https://app.chatwoot.com")
   const [accountId, setAccountId] = useState(String(connection?.account_id ?? ""))
   const [token, setToken] = useState("")
@@ -58,38 +61,59 @@ export function ConnectionSetup({
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl p-6">
+    <motion.div
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR.ui, ease: "easeOut" }}
+      className="mx-auto w-full max-w-xl p-6"
+    >
       <div className="mb-5 flex items-center gap-3">
-        <span className="grid size-10 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
+        <span className="grid size-10 place-items-center rounded-lg bg-cw-500/10 text-cw-600 dark:text-cw-500">
           <Plug className="size-5" />
         </span>
         <div>
-          <h2 className="text-base font-semibold text-ink dark:text-paper">
+          <h2 className="text-base font-semibold text-cw-ink dark:text-paper">
             Conectar o Chatwoot
           </h2>
-          <p className="text-[13px] text-paper-600">
+          <p className="text-[13px] text-cw-muted">
             O atendimento roda sobre a sua instância — nada é duplicado aqui.
           </p>
         </div>
       </div>
 
-      {broken && connection?.last_error && (
-        <p className="mb-4 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[12px] text-ink dark:text-paper">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
-          <span>
-            <strong className="font-semibold">A última verificação falhou:</strong>{" "}
-            {connection.last_error}
-          </span>
-        </p>
-      )}
+      <AnimatePresence initial={false}>
+        {broken && connection?.last_error && (
+          <motion.p
+            key="error"
+            initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            animate={reduced ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: DUR.ui, ease: "easeOut" }}
+            className="mb-4 flex items-start gap-2 overflow-hidden rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              <strong className="font-semibold">A última verificação falhou:</strong>{" "}
+              {connection.last_error}
+            </span>
+          </motion.p>
+        )}
 
-      {connection?.status === "connected" && (
-        <p className="mb-4 flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-[12px] text-ink dark:text-paper">
-          <CheckCircle2 className="size-4 shrink-0 text-success" />
-          Conectada como <strong className="font-semibold">{connection.agent_name}</strong>
-          {connection.agent_email && ` (${connection.agent_email})`}
-        </p>
-      )}
+        {connection?.status === "connected" && (
+          <motion.p
+            key="ok"
+            initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            animate={reduced ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: DUR.ui, ease: "easeOut" }}
+            className="mb-4 flex items-center gap-2 overflow-hidden rounded-md border border-green-400/40 bg-green-50 px-3 py-2 text-[12px] text-green-700"
+          >
+            <CheckCircle2 className="size-4 shrink-0" />
+            Conectada como <strong className="font-semibold">{connection.agent_name}</strong>
+            {connection.agent_email && ` (${connection.agent_email})`}
+          </motion.p>
+        )}
+      </AnimatePresence>
 
       <form onSubmit={submit} className="space-y-4">
         <Field label="URL da instância" hint="Ex.: https://app.chatwoot.com ou o seu domínio">
@@ -155,20 +179,27 @@ export function ConnectionSetup({
       </form>
 
       {connection?.webhook_url && (
-        <section className="mt-6 rounded-xl border border-paper-300 p-4 dark:border-ink-800">
+        <section className="mt-6 rounded-md border border-cw-border p-4 dark:border-ink-800">
           <div className="mb-1.5 flex items-center gap-2">
-            <h3 className="text-[13px] font-semibold text-ink dark:text-paper">
+            <h3 className="text-[13px] font-semibold text-cw-ink dark:text-paper">
               Webhook (tempo real)
             </h3>
-            <Badge tone="outline">Opcional, mas recomendado</Badge>
+            <span className="rounded border border-cw-border px-1.5 py-0.5 text-[10px] font-medium text-cw-muted">
+              Opcional, mas recomendado
+            </span>
           </div>
-          <p className="mb-2 text-[12px] text-paper-600">
+          <p className="mb-2 text-[12px] text-cw-muted">
             No Chatwoot, vá em <strong>Configurações → Integrações → Webhooks</strong>, cole a
             URL abaixo e marque os eventos de conversa e mensagem. Sem isso a caixa só atualiza
             quando você recarrega.
           </p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg bg-paper-100 px-2.5 py-1.5 text-[11px] dark:bg-ink-800">
+            <code
+              className={cx(
+                "min-w-0 flex-1 truncate rounded bg-cw-surface px-2.5 py-1.5 text-[11px] text-cw-ink",
+                "dark:bg-ink-800 dark:text-paper",
+              )}
+            >
               {connection.webhook_url}
             </code>
             <Button
@@ -182,6 +213,6 @@ export function ConnectionSetup({
           </div>
         </section>
       )}
-    </div>
+    </motion.div>
   )
 }

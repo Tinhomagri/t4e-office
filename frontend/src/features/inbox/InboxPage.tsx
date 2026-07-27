@@ -3,10 +3,9 @@
 //
 // Sem conexão configurada, cai no formulário de conexão em vez de mostrar uma
 // caixa vazia sem explicação.
-import { useState } from "react"
-import { AlertTriangle, Inbox as InboxIcon, Settings2 } from "lucide-react"
-
-import { Button, EmptyState, Spinner } from "@/shared/ui/primitives"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { useEffect, useRef, useState } from "react"
+import { AlertTriangle, Inbox as InboxIcon, Loader2, Settings2 } from "lucide-react"
 
 import { ConnectionSetup } from "./ConnectionSetup"
 import { ContactPanel } from "./ContactPanel"
@@ -37,7 +36,8 @@ import {
   useTestChatwootConnection,
   useUnlinkConversation,
 } from "./inbox.hooks"
-import { cleanFilters } from "./inbox.shared"
+import { DUR } from "./inbox.motion"
+import { cleanFilters, contactDisplayName } from "./inbox.shared"
 import type { AssigneeFilter, ConversationPriority, ConversationStatus } from "./inbox.types"
 
 interface Props {
@@ -45,12 +45,14 @@ interface Props {
 }
 
 export function InboxPage({ workspaceId }: Props) {
+  const reduced = useReducedMotion()
   const [activeId, setActiveId] = useState<number | null>(null)
   const [assignee, setAssignee] = useState<AssigneeFilter>("all")
   const [status, setStatus] = useState<ConversationStatus>("open")
   const [inboxId, setInboxId] = useState<number | undefined>()
   const [search, setSearch] = useState("")
   const [showSetup, setShowSetup] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const { data: connectionState, isLoading: loadingConnection } =
     useChatwootConnection(workspaceId)
@@ -68,11 +70,7 @@ export function InboxPage({ workspaceId }: Props) {
   })
 
   const { data: catalog } = useCatalog(workspaceId, connected)
-  const { data: page, isLoading: loadingList } = useConversations(
-    workspaceId,
-    filters,
-    connected,
-  )
+  const { data: page, isLoading: loadingList } = useConversations(workspaceId, filters, connected)
   const { data: counts } = useInboxCounts(workspaceId, connected)
   const { data: conversation } = useConversation(workspaceId, activeId)
   const { data: messages = [], isLoading: loadingMessages } = useMessages(workspaceId, activeId)
@@ -90,8 +88,27 @@ export function InboxPage({ workspaceId }: Props) {
   const link = useLinkConversation(workspaceId, activeId)
   const unlink = useUnlinkConversation(workspaceId, activeId)
 
-  // Puxa os eventos do webhook e invalida só o que mudou.
-  useInboxRealtime(workspaceId, connected)
+  // Eventos do webhook: invalida o que mudou e diz quem está digitando.
+  const { typingConversations } = useInboxRealtime(workspaceId, connected)
+
+  // ⌘F / Ctrl+F foca a busca — convenção de desktop em tela cheia de lista.
+  useEffect(() => {
+    const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+    function onKeyDown(event: KeyboardEvent) {
+      const modifier = isMac ? event.metaKey : event.ctrlKey
+      if (modifier && event.key.toLowerCase() === "f") {
+        event.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+      }
+      // Esc fecha a conversa e devolve o foco à lista.
+      if (event.key === "Escape" && document.activeElement === searchRef.current) {
+        searchRef.current?.blur()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   function selectConversation(id: number) {
     setActiveId(id)
@@ -102,20 +119,24 @@ export function InboxPage({ workspaceId }: Props) {
   if (loadingConnection) {
     return (
       <div className="grid h-[60vh] place-items-center">
-        <Spinner className="size-6" />
+        <Loader2 className="size-6 animate-spin text-cw-muted" />
       </div>
     )
   }
 
-  // Sem conexão (ou pedindo para reconfigurar): formulário no lugar da caixa.
+  // Sem conexão (ou pedindo reconfiguração): formulário no lugar da caixa.
   if (!connectionState?.connection || showSetup) {
     return (
-      <div className="rounded-2xl border border-paper-300 bg-paper dark:border-ink-800 dark:bg-ink-900">
+      <div className="rounded-lg border border-cw-border bg-white dark:border-ink-800 dark:bg-ink-900">
         {showSetup && connectionState?.connection && (
           <div className="flex justify-end p-3 pb-0">
-            <Button variant="ghost" size="sm" onClick={() => setShowSetup(false)}>
+            <button
+              type="button"
+              onClick={() => setShowSetup(false)}
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-cw-muted transition-colors duration-100 hover:bg-cw-surface focus-ring dark:hover:bg-ink-800"
+            >
               Voltar à caixa
-            </Button>
+            </button>
           </div>
         )}
         <ConnectionSetup
@@ -134,9 +155,13 @@ export function InboxPage({ workspaceId }: Props) {
   }
 
   const conversations = page?.payload ?? []
+  const typingName =
+    conversation && typingConversations.has(conversation.id)
+      ? contactDisplayName(conversation)
+      : null
 
   return (
-    <div className="flex h-[calc(100vh-14rem)] min-h-[520px] overflow-hidden rounded-2xl border border-paper-300 bg-paper dark:border-ink-800 dark:bg-ink-900">
+    <div className="flex h-[calc(100vh-14rem)] min-h-[520px] overflow-hidden rounded-lg border border-cw-border bg-white dark:border-ink-800 dark:bg-ink-900">
       <ConversationList
         conversations={conversations}
         counts={counts}
@@ -147,6 +172,7 @@ export function InboxPage({ workspaceId }: Props) {
         inboxId={inboxId}
         search={search}
         loading={loadingList}
+        searchRef={searchRef}
         onSelect={selectConversation}
         onAssigneeChange={setAssignee}
         onStatusChange={setStatus}
@@ -155,22 +181,30 @@ export function InboxPage({ workspaceId }: Props) {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {!connected && (
-          <p className="flex items-center gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-[12px]">
-            <AlertTriangle className="size-4 shrink-0 text-warning" />
-            <span className="flex-1">
-              A conexão com o Chatwoot está com problema — os dados podem estar desatualizados.
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Settings2 className="size-3.5" />}
-              onClick={() => setShowSetup(true)}
+        <AnimatePresence>
+          {!connected && (
+            <motion.p
+              key="broken"
+              initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              animate={reduced ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: DUR.ui, ease: "easeOut" }}
+              className="flex items-center gap-2 overflow-hidden border-b border-orange-400/40 bg-orange-100 px-4 py-2 text-[12px] text-orange-700"
             >
-              Revisar
-            </Button>
-          </p>
-        )}
+              <AlertTriangle className="size-4 shrink-0" />
+              <span className="flex-1">
+                A conexão com o Chatwoot está com problema — os dados podem estar desatualizados.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSetup(true)}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors duration-100 hover:bg-orange-400/20 focus-ring"
+              >
+                <Settings2 className="size-3.5" /> Revisar
+              </button>
+            </motion.p>
+          )}
+        </AnimatePresence>
 
         {conversation ? (
           <>
@@ -181,15 +215,17 @@ export function InboxPage({ workspaceId }: Props) {
               labels={catalog?.labels ?? []}
               busy={changeStatus.isPending}
               onAssign={(payload) => assign.mutate(payload)}
-              onPriority={(priority: ConversationPriority | null) =>
-                changePriority.mutate(priority)
-              }
+              onPriority={(priority: ConversationPriority | null) => changePriority.mutate(priority)}
               onLabels={(labels) => setLabels.mutate(labels)}
               onStatus={(next) => changeStatus.mutate({ status: next })}
               onMute={(muted) => setMuted.mutate(muted)}
             />
 
-            <ConversationThread messages={messages} loading={loadingMessages} />
+            <ConversationThread
+              messages={messages}
+              loading={loadingMessages}
+              typingName={typingName}
+            />
 
             <MessageComposer
               cannedResponses={catalog?.canned_responses ?? []}
@@ -199,19 +235,23 @@ export function InboxPage({ workspaceId }: Props) {
                 await sendMessage.mutateAsync({ content, private: isPrivate })
               }}
               onTyping={(typing) => {
-                void inboxApi
-                  .signalTyping(workspaceId, conversation.id, typing)
-                  .catch(() => {})
+                void inboxApi.signalTyping(workspaceId, conversation.id, typing).catch(() => {})
               }}
             />
           </>
         ) : (
-          <div className="grid flex-1 place-items-center p-8">
-            <EmptyState
-              icon={<InboxIcon className="size-6" />}
-              title="Escolha uma conversa"
-              description="Selecione uma conversa na lista ao lado para começar a atender."
-            />
+          <div className="grid flex-1 place-items-center bg-cw-surface p-8 dark:bg-ink-950">
+            <div className="flex flex-col items-center text-center">
+              <span className="grid size-12 place-items-center rounded-full bg-white text-cw-muted ring-1 ring-cw-border dark:bg-ink-800 dark:ring-ink-700">
+                <InboxIcon className="size-5" />
+              </span>
+              <p className="mt-3 text-[13px] font-semibold text-cw-ink dark:text-paper">
+                Escolha uma conversa
+              </p>
+              <p className="mt-1 max-w-xs text-[12px] text-cw-muted">
+                Selecione uma conversa na lista ao lado para começar a atender.
+              </p>
+            </div>
           </div>
         )}
       </main>
