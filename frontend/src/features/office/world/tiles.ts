@@ -29,6 +29,9 @@ export const COLORS = {
   plantDark: "#456b3d",
   metal: "#9aa0a8",
   metalDark: "#767c85",
+  glassFrame: "#6b727a",
+  glassTint: "rgba(190,222,240,0.16)",
+  deck: "#b98d5f",
 } as const
 
 // Identificadores de tile do piso/parede. A ordem define o índice no atlas.
@@ -165,22 +168,18 @@ function drawWallTop(ctx: Ctx, v: number): void {
   rect(ctx, 0, 14, TILE, 2, shade(top, 0.78))
 }
 
-const GLASS_FRAME = "#6b727a"
-const GLASS_TINT = "rgba(190,222,240,0.16)"
-const DECK_WOOD = "#b98d5f"
-
 /**
  * Vidro do piso ao teto. Só caixilho, reflexo e véu leve são pintados — o resto
  * fica transparente para o céu aparecer, contínuo entre tiles vizinhos.
  */
 function drawGlass(ctx: Ctx, v: number): void {
-  rect(ctx, 0, 0, TILE, TILE, GLASS_TINT)
-  // Montantes: só nas bordas, então dois tiles lado a lado formam um pano
-  // contínuo em vez de uma grade de janelinhas.
-  rect(ctx, 0, 0, 1, TILE, GLASS_FRAME)
-  rect(ctx, 15, 0, 1, TILE, GLASS_FRAME)
-  rect(ctx, 0, 0, TILE, 1, shade(GLASS_FRAME, 0.8))
-  rect(ctx, 0, 15, TILE, 1, shade(GLASS_FRAME, 0.7))
+  rect(ctx, 0, 0, TILE, TILE, COLORS.glassTint)
+  // Montante só na borda ESQUERDA: um a cada 16px. Montante nas duas bordas
+  // faria dois tiles vizinhos encostarem montante com montante — linha dupla
+  // lendo como grade de janelinhas, o oposto do pano contínuo.
+  rect(ctx, 0, 0, 1, TILE, COLORS.glassFrame)
+  rect(ctx, 0, 0, TILE, 1, shade(COLORS.glassFrame, 0.8))
+  rect(ctx, 0, 15, TILE, 1, shade(COLORS.glassFrame, 0.7))
   // Reflexo diagonal, deslocado por variação — quebra a repetição do tile.
   const off = v * 3
   for (let i = 0; i < 5; i++) {
@@ -197,7 +196,7 @@ function drawGlassDoor(ctx: Ctx, v: number): void {
 
 /** Deck da varanda: tábuas no sentido da profundidade, mais claras (está no sol). */
 function drawDeck(ctx: Ctx, v: number): void {
-  const base = tint(DECK_WOOD, 1.06)
+  const base = tint(COLORS.deck, 1.06)
   rect(ctx, 0, 0, TILE, TILE, base)
   // Juntas VERTICAIS em x fixo — continuam de um tile ao seguinte.
   for (const x of [0, 5, 10, 15]) {
@@ -219,7 +218,7 @@ function drawRailing(ctx: Ctx, v: number): void {
   // Dois montantes por tile: passo de 8 px mantém o ritmo entre tiles vizinhos.
   for (const x of [3, 11]) rect(ctx, x, 5, 1, 8, COLORS.metalDark)
   // Base: onde o guarda-corpo encontra o deck.
-  rect(ctx, 0, 13, TILE, 1, shade(DECK_WOOD, 0.7))
+  rect(ctx, 0, 13, TILE, 1, shade(COLORS.deck, 0.7))
   if (v % 2 === 0) px(ctx, 7, 4, "rgba(255,255,255,0.3)")
 }
 

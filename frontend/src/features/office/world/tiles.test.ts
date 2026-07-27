@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { ALPHA_TILES, SOLID_TILES, T } from "./tiles"
+import { ALPHA_TILES, COLORS, SOLID_TILES, T } from "./tiles"
 
 describe("ids de tile", () => {
   it("não tem id duplicado", () => {
@@ -41,5 +41,13 @@ describe("tiles com alfa", () => {
     for (const id of [T.WOOD, T.WALL, T.WALL_TOP, T.DECK]) {
       expect(ALPHA_TILES.has(id)).toBe(false)
     }
+  })
+})
+
+describe("governança de cor", () => {
+  it("as cores do vidro/deck vivem em COLORS, não em literais soltos", () => {
+    expect(COLORS.glassFrame).toBe("#6b727a")
+    expect(COLORS.glassTint).toBe("rgba(190,222,240,0.16)")
+    expect(COLORS.deck).toBe("#b98d5f")
   })
 })
