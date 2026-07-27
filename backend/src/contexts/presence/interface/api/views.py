@@ -37,6 +37,18 @@ def _clamp01(value) -> float:
     return max(0.0, min(1.0, v))
 
 
+MAX_FLOOR = 8
+
+
+def _clamp_floor(value: object) -> int:
+    """Andar válido; qualquer lixo cai no primeiro andar."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return n if 1 <= n <= MAX_FLOOR else 1
+
+
 class HeartbeatView(APIView):
     """POST /api/presence/heartbeat/ — atualiza posição e mantém presença viva."""
 
@@ -55,6 +67,7 @@ class HeartbeatView(APIView):
         facing = str(request.data.get("facing", "down"))
         if facing not in {"down", "up", "left", "right"}:
             facing = "down"
+        floor = _clamp_floor(request.data.get("floor", 1))
 
         presence, _ = PresenceModel.objects.get_or_create(
             workspace_id=workspace_id, user_id=user_id
@@ -63,6 +76,7 @@ class HeartbeatView(APIView):
         presence.x = x
         presence.y = y
         presence.facing = facing
+        presence.floor = floor
         presence.last_seen = now
         if moved:
             presence.last_moved = now
@@ -87,9 +101,10 @@ class RoomView(APIView):
 
         now = datetime.now(UTC)
         cutoff = now - FRESH_WINDOW
+        floor = _clamp_floor(request.query_params.get("floor", 1))
         rows = (
             PresenceModel.objects.filter(
-                workspace_id=workspace_id, last_seen__gte=cutoff
+                workspace_id=workspace_id, last_seen__gte=cutoff, floor=floor
             )
             .select_related("user")
         )
@@ -108,6 +123,7 @@ class RoomView(APIView):
                 "x": r.x,
                 "y": r.y,
                 "facing": r.facing,
+                "floor": r.floor,
                 "status": _effective(r, now),
                 "avatar_config": avatars.get(str(r.user_id)),
             }

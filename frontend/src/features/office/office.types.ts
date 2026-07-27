@@ -17,4 +17,5 @@ export interface HeartbeatInput {
   x: number
   y: number
   facing: Direction
+  floor: number
 }

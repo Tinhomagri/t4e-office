@@ -11,8 +11,13 @@
 import { buildAvatarSheet } from "@/features/avatar/chibi"
 import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/features/avatar/avatar.types"
 
-import { type OfficeMap, isSolid, zoneAt } from "./map"
+import { type OfficeMap, type Seat, isSolid, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
+import {
+  cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
+} from "./camera"
+import { keyAction } from "./input"
+import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
 
@@ -65,7 +70,8 @@ const POOL = 240
 export interface EngineCallbacks {
   onZoneChange?(zoneId: string | null, label: string, hint: string): void
   onMove?(x: number, y: number, facing: Direction): void
-  onInteract?(label: string): void
+  /** Assento ao sentar, `null` ao levantar. */
+  onInteract?(seat: Seat | null): void
 }
 
 export class OfficeEngine {
@@ -77,6 +83,9 @@ export class OfficeEngine {
   private lightCtx: CanvasRenderingContext2D
   private props: Record<string, PropSprite>
   private shadow: PropSprite
+  private sky: SkyLayers
+  /** Offset ativo da câmera (apoiado no guarda-corpo). */
+  private viewOffset = { dx: 0, dy: 0 }
 
   private actors = new Map<string, Actor>()
   private me: Actor | null = null
@@ -100,10 +109,18 @@ export class OfficeEngine {
   private viewW = 0
   private viewH = 0
 
+  /** Ponto travado da câmera enquanto o PC está aberto. */
+  private focus: { x: number; y: number; zoom: number } | null = null
+  private cssW = 320
+  private cssH = 200
+
   private currentZone: string | null = null
   private cb: EngineCallbacks
   private moveAccum = 0
   private reduceMotion = false
+
+  /** Desligado enquanto o PC do escritório está aberto. */
+  private inputEnabled = true
 
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
@@ -117,6 +134,7 @@ export class OfficeEngine {
 
     this.props = buildPropSprites()
     this.shadow = buildShadowSprite()
+    this.sky = buildSky()
     this.bakeGround()
 
     // Buffer de luz em 1/4 da resolução do mundo visível: o desfoque natural
@@ -153,7 +171,7 @@ export class OfficeEngine {
       for (let x = 0; x < this.map.cols; x++) {
         const here = this.map.floor[y * this.map.cols + x]
         const below = this.map.floor[(y + 1) * this.map.cols + x]
-        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.WINDOW
+        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.GLASS
         const openBelow = below !== T.WALL && below !== T.WALL_TOP && below !== T.VOID
         if (wallHere && openBelow) ctx.fillRect(x * TILE, (y + 1) * TILE, TILE, 3)
       }
@@ -261,14 +279,20 @@ export class OfficeEngine {
 
   // ── Entrada ───────────────────────────────────────────────────────────────
 
+  /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
+  setInputEnabled(enabled: boolean): void {
+    this.inputEnabled = enabled
+    if (!enabled) this.keys.clear()
+  }
+
   onKeyDown = (e: KeyboardEvent): void => {
-    const k = e.key.toLowerCase()
-    if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"].includes(k)) {
-      this.keys.add(k)
+    const action = keyAction(e.key, this.inputEnabled)
+    if (action === "move") {
+      this.keys.add(e.key.toLowerCase())
       this.target = null
       e.preventDefault()
     }
-    if (k === "e") this.tryInteract()
+    if (action === "interact") this.tryInteract()
   }
 
   onKeyUp = (e: KeyboardEvent): void => {
@@ -277,11 +301,15 @@ export class OfficeEngine {
 
   /** Clique na tela → alvo de caminhada no mundo. */
   clickTo(screenX: number, screenY: number): void {
-    const x = this.camX + screenX / this.scale
-    const y = this.camY + screenY / this.scale
+    const { x, y } = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
     if (isSolid(this.map, x, y)) return
     this.target = { x, y }
     if (this.me) this.me.seatIndex = -1
+  }
+
+  /** O avatar do usuário está sentado? */
+  isSeated(): boolean {
+    return (this.me?.seatIndex ?? -1) >= 0
   }
 
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
@@ -291,7 +319,8 @@ export class OfficeEngine {
     if (me.seatIndex >= 0) {
       me.seatIndex = -1
       me.anim = "idle"
-      this.cb.onInteract?.("De pé")
+      this.viewOffset = { dx: 0, dy: 0 }
+      this.cb.onInteract?.(null)
       return
     }
     let best = -1
@@ -311,9 +340,12 @@ export class OfficeEngine {
     me.x = seat.x
     me.y = seat.y
     me.facing = seat.facing
-    me.anim = seat.label.includes("Sofá") ? "idle" : "type"
+    me.anim =
+      seat.kind === "view" ? "lean" : seat.kind === "lounge" ? "idle" : "type"
+    this.viewOffset =
+      seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
-    this.cb.onInteract?.(seat.label)
+    this.cb.onInteract?.(seat)
   }
 
   // ── Física ────────────────────────────────────────────────────────────────
@@ -563,32 +595,54 @@ export class OfficeEngine {
   }
 
   resize(cssW: number, cssH: number): void {
+    this.cssW = cssW
+    this.cssH = cssH
     const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1))
-    // Escala inteira: 4× quando cabe folgado, senão 3× (2× em telas apertadas).
-    const fit = Math.min(cssW / 320, cssH / 200)
-    this.scale = Math.max(2, Math.min(4, Math.floor(fit)))
-    this.viewW = Math.ceil(cssW / this.scale)
-    this.viewH = Math.ceil(cssH / this.scale)
     this.canvas.width = cssW * dpr
     this.canvas.height = cssH * dpr
     this.canvas.style.width = `${cssW}px`
     this.canvas.style.height = `${cssH}px`
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     this.ctx.imageSmoothingEnabled = false
+    this.applyScale()
+  }
+
+  /** Recalcula escala e viewport. Escala inteira, sempre. */
+  private applyScale(): void {
+    this.scale = this.focus
+      ? focusScale(this.cssW, this.cssH, this.focus.zoom)
+      : integerScale(this.cssW, this.cssH)
+    const { viewW, viewH } = viewportFor(this.cssW, this.cssH, this.scale)
+    this.viewW = viewW
+    this.viewH = viewH
     this.lightBuf.width = Math.max(1, Math.ceil(this.viewW / 2))
     this.lightBuf.height = Math.max(1, Math.ceil(this.viewH / 2))
   }
 
+  /**
+   * Trava a câmera num ponto do mundo com zoom. `zoom` é piso, não alvo exato:
+   * `focusScale` mantém a escala inteira e dentro do teto.
+   */
+  focusOn(x: number, y: number, zoom = 6): void {
+    this.focus = { x, y, zoom }
+    this.applyScale()
+  }
+
+  clearFocus(): void {
+    this.focus = null
+    this.applyScale()
+  }
+
   private updateCamera(): void {
-    const me = this.me
-    if (!me) return
-    const targetX = me.x - this.viewW / 2
-    const targetY = me.y - this.viewH / 2
-    // Segue com folga e trava nas bordas do mapa.
-    const maxX = Math.max(0, this.map.width - this.viewW)
-    const maxY = Math.max(0, this.map.height - this.viewH)
-    const cx = Math.max(0, Math.min(maxX, targetX))
-    const cy = Math.max(0, Math.min(maxY, targetY))
+    const anchor = this.focus ?? this.me
+    if (!anchor) return
+    const base = cameraTarget(
+      anchor.x, anchor.y, this.viewW, this.viewH, this.map.width, this.map.height,
+    )
+    const { x: cx, y: cy } = offsetCamera(
+      base, this.viewOffset.dx, this.viewOffset.dy,
+      this.viewW, this.viewH, this.map.width, this.map.height,
+    )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
     this.camY += (cy - this.camY) * ease
@@ -604,8 +658,32 @@ export class OfficeEngine {
     const camY = Math.round(this.camY)
     const s = this.scale
 
-    ctx.fillStyle = "#1a1712"
-    ctx.fillRect(0, 0, this.viewW * s, this.viewH * s)
+    // Céu primeiro: o piso é blitado por cima com alfa, então vidro,
+    // guarda-corpo e o vazio fora do prédio revelam estas faixas.
+    const vw = this.viewW
+    const vh = this.viewH
+    const blit = (layer: HTMLCanvasElement, factor: number, extraX = 0) => {
+      const r = layerRect(factor, camX + extraX, camY, vw, vh)
+      ctx.drawImage(layer, r.sx, r.sy, r.sw, r.sh, 0, 0, vw * s, vh * s)
+      // Segunda passada quando o recorte cruza o fim da faixa — sem ela
+      // aparece uma coluna vazia a cada volta do loop.
+      const over = r.sx + r.sw - layer.width
+      if (over > 0) {
+        ctx.drawImage(
+          layer, 0, r.sy, over, r.sh,
+          (r.sw - over) * s, 0, over * s, vh * s,
+        )
+      }
+    }
+
+    blit(this.sky.sky, 0)
+    blit(this.sky.far, SKY_PARALLAX.far)
+    blit(this.sky.near, SKY_PARALLAX.near)
+    ctx.drawImage(
+      this.sky.clouds,
+      cloudOffset(camX, this.time), 0, vw, vh,
+      0, 0, vw * s, vh * s,
+    )
 
     // Piso e paredes: um único blit da região visível.
     ctx.drawImage(

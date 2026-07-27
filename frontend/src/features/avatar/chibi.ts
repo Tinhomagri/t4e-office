@@ -706,6 +706,14 @@ export function poseFor(anim: string, f: number): Pose {
       return { body: f % 2, lean: sway, legL: f % 4 < 2 ? 1 : 0, legR: f % 4 < 2 ? 0 : 1, armL: armUp, armR: -armUp, face: "happy", fx: f % 4 === 0 ? "note" : null }
     }
     case "dab": return [{ armL: 0, armR: 0, face: "happy" }, { body: 1, armL: -5, armR: -2, lean: -2, face: "happy" }, { body: 1, armL: -6, armR: -3, lean: -2, face: "happy", fx: "note" }, { armL: 0, armR: 0, face: "happy" }][f % 4]
+    // Apoiado no guarda-corpo: tronco inclinado para frente, braços na barra,
+    // respiração de 4 frames — quase parado, só o peso trocando de pé.
+    case "lean": return [
+      { lean: 2, armL: 1, armR: 1 },
+      { lean: 2, armL: 1, armR: 1, body: 1 },
+      { lean: 3, armL: 2, armR: 1 },
+      { lean: 2, armL: 1, armR: 2, body: 1 },
+    ][f % 4]
     case "floss": return [{ lean: -2, armL: 2, armR: -2, legL: 1, face: "happy" }, { body: 1, lean: -1, armL: 1, armR: -1, face: "happy", fx: "note" }, { lean: 2, armL: -2, armR: 2, legR: 1, face: "happy" }, { body: 1, lean: 1, armL: -1, armR: 1, face: "happy", fx: "note" }, { lean: -2, armL: 2, armR: -2, legL: 1, face: "happy" }, { body: 1, lean: 2, armL: -2, armR: 2, legR: 1, face: "happy", fx: "note" }][f % 6]
     case "jamal": return [
       { squash: -2, headBob: 1, hairDrag: 1 },

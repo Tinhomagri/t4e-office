@@ -10,6 +10,7 @@ import { saveAvatarConfig } from "./office.api"
 import { useMyAvatar, useRoom } from "./office.hooks"
 import { OfficeRoom } from "./OfficeRoom"
 import { PresenceBar, StatusLegend } from "./PresenceBar"
+import { useWorldStore } from "./world.store"
 
 export function OfficePage() {
   const { data: workspaces, isLoading, activeWorkspaceId } = useWorkspaces()
@@ -38,7 +39,8 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
   const backendAvatar = useMyAvatar()
   const localConfig = useAvatarStore((s) => s.config)
   const localCreated = useAvatarStore((s) => s.created)
-  const room = useRoom(workspaceId)
+  const floor = useWorldStore((s) => s.floor)
+  const room = useRoom(workspaceId, floor)
 
   // Se o avatar existe local mas ainda não no servidor, persiste para que os
   // outros consigam te ver na sala.
@@ -84,14 +86,25 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
   const onlineCount = room.data?.length ?? 1
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Escritório Virtual"
-        subtitle="Clique no chão para andar — todos veem em tempo real"
-      />
-      <PresenceBar workspaceId={workspaceId} onlineCount={onlineCount} />
+    <div className="fixed inset-0 z-30 bg-[#1a1712]">
       <OfficeRoom workspaceId={workspaceId} myConfig={config} />
-      <StatusLegend />
+
+      {/* Presença e legenda viram overlay: em tela cheia não há onde empilhar. */}
+      <div className="pointer-events-none absolute left-3 top-3 flex max-w-[min(92vw,44rem)] flex-col gap-2">
+        <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
+          <PresenceBar workspaceId={workspaceId} onlineCount={onlineCount} />
+        </div>
+        <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
+          <StatusLegend />
+        </div>
+      </div>
+
+      <Link
+        to="/app"
+        className="absolute right-3 top-3 rounded-lg bg-ink-950/70 px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-sm hover:bg-ink-950/90 focus-ring"
+      >
+        Sair do escritório
+      </Link>
     </div>
   )
 }
