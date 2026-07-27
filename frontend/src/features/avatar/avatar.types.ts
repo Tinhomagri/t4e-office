@@ -91,7 +91,7 @@ export const ANIMS: Record<string, number> = {
   // walk tem 4 — o ciclo clássico contato/passagem/contato/passagem.
   idle: 8, walk: 4, run: 6, push: 4, jump: 5, hurt: 3,
   wave: 5, dance: 8, jamal: 8, dab: 4, floss: 6,
-  punch: 4, getHit: 4, block: 3, type: 4, present: 4, coffee: 4, sleep: 4, celebrate: 6,
+  punch: 4, getHit: 4, block: 3, type: 4, present: 4, coffee: 4, sleep: 4, celebrate: 6, lean: 4,
 }
 export type AnimName = keyof typeof ANIMS | string
 
@@ -99,13 +99,13 @@ export const ANIM_LABELS: Record<string, string> = {
   idle: "Parado", walk: "Andar", run: "Correr", push: "Empurrar", jump: "Pular", hurt: "Tomar dano",
   wave: "Acenar", dance: "Dançar", jamal: "Passinho do Jamal", dab: "Dab", floss: "Floss",
   punch: "Socar", getHit: "Levar soco", block: "Defender",
-  type: "Digitar", present: "Apresentar", coffee: "Café", sleep: "Dormir", celebrate: "Comemorar",
+  type: "Digitar", present: "Apresentar", coffee: "Café", sleep: "Dormir", celebrate: "Comemorar", lean: "Apoiado",
 }
 
 // FPS sugerido por animação.
 export const ANIM_FPS: Record<string, number> = {
   jamal: 8.7, dance: 8, floss: 9, dab: 6, celebrate: 10, run: 12, walk: 8,
-  punch: 10, getHit: 9, wave: 7, sleep: 3, type: 7, coffee: 5, idle: 4,
+  punch: 10, getHit: 9, wave: 7, sleep: 3, type: 7, coffee: 5, idle: 4, lean: 3,
 }
 
 export type Direction = "down" | "up" | "left" | "right"
