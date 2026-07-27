@@ -22,4 +22,5 @@ urlpatterns = [
     path("api/presence/", include("contexts.presence.interface.api.urls")),
     path("api/integrations/", include("contexts.integrations.interface.api.urls")),
     path("api/sales/", include("contexts.sales.interface.api.urls")),
+    path("api/chatwoot/", include("contexts.chatwoot.interface.api.urls")),
 ]

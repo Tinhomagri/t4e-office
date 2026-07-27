@@ -18,6 +18,7 @@ import {
   ListTodo,
   type LucideIcon,
   Megaphone,
+  MessagesSquare,
   Share2,
   Smile,
   Sparkles,
@@ -162,6 +163,7 @@ export const SPACES: Space[] = [
         heading: "Carteira",
         items: [
           { label: "Clientes", to: "/app/comercial/clientes", icon: Building2 },
+          { label: "Atendimento", to: "/app/comercial/atendimento", icon: MessagesSquare },
           { label: "Atividades", to: "/app/comercial/atividades", icon: ListTodo },
           { label: "Propostas", to: "/app/comercial/propostas", icon: FileText },
         ],

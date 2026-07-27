@@ -19,3 +19,11 @@ class PermissionDeniedError(DomainError):
 
 class ConflictError(DomainError):
     """Operação conflita com o estado atual (ex.: recurso duplicado)."""
+
+
+class UpstreamError(DomainError):
+    """Serviço externo falhou ou está indisponível (Chatwoot, GitHub, Google…).
+
+    Distinto de ValidationError: o pedido do usuário estava correto, quem
+    quebrou foi o terceiro — por isso vira 502 e não 400.
+    """

@@ -5,6 +5,7 @@
 import { FileText, Trophy, UserSearch } from "lucide-react"
 import { useOutletContext } from "react-router-dom"
 
+import { InboxPage } from "@/features/inbox/InboxPage"
 import { ComingSoon } from "@/shared/ui/ComingSoon"
 
 import { ActivitiesView } from "./views/ActivitiesView"
@@ -30,6 +31,11 @@ export function CustomersRoute() {
 
 export function ActivitiesRoute() {
   return <ActivitiesView workspaceId={useSalesWorkspace()} />
+}
+
+/** Caixa de entrada do Chatwoot embutida no Comercial. */
+export function InboxRoute() {
+  return <InboxPage workspaceId={useSalesWorkspace()} />
 }
 
 export function LeadsRoute() {
