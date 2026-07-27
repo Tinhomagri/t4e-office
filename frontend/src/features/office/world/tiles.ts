@@ -40,15 +40,31 @@ export const T = {
   TILEFLOOR: 4,
   WALL: 5,
   WALL_TOP: 6,
-  WINDOW: 7,
-  DOORWAY: 8,
-  WALL_V: 9,
+  DOORWAY: 7,
+  WALL_V: 8,
+  /** Vidro do piso ao teto: caixilho opaco, miolo transparente. */
+  GLASS: 9,
+  /** Igual ao vidro, com puxador e passável. */
+  GLASS_DOOR: 10,
+  /** Piso da varanda — tábuas no sol. */
+  DECK: 11,
+  /** Guarda-corpo: montantes com vão, céu aparece no meio. */
+  RAILING: 12,
 } as const
 
 export type TileId = (typeof T)[keyof typeof T]
 
 /** Tiles que bloqueiam passagem. */
-export const SOLID_TILES = new Set<number>([T.VOID, T.WALL, T.WALL_TOP, T.WINDOW, T.WALL_V])
+export const SOLID_TILES = new Set<number>([
+  T.VOID, T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.RAILING,
+])
+
+/**
+ * Tiles cujo pintor NÃO preenche o fundo: os pixels vazios revelam a camada de
+ * céu desenhada atrás do piso. Sem isso o vidro fica opaco e volta o efeito de
+ * adesivo na parede.
+ */
+export const ALPHA_TILES = new Set<number>([T.GLASS, T.GLASS_DOOR, T.RAILING])
 
 const VARIANTS = 4
 
@@ -149,26 +165,62 @@ function drawWallTop(ctx: Ctx, v: number): void {
   rect(ctx, 0, 14, TILE, 2, shade(top, 0.78))
 }
 
-/** Janela: vidro com céu, caixilho e peitoril. A luz dela é desenhada à parte. */
-function drawWindow(ctx: Ctx, v: number): void {
-  drawWall(ctx, v)
-  rect(ctx, 1, 1, 14, 9, "#5c7f9e")
-  // Céu com degradê de 3 faixas + nuvem.
-  rect(ctx, 1, 1, 14, 3, "#7ba3c2")
-  rect(ctx, 1, 4, 14, 3, "#6a92b3")
-  rect(ctx, 3, 3, 4, 1, "#cfe0ea")
-  rect(ctx, 4, 2, 2, 1, "#cfe0ea")
-  // Prédios distantes.
-  rect(ctx, 9, 6, 3, 4, "#4e6a80")
-  rect(ctx, 12, 7, 2, 3, "#456075")
-  // Caixilho.
-  rect(ctx, 0, 0, TILE, 1, COLORS.wainscotDark)
-  rect(ctx, 0, 10, TILE, 1, COLORS.wainscotDark)
-  rect(ctx, 0, 0, 1, 11, COLORS.wainscotDark)
-  rect(ctx, 15, 0, 1, 11, COLORS.wainscotDark)
-  rect(ctx, 7, 1, 1, 9, COLORS.wainscotDark)
-  // Peitoril.
-  rect(ctx, 0, 11, TILE, 1, tint(COLORS.wainscot, 1.2))
+const GLASS_FRAME = "#6b727a"
+const GLASS_TINT = "rgba(190,222,240,0.16)"
+const DECK_WOOD = "#b98d5f"
+
+/**
+ * Vidro do piso ao teto. Só caixilho, reflexo e véu leve são pintados — o resto
+ * fica transparente para o céu aparecer, contínuo entre tiles vizinhos.
+ */
+function drawGlass(ctx: Ctx, v: number): void {
+  rect(ctx, 0, 0, TILE, TILE, GLASS_TINT)
+  // Montantes: só nas bordas, então dois tiles lado a lado formam um pano
+  // contínuo em vez de uma grade de janelinhas.
+  rect(ctx, 0, 0, 1, TILE, GLASS_FRAME)
+  rect(ctx, 15, 0, 1, TILE, GLASS_FRAME)
+  rect(ctx, 0, 0, TILE, 1, shade(GLASS_FRAME, 0.8))
+  rect(ctx, 0, 15, TILE, 1, shade(GLASS_FRAME, 0.7))
+  // Reflexo diagonal, deslocado por variação — quebra a repetição do tile.
+  const off = v * 3
+  for (let i = 0; i < 5; i++) {
+    px(ctx, 3 + i + off - (off > 8 ? 9 : 0), 4 + i, "rgba(255,255,255,0.22)")
+  }
+}
+
+function drawGlassDoor(ctx: Ctx, v: number): void {
+  drawGlass(ctx, v)
+  // Puxador vertical + soleira, para ler como porta e não como pano de vidro.
+  rect(ctx, 11, 6, 1, 5, tint(COLORS.metal, 1.1))
+  rect(ctx, 0, 14, TILE, 2, COLORS.metalDark)
+}
+
+/** Deck da varanda: tábuas no sentido da profundidade, mais claras (está no sol). */
+function drawDeck(ctx: Ctx, v: number): void {
+  const base = tint(DECK_WOOD, 1.06)
+  rect(ctx, 0, 0, TILE, TILE, base)
+  // Juntas VERTICAIS em x fixo — continuam de um tile ao seguinte.
+  for (const x of [0, 5, 10, 15]) {
+    rect(ctx, x, 0, 1, TILE, shade(base, 0.72))
+    rect(ctx, x + 1, 0, 1, TILE, tint(base, 1.05))
+  }
+  for (let i = 0; i < 3; i++) {
+    const gy = 2 + Math.floor(hash2(v, i, 13) * (TILE - 5))
+    const band = Math.floor(hash2(i, v, 29) * 3)
+    rect(ctx, band * 5 + 2, gy, 1, 2 + (i % 2), shade(base, 0.84))
+  }
+}
+
+/** Guarda-corpo: corrimão contínuo + montantes com vão de céu entre eles. */
+function drawRailing(ctx: Ctx, v: number): void {
+  rect(ctx, 0, 3, TILE, 2, COLORS.metal)
+  rect(ctx, 0, 3, TILE, 1, tint(COLORS.metal, 1.18))
+  rect(ctx, 0, 10, TILE, 1, COLORS.metalDark)
+  // Dois montantes por tile: passo de 8 px mantém o ritmo entre tiles vizinhos.
+  for (const x of [3, 11]) rect(ctx, x, 5, 1, 8, COLORS.metalDark)
+  // Base: onde o guarda-corpo encontra o deck.
+  rect(ctx, 0, 13, TILE, 1, shade(DECK_WOOD, 0.7))
+  if (v % 2 === 0) px(ctx, 7, 4, "rgba(255,255,255,0.3)")
 }
 
 /**
@@ -207,9 +259,12 @@ const PAINTERS: Record<number, (ctx: Ctx, v: number) => void> = {
   [T.TILEFLOOR]: drawTileFloor,
   [T.WALL]: drawWall,
   [T.WALL_TOP]: drawWallTop,
-  [T.WINDOW]: drawWindow,
   [T.DOORWAY]: drawDoorway,
   [T.WALL_V]: drawWallV,
+  [T.GLASS]: drawGlass,
+  [T.GLASS_DOOR]: drawGlassDoor,
+  [T.DECK]: drawDeck,
+  [T.RAILING]: drawRailing,
 }
 
 export interface TileAtlas {

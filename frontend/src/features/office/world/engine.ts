@@ -164,7 +164,7 @@ export class OfficeEngine {
       for (let x = 0; x < this.map.cols; x++) {
         const here = this.map.floor[y * this.map.cols + x]
         const below = this.map.floor[(y + 1) * this.map.cols + x]
-        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.WINDOW
+        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.GLASS
         const openBelow = below !== T.WALL && below !== T.WALL_TOP && below !== T.VOID
         if (wallHere && openBelow) ctx.fillRect(x * TILE, (y + 1) * TILE, TILE, 3)
       }

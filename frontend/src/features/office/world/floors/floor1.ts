@@ -64,9 +64,9 @@ export function buildFloor1(): OfficeMap {
   fill(floor, 46, 22, 3, 1, T.DOORWAY)
 
   // Janelas: parede superior e a lateral direita do lounge.
-  for (let x = 4; x < 20; x += 3) floor[idx(x, 2)] = T.WINDOW
-  for (let x = 38; x < 56; x += 3) floor[idx(x, 2)] = T.WINDOW
-  for (let x = 26; x < 34; x += 3) floor[idx(x, 1)] = T.WINDOW
+  for (let x = 4; x < 20; x += 3) floor[idx(x, 2)] = T.GLASS
+  for (let x = 38; x < 56; x += 3) floor[idx(x, 2)] = T.GLASS
+  for (let x = 26; x < 34; x += 3) floor[idx(x, 1)] = T.GLASS
 
   // ── Colisão ───────────────────────────────────────────────────────────────
   const collision = new Uint8Array(COLS * ROWS)
