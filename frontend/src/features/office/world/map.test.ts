@@ -11,24 +11,21 @@ describe("assentos", () => {
   })
 
   it("id deriva do tile do assento, não do índice do array", () => {
-    // Cluster de baia em (16,6): a cadeira "up" cai no tile (17,9), a "down" em (18,9).
-    expect(map.seats.some((s) => s.id === "ws-17-9")).toBe(true)
-    expect(map.seats.some((s) => s.id === "ws-18-9")).toBe(true)
+    // Primeira baia, coluna 8: a cadeira do lado "cubicle" cai no tile (9,4),
+    // a do lado "cubicleFlip" em (10,4) — as duas na fileira do corredor.
+    expect(map.seats.some((s) => s.id === "ws-9-4")).toBe(true)
+    expect(map.seats.some((s) => s.id === "ws-10-4")).toBe(true)
   })
 
-  it("baias são kind 'pc' — 16 no total", () => {
+  it("baias são kind 'pc' — 30 no total", () => {
     const pc = map.seats.filter((s) => s.kind === "pc")
-    expect(pc).toHaveLength(16)
+    expect(pc).toHaveLength(30)
     for (const s of pc) expect(s.id.startsWith("ws-")).toBe(true)
   })
 
-  it("guarda-corpo da varanda é kind 'view' — não abre PC", () => {
+  it("não há assento 'view' de varanda — bullpen compacto não tem varanda", () => {
     const view = map.seats.filter((s) => s.kind === "view")
-    expect(view.length).toBeGreaterThanOrEqual(3)
-    for (const s of view) {
-      expect(s.kind).not.toBe("pc")
-      expect(s.label).toBe("Vista da varanda")
-    }
+    expect(view).toHaveLength(0)
   })
 
   it("todo assento está dentro dos limites do mapa", () => {

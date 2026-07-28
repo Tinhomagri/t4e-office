@@ -1,17 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import { isSolid } from "../map"
-import { T, TILE } from "../tiles"
+import { TILE } from "../tiles"
 import { buildFloor1 } from "./floor1"
 
-import { T as TILES } from "../tiles"
-
-/** Vizinhos aceitáveis para um tile de deck além de deck e guarda-corpo. */
-const SOLID_OK = new Set<number>([TILES.WALL, TILES.WALL_TOP, TILES.WALL_V, TILES.GLASS, TILES.GLASS_DOOR])
-
 const map = buildFloor1()
-const at = (tx: number, ty: number) => map.floor[ty * map.cols + tx]
-const blocked = (tx: number, ty: number) => map.collision[ty * map.cols + tx] === 1
 
 /** Tiles alcançáveis a pé a partir do spawn, em 4-vizinhança. */
 function reachable(): Set<number> {
@@ -39,13 +32,13 @@ const REACH = reachable()
 const tileOf = (x: number, y: number) => Math.floor(y / TILE) * map.cols + Math.floor(x / TILE)
 
 describe("dimensões", () => {
-  it("é 72×46 tiles", () => {
-    expect([map.cols, map.rows]).toEqual([72, 46])
+  it("é 70×10 tiles — bullpen compacto, não o galpão antigo", () => {
+    expect([map.cols, map.rows]).toEqual([70, 10])
   })
 
   it("width/height batem com a grade", () => {
-    expect(map.width).toBe(72 * TILE)
-    expect(map.height).toBe(46 * TILE)
+    expect(map.width).toBe(70 * TILE)
+    expect(map.height).toBe(10 * TILE)
   })
 
   it("o spawn não está dentro de parede", () => {
@@ -54,12 +47,12 @@ describe("dimensões", () => {
 })
 
 describe("assentos", () => {
-  it("tem 16 assentos de PC", () => {
-    expect(map.seats.filter((s) => s.kind === "pc")).toHaveLength(16)
+  it("tem 30 assentos de PC", () => {
+    expect(map.seats.filter((s) => s.kind === "pc")).toHaveLength(30)
   })
 
-  it("tem assento de vista na varanda", () => {
-    expect(map.seats.filter((s) => s.kind === "view").length).toBeGreaterThanOrEqual(3)
+  it("todo assento olha para baixo — nenhum de costas para a câmera", () => {
+    for (const s of map.seats) expect(s.facing).toBe("down")
   })
 
   it("nenhum id de assento repetido", () => {
@@ -78,61 +71,9 @@ describe("assentos", () => {
   })
 })
 
-describe("vidro e varanda", () => {
-  it("existe fachada de vidro nas duas orientações", () => {
-    let sul = 0
-    let leste = 0
-    for (let x = 0; x < map.cols; x++) if (at(x, 37) === T.GLASS) sul++
-    for (let y = 0; y < map.rows; y++) if (at(55, y) === T.GLASS) leste++
-    expect(sul).toBeGreaterThan(30)
-    expect(leste).toBeGreaterThan(20)
-  })
-
-  it("a porta de vidro é passável e o vidro não", () => {
-    const portas: number[] = []
-    for (let x = 0; x < map.cols; x++) if (at(x, 37) === T.GLASS_DOOR) portas.push(x)
-    expect(portas.length).toBeGreaterThanOrEqual(3)
-    for (const x of portas) expect(blocked(x, 37)).toBe(false)
-    expect(blocked(portas[0] - 1, 37)).toBe(true)
-  })
-
-  it("TODO tile de deck é alcançável a pé", () => {
-    const ilhados: string[] = []
-    for (let y = 0; y < map.rows; y++) {
-      for (let x = 0; x < map.cols; x++) {
-        if (at(x, y) === T.DECK && !REACH.has(y * map.cols + x)) ilhados.push(`${x},${y}`)
-      }
-    }
-    expect(ilhados).toEqual([])
-  })
-
-  it("todo deck tem guarda-corpo ou parede em volta — não dá para cair", () => {
-    const vazado: string[] = []
-    for (let y = 0; y < map.rows; y++) {
-      for (let x = 0; x < map.cols; x++) {
-        if (at(x, y) !== T.DECK) continue
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = x + dx
-          const ny = y + dy
-          if (nx < 0 || ny < 0 || nx >= map.cols || ny >= map.rows) {
-            vazado.push(`${x},${y} borda`)
-            continue
-          }
-          const n = at(nx, ny)
-          const ok = n === T.DECK || n === T.RAILING || SOLID_OK.has(n)
-          if (!ok) vazado.push(`${x},${y} -> ${nx},${ny} = ${n}`)
-        }
-      }
-    }
-    expect(vazado).toEqual([])
-  })
-})
-
 describe("zonas", () => {
-  it("tem bullpen, recepção, elevador e varanda", () => {
-    expect(map.zones.map((z) => z.id).sort()).toEqual(
-      ["bullpen", "elevator", "reception", "terrace"].sort(),
-    )
+  it("tem só bullpen e elevador — sem varanda nem recepção nesta entrega", () => {
+    expect(map.zones.map((z) => z.id).sort()).toEqual(["bullpen", "elevator"])
   })
 
   it("toda zona tem rótulo, dica e cabe na grade", () => {
@@ -155,8 +96,8 @@ describe("props", () => {
     }
   })
 
-  it("usa as baias novas", () => {
+  it("usa 30 baias (15 pares cubicle/cubicleFlip)", () => {
     const baias = map.props.filter((p) => p.kind === "cubicle" || p.kind === "cubicleFlip")
-    expect(baias).toHaveLength(16)
+    expect(baias).toHaveLength(30)
   })
 })
