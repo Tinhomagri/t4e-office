@@ -1,4 +1,5 @@
 """Caso de uso: criar os estágios padrão do funil de um workspace."""
+
 from contexts.sales.domain.entities.stage import PipelineStage, StageKind
 from contexts.sales.domain.repositories.stage_repository import StageRepository
 

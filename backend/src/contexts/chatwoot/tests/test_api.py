@@ -18,9 +18,9 @@ from contexts.identity.infrastructure.django.models import (
     UserModel,
     WorkspaceModel,
 )
+from contexts.sales.application.use_cases.seed_default_stages import SeedDefaultStages
 from contexts.sales.infrastructure.django.models import CustomerModel, DealModel
 from contexts.sales.infrastructure.django.repositories_impl import DjangoStageRepository
-from contexts.sales.application.use_cases.seed_default_stages import SeedDefaultStages
 
 
 @pytest.fixture
