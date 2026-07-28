@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 import * as pokerApi from "./poker.api"
+import { pickActiveSession } from "./poker.selectors"
 
 export function useSession(sessionId: string | null) {
   return useQuery({
@@ -106,5 +107,15 @@ export function useApplyPoints(sessionId: string | null) {
       qc.invalidateQueries({ queryKey: ["cards"] })
       qc.invalidateQueries({ queryKey: ["poker-rounds", sessionId] })
     },
+  })
+}
+
+export function useActivePokerSession(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["poker-sessions", "workspace", workspaceId],
+    queryFn: () => pokerApi.listSessions(workspaceId!),
+    enabled: !!workspaceId,
+    refetchInterval: 2000,
+    select: pickActiveSession,
   })
 }
