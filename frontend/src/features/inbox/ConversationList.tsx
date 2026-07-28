@@ -9,7 +9,8 @@
 // lidas entra com spring — é o único overshoot da tela, porque é o que precisa
 // puxar o olho quando chega mensagem.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Hash, Search, UserCheck, UserX, Users } from "lucide-react"
+import { Hash, Search, Tag, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import { cx } from "@/shared/ui/primitives"
 
@@ -38,14 +39,19 @@ import type {
   Team,
 } from "./inbox.types"
 
-const FOLDERS: { id: AssigneeFilter; label: string; icon: typeof Users }[] = [
-  { id: "me", label: "Minhas", icon: UserCheck },
-  { id: "assigned", label: "Atribuídas", icon: Users },
-  { id: "unassigned", label: "Não atribuídas", icon: UserX },
-  { id: "all", label: "Todas", icon: Users },
+// Pastas viram <select>: como abas numa coluna de 340px os rótulos truncavam
+// ("Não atribuíd…") e a contagem estourava a largura. Aqui cabe o nome inteiro.
+const FOLDERS: { id: AssigneeFilter; label: string }[] = [
+  { id: "me", label: "Minhas" },
+  { id: "assigned", label: "Atribuídas" },
+  { id: "unassigned", label: "Não atribuídas" },
+  { id: "all", label: "Todas" },
 ]
 
 const STATUS_TABS: ConversationStatus[] = ["open", "pending", "resolved", "snoozed"]
+
+const CONTROL =
+  "h-8 rounded-md border border-cw-border bg-white px-2 text-[12px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
 
 interface Props {
   conversations: Conversation[]
@@ -70,6 +76,120 @@ interface Props {
   onSearchChange: (value: string) => void
   /** Foco programático vindo do atalho de busca (⌘F / Ctrl+F). */
   searchRef?: React.RefObject<HTMLInputElement>
+}
+
+// Filtro de etiquetas em popover. Inline, a nuvem de chips ocupava metade da
+// coluna e não tinha como fechar — aqui o painel some ao clicar fora ou no Esc.
+function LabelFilter({
+  labels,
+  selected,
+  onChange,
+}: {
+  labels: Label[]
+  selected: string[]
+  onChange: (value: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
+    document.addEventListener("mousedown", onPointerDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [open])
+
+  const toggle = (title: string) =>
+    onChange(
+      selected.includes(title)
+        ? selected.filter((current) => current !== title)
+        : [...selected, title],
+    )
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label="Filtrar por etiqueta"
+        className={cx(
+          "flex h-7 items-center gap-1 rounded px-1.5 text-[11px] font-medium transition-colors duration-100 focus-ring",
+          selected.length > 0
+            ? "bg-cw-500/10 text-cw-600 dark:text-cw-500"
+            : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
+        )}
+      >
+        <Tag className="size-3.5" />
+        {selected.length > 0 && <span className="tabular-nums">{selected.length}</span>}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-60 rounded-lg border border-cw-border bg-white p-2 shadow-lg dark:border-ink-700 dark:bg-ink-800">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cw-muted">
+              Etiquetas
+            </span>
+            <div className="flex items-center gap-2">
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  className="text-[11px] font-medium text-cw-muted transition-colors duration-100 hover:text-cw-600"
+                >
+                  Limpar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Fechar etiquetas"
+                className="text-cw-muted transition-colors duration-100 hover:text-cw-600"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
+            {labels.map((label) => {
+              const active = selected.includes(label.title)
+              return (
+                <button
+                  key={label.id}
+                  type="button"
+                  onClick={() => toggle(label.title)}
+                  aria-pressed={active}
+                  className={cx(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors duration-100 focus-ring",
+                    !active && "border-cw-border text-cw-muted hover:bg-cw-surface dark:border-ink-700 dark:hover:bg-ink-700",
+                  )}
+                  style={
+                    active
+                      ? {
+                          borderColor: label.color,
+                          backgroundColor: `${label.color}1f`,
+                          color: label.color,
+                        }
+                      : undefined
+                  }
+                >
+                  <Hash className="size-2.5 shrink-0" />
+                  <span className="max-w-[150px] truncate">{label.title}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function ConversationList({
@@ -109,51 +229,10 @@ export function ConversationList({
   }
 
   return (
-    <aside className="flex w-full flex-col border-r border-cw-border bg-white md:w-[340px] md:shrink-0 dark:border-ink-800 dark:bg-ink-900">
-      {/* Pastas — o `assignee_type` do Chatwoot */}
-      <div className="flex gap-0.5 border-b border-cw-border p-1.5 dark:border-ink-800">
-        {FOLDERS.map((folder) => {
-          const count = folderCount(folder.id)
-          const active = assignee === folder.id
-          return (
-            <button
-              key={folder.id}
-              type="button"
-              onClick={() => onAssigneeChange(folder.id)}
-              aria-pressed={active}
-              className={cx(
-                "relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors duration-100 focus-ring",
-                active
-                  ? "text-cw-600 dark:text-cw-500"
-                  : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
-              )}
-            >
-              {/* A pílula é um nó só que desliza entre as pastas — troca de
-                  seleção lida como movimento, não como dois estados piscando. */}
-              {active && (
-                <motion.span
-                  layoutId="inbox-folder-pill"
-                  className="absolute inset-0 rounded-md bg-cw-500/10"
-                  transition={
-                    reduced
-                      ? { duration: 0 }
-                      : { type: "spring", stiffness: 480, damping: 38 }
-                  }
-                />
-              )}
-              <folder.icon className="relative size-3.5 shrink-0" />
-              <span className="relative truncate">{folder.label}</span>
-              {count !== null && count > 0 && (
-                <span className="relative rounded-full bg-cw-border/70 px-1.5 text-[10px] tabular-nums text-cw-ink dark:bg-ink-700 dark:text-paper-300">
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Busca + filtro por caixa */}
+    <aside className="flex min-h-0 w-full flex-col border-r border-cw-border bg-white md:w-[340px] md:shrink-0 dark:border-ink-800 dark:bg-ink-900">
+      {/* Cabeçalho de filtros: busca primeiro, depois escopo, depois status.
+          Tudo num bloco só — antes eram quatro faixas com borda empilhadas, e
+          a lista de conversas começava abaixo da dobra. */}
       <div className="space-y-1.5 border-b border-cw-border p-2 dark:border-ink-800">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-cw-muted" />
@@ -167,13 +246,31 @@ export function ConversationList({
             className="h-8 w-full rounded-md border border-cw-border bg-white pl-8 pr-2 text-[13px] text-cw-ink outline-none transition-colors duration-100 placeholder:text-cw-muted focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
           />
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
+
+        <div className="flex gap-1.5">
+          <select
+            value={assignee}
+            onChange={(e) => onAssigneeChange(e.target.value as AssigneeFilter)}
+            aria-label="Filtrar por atribuição"
+            className={cx(CONTROL, "min-w-0 flex-1")}
+          >
+            {FOLDERS.map((folder) => {
+              const count = folderCount(folder.id)
+              return (
+                <option key={folder.id} value={folder.id}>
+                  {folder.label}
+                  {count !== null ? ` (${count})` : ""}
+                </option>
+              )
+            })}
+          </select>
+
           {inboxes.length > 1 && (
             <select
               value={inboxId ?? ""}
               onChange={(e) => onInboxChange(e.target.value ? Number(e.target.value) : undefined)}
               aria-label="Filtrar por caixa de entrada"
-              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+              className={cx(CONTROL, "min-w-0 flex-1")}
             >
               <option value="">Todas as caixas</option>
               {inboxes.map((box) => (
@@ -183,12 +280,13 @@ export function ConversationList({
               ))}
             </select>
           )}
+
           {teams.length > 1 && (
             <select
               value={teamId ?? ""}
               onChange={(e) => onTeamChange(e.target.value ? Number(e.target.value) : undefined)}
               aria-label="Filtrar por time"
-              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+              className={cx(CONTROL, "min-w-0 flex-1")}
             >
               <option value="">Todos os times</option>
               {teams.map((team) => (
@@ -199,84 +297,45 @@ export function ConversationList({
             </select>
           )}
         </div>
-      </div>
 
-      {/* Abas de status */}
-      <div className="flex gap-0.5 border-b border-cw-border px-2 py-1.5 dark:border-ink-800">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => onStatusChange(tab)}
-            aria-pressed={status === tab}
-            className={cx(
-              "relative rounded px-2 py-1 text-[12px] font-medium transition-colors duration-100 focus-ring",
-              status === tab ? "text-white" : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
-            )}
-          >
-            {status === tab && (
-              <motion.span
-                layoutId="inbox-status-pill"
-                className="absolute inset-0 rounded bg-cw-500"
-                transition={
-                  reduced ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }
-                }
-              />
-            )}
-            <span className="relative">{STATUS_LABELS[tab]}</span>
-          </button>
-        ))}
-      </div>
-
-      {availableLabels.length > 0 && (
-        <div className="border-b border-cw-border px-2 py-2 dark:border-ink-800">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cw-muted">
-              Etiquetas
-            </span>
-            {selectedLabels.length > 0 && (
+        <div className="flex items-center gap-1">
+          <div className="flex min-w-0 flex-1 gap-0.5">
+            {STATUS_TABS.map((tab) => (
               <button
+                key={tab}
                 type="button"
-                onClick={() => onLabelsChange([])}
-                className="text-[11px] font-medium text-cw-muted transition-colors duration-100 hover:text-cw-600"
+                onClick={() => onStatusChange(tab)}
+                aria-pressed={status === tab}
+                className={cx(
+                  "relative min-w-0 rounded px-1.5 py-1 text-[11px] font-medium transition-colors duration-100 focus-ring",
+                  status === tab
+                    ? "text-white"
+                    : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
+                )}
               >
-                Limpar
+                {status === tab && (
+                  <motion.span
+                    layoutId="inbox-status-pill"
+                    className="absolute inset-0 rounded bg-cw-500"
+                    transition={
+                      reduced ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }
+                    }
+                  />
+                )}
+                <span className="relative">{STATUS_LABELS[tab]}</span>
               </button>
-            )}
+            ))}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {availableLabels.slice(0, 18).map((label) => {
-              const active = selectedLabels.includes(label.title)
-              return (
-                <button
-                  key={label.id}
-                  type="button"
-                  onClick={() =>
-                    onLabelsChange(
-                      active
-                        ? selectedLabels.filter((current) => current !== label.title)
-                        : [...selectedLabels, label.title],
-                    )
-                  }
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors duration-100 focus-ring"
-                  style={
-                    active
-                      ? {
-                          borderColor: label.color,
-                          backgroundColor: `${label.color}1f`,
-                          color: label.color,
-                        }
-                      : undefined
-                  }
-                >
-                  <Hash className="size-2.5 shrink-0" />
-                  <span className="max-w-[140px] truncate">{label.title}</span>
-                </button>
-              )
-            })}
-          </div>
+
+          {availableLabels.length > 0 && (
+            <LabelFilter
+              labels={availableLabels}
+              selected={selectedLabels}
+              onChange={onLabelsChange}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       {/* Lista */}
       <div className="flex-1 overflow-y-auto">
@@ -298,6 +357,9 @@ export function ConversationList({
             variants={reduced ? undefined : listContainer}
             initial="hidden"
             animate="show"
+            // Respiro no fim da lista: sem isso a última conversa encosta na
+            // borda inferior e não fica claro que a rolagem acabou.
+            className="pb-6"
           >
             {ordered.map((conversation, index) => {
               const name = contactDisplayName(conversation)

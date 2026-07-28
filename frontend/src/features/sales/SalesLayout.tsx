@@ -111,19 +111,34 @@ export function SalesLayout() {
   // próprios KPIs e já absorveu o painel de atrasados. Repetir tudo isso acima
   // dele empilhava três barras de controle dizendo a mesma coisa.
   const isDeck = location.pathname.startsWith("/app/comercial/dashboard")
+  // Atendimento é uma superfície fechada como o deck: o inbox já tem sua
+  // própria busca, filtros e cabeçalho de conversa — empilhar o header e os
+  // KPIs do funil em cima só rouba altura de uma tela que já é apertada.
+  const isAtendimento = location.pathname.startsWith("/app/comercial/atendimento")
+  const isFullBleed = isDeck || isAtendimento
 
   return (
-    // Sem gap no deck: ele é a única superfície da rota e compensa o padding do
-    // AppShell por conta própria — qualquer espaço extra aqui vira uma faixa
-    // clara acima do fundo escuro.
-    <div className={cx("flex flex-col", !isDeck && "gap-4")}>
+    // Sem gap no deck/atendimento: são a única superfície da rota e compensam
+    // o padding do AppShell por conta própria — qualquer espaço extra aqui
+    // vira uma faixa clara acima do fundo escuro (deck) ou rouba altura do
+    // inbox (atendimento).
+    <div
+      className={cx(
+        "flex flex-col",
+        !isFullBleed && "gap-4",
+        // min-h-0 é o que permite o filho encolher e rolar por dentro; sem ele
+        // o inbox estoura a altura da viewport.
+        isAtendimento && "min-h-0 flex-1",
+      )}
+    >
       {palette}
 
       {/* O deck traz o próprio cabeçalho e sangra o fundo escuro com margem
           negativa — renderizar um PageHeader acima dele fazia o deck subir por
           cima do subtítulo e comer o texto. Ele também já tem seu seletor de
-          período e sua paleta de comandos, então aqui não sobra nada a mostrar. */}
-      {!isDeck && (
+          período e sua paleta de comandos, então aqui não sobra nada a mostrar.
+          Atendimento pelo mesmo motivo: o inbox é a tela inteira. */}
+      {!isFullBleed && (
         <PageHeader
           title={current?.label ?? "Comercial"}
           subtitle="Funil de vendas, clientes e follow-ups do time."
@@ -154,7 +169,7 @@ export function SalesLayout() {
         />
       ) : (
         <>
-          {isDeck ? null : isLoading ? (
+          {isFullBleed ? null : isLoading ? (
             <Skeleton className="h-24 rounded-lg" />
           ) : metrics ? (
             <MetricStrip>
@@ -201,7 +216,7 @@ export function SalesLayout() {
             </MetricStrip>
           ) : null}
 
-          {!isDeck && (alerts.deals > 0 || alerts.activities > 0 || alerts.stale > 0) && (
+          {!isFullBleed && (alerts.deals > 0 || alerts.activities > 0 || alerts.stale > 0) && (
             <button
               type="button"
               onClick={() => navigate("/app/comercial/dashboard")}
@@ -227,6 +242,7 @@ export function SalesLayout() {
             initial={reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: EASE }}
+            className={cx(isAtendimento && "flex min-h-0 flex-1 flex-col")}
           >
             <Outlet context={{ workspaceId }} />
           </motion.div>
