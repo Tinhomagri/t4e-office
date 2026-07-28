@@ -50,7 +50,7 @@ export function PokerConsolePanel() {
           <label className="flex flex-col gap-1">
             Projeto
             <select
-              className="win98-btn"
+              className="win98-field"
               value={projectId ?? ""}
               onChange={(e) => {
                 setProjectId(e.target.value || null)
@@ -68,7 +68,7 @@ export function PokerConsolePanel() {
             <label className="flex flex-col gap-1">
               Sessão
               <select
-                className="win98-btn"
+                className="win98-field"
                 value={sessionId ?? ""}
                 onChange={(e) => setSessionId(e.target.value || null)}
               >
@@ -98,7 +98,7 @@ export function PokerConsolePanel() {
                 <button
                   type="button"
                   className="win98-btn flex-1"
-                  disabled={session.status === "voting"}
+                  disabled={session.status !== "waiting"}
                   onClick={() => updateSession.mutate({ status: "voting" })}
                 >
                   Iniciar votação
@@ -115,7 +115,7 @@ export function PokerConsolePanel() {
               {session.status === "revealed" && (
                 <div className="flex gap-1">
                   <input
-                    className="win98-btn flex-1"
+                    className="win98-field flex-1"
                     placeholder="Pontos finais"
                     value={points}
                     onChange={(e) => setPoints(e.target.value)}

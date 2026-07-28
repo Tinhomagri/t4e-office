@@ -72,6 +72,23 @@
   border-bottom-color: var(--w98-light);
 }
 
+/* Campo de formulário (select/input) com cara de sunken field do 98 —
+   diferente de .win98-btn (botão quadrado de ícone, 14px). Usado em
+   PokerConsolePanel para o seletor de projeto/sessão e o input de pontos. */
+.win98-field {
+  height: 20px;
+  padding: 0 4px;
+  background: var(--w98-light);
+  border-top: 1px solid var(--w98-shadow);
+  border-left: 1px solid var(--w98-shadow);
+  border-right: 1px solid var(--w98-light);
+  border-bottom: 1px solid var(--w98-light);
+  box-shadow: inset 1px 1px 0 var(--w98-dark);
+  font-family: var(--w98-font);
+  font-size: 11px;
+  color: var(--w98-dark);
+}
+
 .win98-resize {
   cursor: nwse-resize;
   width: 14px;
