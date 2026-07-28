@@ -352,7 +352,14 @@ export class OfficeEngine {
         best = i
       }
     })
-    if (best < 0) return
+    if (best < 0) {
+      // Nenhum assento por perto: ainda assim avisa o React com "sem
+      // assento" — é o que deixa interações de zona sem assento (elevador,
+      // console do poker) funcionarem. Sem isso, apertar E de pé fora de
+      // qualquer assento nunca chegava ao onInteract e a zona nunca reagia.
+      this.cb.onInteract?.(null)
+      return
+    }
     const seat = this.map.seats[best]
     me.seatIndex = best
     me.x = seat.x
