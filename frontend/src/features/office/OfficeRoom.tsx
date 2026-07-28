@@ -12,11 +12,16 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
+import { useActivePokerSession } from "@/features/poker/poker.hooks"
+
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
 import { isMyDesk } from "./pc/desk"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
+import { PokerConsolePanel } from "./poker/PokerConsolePanel"
+import { PokerVoteWheel } from "./poker/PokerVoteWheel"
+import { usePokerRoomStore } from "./poker/pokerRoom.store"
 import { OfficeEngine } from "./world/engine"
 import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
@@ -47,6 +52,9 @@ export function OfficeRoom({
   const room = useRoom(workspaceId, floor)
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
+
+  const activeSession = useActivePokerSession(workspaceId).data ?? null
+  const voteSeatId = usePokerRoomStore((s) => s.voteSeatId)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -107,11 +115,23 @@ export function OfficeRoom({
           useWorldStore.getState().openPanel()
           return
         }
+        // O console do andar 2 abre o painel de host em vez de mostrar toast
+        // de "de pé" — mesma lógica do elevador, zona sem assento.
+        if (!seat && zoneIdRef.current === "poker-console") {
+          usePokerRoomStore.getState().openConsole()
+          return
+        }
         setToast(seat ? seat.label : "De pé")
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
-        // outro assento continua sendo só sentar.
+        // outro assento continua sendo só sentar. Assento da mesa de poker
+        // abre a roda de votos em vez de ligar o PC.
         if (seat && me?.id && isMyDesk(me.id, seat, map.seats)) bootPc(seat.id)
-        else if (!seat) shutdownPc()
+        else if (seat && seat.kind === "poker") {
+          usePokerRoomStore.getState().openVote(seat.id)
+        } else if (!seat) {
+          shutdownPc()
+          usePokerRoomStore.getState().closeVote()
+        }
       },
     })
     engineRef.current = engine
@@ -148,6 +168,24 @@ export function OfficeRoom({
     if (!room.data) return
     engineRef.current?.syncRemote(room.data)
   }, [room.data])
+
+  // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
+  // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    if (!activeSession) {
+      engine.setPokerVotes(new Map(), false)
+      return
+    }
+    const votes = new Map(
+      activeSession.participants.map((p) => {
+        const v = activeSession.votes.find((v) => v.participant_id === p.id)
+        return [p.user_id, v?.has_voted ? v.value : null] as const
+      }),
+    )
+    engine.setPokerVotes(votes, activeSession.status === "revealed")
+  }, [activeSession])
 
   // Keepalive: mantém a presença viva mesmo parado.
   useEffect(() => {
@@ -270,6 +308,13 @@ export function OfficeRoom({
       <Win98Desktop />
 
       <ElevatorPanel />
+      <PokerConsolePanel />
+      {voteSeatId && activeSession && (
+        <PokerVoteWheel
+          sessionId={activeSession.id}
+          onClose={() => usePokerRoomStore.getState().closeVote()}
+        />
+      )}
 
       {/* Rótulo da zona atual — só faz sentido com o PC desligado */}
       <AnimatePresence>
