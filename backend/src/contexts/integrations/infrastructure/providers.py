@@ -1,12 +1,8 @@
-"""Conectores de providers externos — publicação e import.
+"""Conectores de providers externos — publicação.
 
 Publicação REAL nas redes vive em `social_publisher.py` (API oficial de cada
 provider). Aqui ficam apenas o roteamento (`publish_post`/`collect_metrics`) e
 o modo simulado (`SOCIAL_SIMULATE=True`) usado por seed/demo sem credenciais.
-
-Parsers de import aceitam o JSON de export nativo de cada ferramenta:
-* Jira — export de busca (`issues: [{key, fields: {summary, status, ...}}]`).
-* Trello — export de board (`cards: [...]`, `lists: [...]`).
 """
 from __future__ import annotations
 
@@ -18,29 +14,6 @@ from django.conf import settings
 from contexts.integrations.infrastructure import social_publisher
 
 SOCIAL_CHANNELS = ["instagram", "facebook", "linkedin", "x", "tiktok", "youtube"]
-
-# Mapeamento padrão de status externos → status do card
-_JIRA_STATUS_MAP = {
-    "to do": "todo",
-    "a fazer": "todo",
-    "backlog": "backlog",
-    "in progress": "doing",
-    "em andamento": "doing",
-    "in review": "review",
-    "em revisão": "review",
-    "done": "done",
-    "concluído": "done",
-    "concluido": "done",
-}
-_JIRA_TYPE_MAP = {
-    "bug": "bug",
-    "story": "feature",
-    "história": "feature",
-    "task": "chore",
-    "tarefa": "chore",
-    "epic": "epic",
-    "épico": "epic",
-}
 
 
 def _seed(value: str) -> int:
@@ -83,65 +56,3 @@ def _simulate_metrics(post) -> dict:
         "shares": int(likes * 0.08),
         "clicks": int(impressions * 0.03),
     }
-
-
-def parse_jira(payload: dict) -> list[dict]:
-    """Extrai itens de um export Jira (JSON de busca de issues)."""
-    issues = payload.get("issues") or []
-    items = []
-    for issue in issues:
-        fields = issue.get("fields") or {}
-        status_name = ((fields.get("status") or {}).get("name") or "").lower()
-        type_name = ((fields.get("issuetype") or {}).get("name") or "").lower()
-        items.append(
-            {
-                "external_key": issue.get("key") or "",
-                "title": fields.get("summary") or "(sem título)",
-                "description": fields.get("description") or "",
-                "status": _JIRA_STATUS_MAP.get(status_name, "todo"),
-                "type": _JIRA_TYPE_MAP.get(type_name, "chore"),
-                "external_status": status_name,
-            }
-        )
-    return items
-
-
-def parse_trello(payload: dict) -> list[dict]:
-    """Extrai itens de um export Trello (JSON de board)."""
-    lists = {lst.get("id"): (lst.get("name") or "").lower() for lst in payload.get("lists") or []}
-    # Heurística: nome da lista → status do card
-    def status_for(list_name: str) -> str:
-        for token, st in (
-            ("done", "done"), ("concluí", "done"), ("feito", "done"),
-            ("review", "review"), ("revis", "review"),
-            ("doing", "doing"), ("andamento", "doing"), ("progress", "doing"),
-            ("backlog", "backlog"),
-        ):
-            if token in list_name:
-                return st
-        return "todo"
-
-    items = []
-    for card in payload.get("cards") or []:
-        if card.get("closed"):
-            continue
-        list_name = lists.get(card.get("idList"), "")
-        items.append(
-            {
-                "external_key": card.get("shortLink") or card.get("id") or "",
-                "title": card.get("name") or "(sem título)",
-                "description": card.get("desc") or "",
-                "status": status_for(list_name),
-                "type": "chore",
-                "external_status": list_name,
-            }
-        )
-    return items
-
-
-def parse_import(provider: str, payload: dict) -> list[dict]:
-    if provider == "jira":
-        return parse_jira(payload)
-    if provider == "trello":
-        return parse_trello(payload)
-    raise ValueError(f"Provider de import desconhecido: {provider}")

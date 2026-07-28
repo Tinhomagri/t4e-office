@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "contexts.presence",
     "contexts.integrations",
     "contexts.sales",
+    "contexts.chatwoot",
 ]
 
 MIDDLEWARE = [
@@ -204,6 +205,19 @@ SOCIAL_YOUTUBE_CLIENT_SECRET = env("SOCIAL_YOUTUBE_CLIENT_SECRET", default="")
 # Publicação: real via API oficial (padrão). SOCIAL_SIMULATE=True mantém a
 # publicação/métricas simuladas para seed e demo sem credenciais reais.
 SOCIAL_SIMULATE = env.bool("SOCIAL_SIMULATE", default=False)
+
+# Atendimento (Chatwoot). A instância e o token são por workspace, cadastrados
+# na tela Comercial → Atendimento → Conexão; aqui fica só a chave Fernet que
+# cifra o token no banco (reaproveita a do Google se vazia).
+CHATWOOT_TOKEN_ENC_KEY = env("CHATWOOT_TOKEN_ENC_KEY", default="") or env(
+    "GOOGLE_TOKEN_ENC_KEY", default=""
+)
+
+# URL pública desta API — usada para montar a URL de webhook que o admin cola
+# no Chatwoot. Em dev, aponte para o túnel (ngrok/cloudflared).
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="") or env(
+    "SOCIAL_OAUTH_REDIRECT_BASE", default="http://localhost:8000"
+)
 
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

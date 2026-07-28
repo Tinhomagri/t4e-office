@@ -12,23 +12,41 @@ import { OfficeRoom } from "./OfficeRoom"
 import { PresenceBar, StatusLegend } from "./PresenceBar"
 import { useWorldStore } from "./world.store"
 
+// A rota fica fora do AppShell (é uma cena 3D em tela cheia — ver router.tsx),
+// então nenhum destes estados tem sidebar/header para voltar. `BackLink` supre
+// isso; sem ele, carregando ou sem workspace vira beco sem saída.
+function BackLink() {
+  return (
+    <Link
+      to="/app"
+      className="fixed left-3 top-3 z-10 rounded-lg bg-ink-950/70 px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-sm hover:bg-ink-950/90 focus-ring"
+    >
+      ← Voltar
+    </Link>
+  )
+}
+
 export function OfficePage() {
   const { data: workspaces, isLoading, activeWorkspaceId } = useWorkspaces()
 
   if (isLoading) {
     return (
-      <div className="grid place-items-center py-24">
+      <div className="grid h-screen place-items-center">
+        <BackLink />
         <Spinner />
       </div>
     )
   }
   if (!workspaces || workspaces.length === 0 || !activeWorkspaceId) {
     return (
-      <EmptyState
-        icon={<Users className="size-6" />}
-        title="Nenhum workspace"
-        description="Crie um workspace na aba Boards para entrar no Escritório."
-      />
+      <div className="grid h-screen place-items-center px-6">
+        <BackLink />
+        <EmptyState
+          icon={<Users className="size-6" />}
+          title="Nenhum workspace"
+          description="Crie um workspace na aba Boards para entrar no Escritório."
+        />
+      </div>
     )
   }
 
@@ -56,7 +74,8 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
 
   if (backendAvatar.isLoading) {
     return (
-      <div className="grid place-items-center py-24">
+      <div className="grid h-screen place-items-center">
+        <BackLink />
         <Spinner />
       </div>
     )
@@ -64,7 +83,8 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
 
   if (!config) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto h-screen max-w-2xl space-y-6 px-6 pt-20">
+        <BackLink />
         <PageHeader
           title="Escritório Virtual"
           subtitle="Presença da equipe em tempo real"
@@ -86,6 +106,9 @@ function OfficeInner({ workspaceId }: { workspaceId: string }) {
   const onlineCount = room.data?.length ?? 1
 
   return (
+    // `fixed inset-0` não é mais um hack para cobrir o AppShell — a rota já
+    // roda fora dele — mas continua sendo a forma mais simples de garantir
+    // tela cheia independente do que o resto da árvore fizer.
     <div className="fixed inset-0 z-30 bg-[#1a1712]">
       <OfficeRoom workspaceId={workspaceId} myConfig={config} />
 

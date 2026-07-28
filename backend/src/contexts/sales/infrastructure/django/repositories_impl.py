@@ -6,6 +6,7 @@ from contexts.sales.domain.entities.activity import ActivityKind, DealActivity
 from contexts.sales.domain.entities.contact import Contact
 from contexts.sales.domain.entities.customer import Customer, CustomerKind
 from contexts.sales.domain.entities.deal import Deal
+from contexts.sales.domain.entities.goal import Goal
 from contexts.sales.domain.entities.history import DealHistoryEntry
 from contexts.sales.domain.entities.stage import PipelineStage, StageKind
 from contexts.sales.domain.repositories.activity_repository import ActivityRepository
@@ -15,6 +16,7 @@ from contexts.sales.domain.repositories.customer_repository import (
     WorkspaceAccess,
 )
 from contexts.sales.domain.repositories.deal_repository import DealRepository
+from contexts.sales.domain.repositories.goal_repository import GoalRepository
 from contexts.sales.domain.repositories.history_repository import DealHistoryRepository
 from contexts.sales.domain.repositories.stage_repository import StageRepository
 from contexts.sales.infrastructure.django.models import (
@@ -24,6 +26,7 @@ from contexts.sales.infrastructure.django.models import (
     DealHistoryModel,
     DealModel,
     PipelineStageModel,
+    SalesGoalModel,
 )
 
 # ── Tradutores ORM → entidade ────────────────────────────────────────────────
@@ -470,3 +473,59 @@ class DjangoDealHistoryRepository(DealHistoryRepository):
     def list_by_deal(self, *, deal_id: str) -> list[DealHistoryEntry]:
         rows = DealHistoryModel.objects.filter(deal_id=deal_id).select_related("author")
         return [_history_to_entity(r) for r in rows]
+
+
+def _goal_to_entity(row: SalesGoalModel) -> Goal:
+    """Traduz o model ORM de meta para a entidade de domínio."""
+    return Goal(
+        id=str(row.id),
+        workspace_id=str(row.workspace_id),
+        period=row.period,
+        target_amount=row.target_amount,
+        currency=row.currency,
+        owner_id=str(row.owner_id) if row.owner_id else None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+class DjangoGoalRepository(GoalRepository):
+    """Persistência de metas comerciais via Django ORM."""
+
+    def create(self, *, goal: Goal) -> Goal:
+        row = SalesGoalModel.objects.create(
+            workspace_id=goal.workspace_id,
+            period=goal.period,
+            target_amount=goal.target_amount,
+            currency=goal.currency,
+            owner_id=goal.owner_id,
+        )
+        return _goal_to_entity(row)
+
+    def get(self, *, goal_id: str) -> Goal | None:
+        row = SalesGoalModel.objects.filter(id=goal_id).first()
+        return _goal_to_entity(row) if row else None
+
+    def list_by_workspace(
+        self,
+        *,
+        workspace_id: str,
+        period: str | None = None,
+        owner_id: str | None = None,
+    ) -> list[Goal]:
+        qs = SalesGoalModel.objects.filter(workspace_id=workspace_id)
+        if period:
+            qs = qs.filter(period=period)
+        if owner_id:
+            qs = qs.filter(owner_id=owner_id)
+        return [_goal_to_entity(r) for r in qs]
+
+    def update(self, *, goal: Goal) -> Goal:
+        row = SalesGoalModel.objects.get(id=goal.id)
+        row.target_amount = goal.target_amount
+        row.currency = goal.currency
+        row.save()
+        return _goal_to_entity(row)
+
+    def delete(self, *, goal_id: str) -> None:
+        SalesGoalModel.objects.filter(id=goal_id).delete()

@@ -1,0 +1,20 @@
+{% extends "identity/email/base.html" %}
+
+{% block subject %}Confirme seu cadastro — T4E Office{% endblock %}
+{% block preheader %}Confirme seu email para ativar sua conta. Link válido por 24 horas.{% endblock %}
+{% block heading %}Confirme seu email{% endblock %}
+{% block action_label %}Confirmar email{% endblock %}
+
+{% block content %}
+  <p style="margin:0 0 14px 0; font-size:15px; line-height:1.6; color:#44546F;">
+    Olá{% if full_name %}, <strong style="color:#181A1F;">{{ full_name }}</strong>{% endif %}!
+    Falta só um passo para ativar sua conta no T4E Office.
+  </p>
+  <p style="margin:0 0 4px 0; font-size:14px; line-height:1.6; color:#626F86;">
+    Este link expira em <strong style="color:#181A1F;">24 horas</strong>.
+  </p>
+{% endblock %}
+
+{% block footer %}
+  Se você não criou uma conta no T4E Office, ignore este email.
+{% endblock %}

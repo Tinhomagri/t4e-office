@@ -83,14 +83,17 @@ export function DeckCard({
       }}
       style={{ background: DECK.surface, borderColor: DECK.border }}
       className={cx(
-        "group/card relative overflow-hidden rounded-xl border shadow-[0_1px_0_0_rgb(255_255_255/0.04)_inset]",
+        "group/card relative overflow-hidden rounded-xl border shadow-[0_1px_0_0_var(--deck-overlay-1)_inset]",
         className,
       )}
     >
       {/* Realce superior: fio de luz de 1px, some para as bordas. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background: `linear-gradient(to right, transparent, ${DECK.borderHi}, transparent)`,
+        }}
       />
       {(title || action || exportName) && (
         <header className="flex items-start gap-3 px-4 pb-2 pt-3.5">
@@ -114,7 +117,7 @@ export function DeckCard({
               disabled={busy}
               title={`Exportar "${title ?? exportName}" como PNG`}
               aria-label={`Exportar ${title ?? exportName} como imagem PNG`}
-              className="grid size-7 shrink-0 place-items-center rounded-md text-white/35 opacity-0 transition-all duration-150 hover:bg-white/10 hover:text-white focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:opacity-40 group-hover/card:opacity-100 group-focus-within/card:opacity-100"
+              className="grid size-7 shrink-0 place-items-center rounded-md text-[color:var(--deck-text-faint)] opacity-0 transition-all duration-150 hover:bg-[var(--deck-overlay-3)] hover:text-[color:var(--deck-text)] focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:opacity-40 group-hover/card:opacity-100 group-focus-within/card:opacity-100"
             >
               <Download className={cx("size-3.5", busy && "animate-pulse")} />
             </button>
@@ -330,7 +333,7 @@ export function RadialGauge({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="rgb(255 255 255 / 0.08)"
+          stroke={DECK.border}
           strokeWidth={8}
         />
         <motion.circle

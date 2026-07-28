@@ -25,6 +25,10 @@ dependencies = [
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.140",
     "cryptography>=43.0",
+    # PDF das propostas comerciais. ReportLab é Python puro de propósito: o
+    # backend roda serverless na Vercel (api/index.py + @vercel/python) e
+    # WeasyPrint exigiria pango/cairo como lib de sistema, impossível ali.
+    "reportlab>=4.2",
     # Áudio (opcional): faster-whisper + ffmpeg habilitam transcrição
 ]
 

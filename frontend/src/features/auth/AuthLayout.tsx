@@ -2,6 +2,7 @@ import { motion } from "framer-motion"
 import { Suspense, lazy, type ReactNode } from "react"
 
 import { EASE } from "@/shared/lib/motion"
+import { DecorBoundary } from "@/shared/ui/DecorBoundary"
 
 // Cena WebGL (túnel wireframe) carregada sob demanda: Three.js fica fora do
 // bundle inicial das telas.
@@ -23,10 +24,15 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
     <div className="flex h-screen w-screen overflow-hidden">
       {/* Metade esquerda: preto + animação */}
       <div className="relative hidden overflow-hidden bg-ink md:block md:w-1/2">
+        {/* A cena é enfeite: se o WebGL faltar ou uma textura não carregar, o
+            login precisa continuar de pé. Sem este boundary um 404 de textura
+            derruba a tela inteira. */}
         <div className="absolute inset-0">
-          <Suspense fallback={null}>
-            <Scene />
-          </Suspense>
+          <DecorBoundary>
+            <Suspense fallback={null}>
+              <Scene />
+            </Suspense>
+          </DecorBoundary>
         </div>
 
         {/* Vinheta radial: escurece as bordas → foco no centro do túnel e
