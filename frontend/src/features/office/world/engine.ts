@@ -405,6 +405,20 @@ export class OfficeEngine {
     }
     if (me.seatIndex >= 0) return
 
+    // Checagem de zona roda todo frame, parado ou andando — antes só rodava
+    // dentro do bloco de movimento, então quem chegava a uma zona e ficava
+    // parado sem antes se mexer (ex.: spawn dentro da própria zona) nunca
+    // disparava onZoneChange, e o E não fazia nada.
+    const zone = zoneAt(this.map, me.x, me.y)
+    const zoneId = zone?.id ?? null
+    if (zoneId !== this.currentZone) {
+      this.currentZone = zoneId
+      this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
+      if (zone) {
+        for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
+      }
+    }
+
     let dx = 0
     let dy = 0
     if (this.keys.has("w") || this.keys.has("arrowup")) dy -= 1
@@ -455,16 +469,6 @@ export class OfficeEngine {
     if (this.moveAccum > 0.2) {
       this.moveAccum = 0
       this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
-    }
-
-    const zone = zoneAt(this.map, me.x, me.y)
-    const zoneId = zone?.id ?? null
-    if (zoneId !== this.currentZone) {
-      this.currentZone = zoneId
-      this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
-      if (zone) {
-        for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
-      }
     }
   }
 
