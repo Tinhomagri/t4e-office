@@ -8,7 +8,11 @@ import type { Config } from "tailwindcss"
 // Nunca usar hex solto no JSX — sempre via token.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
-  darkMode: "class",
+  // "class" simples deixaria o conteúdo embutido no PC Win98 herdar o dark
+  // mode do app (o <html class="dark">), enquanto a tela do PC é sempre clara
+  // (bg-white fixo em Win98Window). Exclui .win98-sunken da herança para que
+  // board e chrome do PC fiquem no mesmo tema.
+  darkMode: ["variant", "&:is(.dark *):not(.win98-sunken):not(.win98-sunken *)"],
   theme: {
     extend: {
       colors: {
