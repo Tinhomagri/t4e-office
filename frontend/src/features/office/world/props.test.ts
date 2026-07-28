@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { PROPS, type PropKind } from "./props"
 import { TILE } from "./tiles"
+import { makeCanvas } from "./pixels"
 
 const NOVOS: PropKind[] = [
   "cubicle", "cubicleFlip", "copier", "filingCabinet",
@@ -59,5 +60,28 @@ describe("portas do elevador", () => {
   it("ocupam a largura da cabine (4 tiles) e bloqueiam", () => {
     expect(PROPS.elevatorDoors.w).toBe(4 * TILE)
     expect(PROPS.elevatorDoors.solid).toBeTruthy()
+  })
+})
+
+describe("props de Planning Poker", () => {
+  it("pokerTable é sólida e maior que uma mesa comum", () => {
+    expect(PROPS.pokerTable.solid).toBeTruthy()
+    expect(PROPS.pokerTable.w).toBeGreaterThan(PROPS.meetingTable.w)
+  })
+
+  it("pokerScreen é sólido só numa faixa fina (montado na parede)", () => {
+    expect(PROPS.pokerScreen.solid!.h).toBeLessThan(PROPS.pokerScreen.h)
+  })
+
+  it("pokerConsole é sólido", () => {
+    expect(PROPS.pokerConsole.solid).toBeTruthy()
+  })
+
+  it("os três desenham sem lançar exceção", () => {
+    for (const kind of ["pokerTable", "pokerScreen", "pokerConsole"] as const) {
+      const { canvas, ctx } = makeCanvas(PROPS[kind].w, PROPS[kind].h)
+      expect(() => PROPS[kind].draw(ctx)).not.toThrow()
+      expect(canvas.width).toBe(PROPS[kind].w)
+    }
   })
 })

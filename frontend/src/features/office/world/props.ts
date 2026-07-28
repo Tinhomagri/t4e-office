@@ -636,6 +636,68 @@ export const PROPS: Record<string, PropDef> = {
       rect(ctx, 2, 37, 60, 1, "rgba(43,30,26,0.25)")
     },
   },
+
+  /**
+   * Mesa em U da sala de Planning Poker: abre ao norte (lado da entrada). A
+   * colisão é o retângulo cheio — ninguém precisa andar dentro do vão do U,
+   * só ao redor, onde ficam os assentos.
+   */
+  pokerTable: {
+    w: 256,
+    h: 112,
+    solid: { x: 0, y: 0, w: 256, h: 112 },
+    baseline: 108,
+    draw(ctx) {
+      const top = "#8f6a44"
+      const dark = shade(top, 0.74)
+      const light = tint(top, 1.12)
+      // Base do U (fecha ao sul) + os dois braços (abrem ao norte, vão no
+      // meio fica transparente — não pintamos ali).
+      rect(ctx, 0, 80, 256, 32, top)
+      rect(ctx, 0, 0, 32, 112, top)
+      rect(ctx, 224, 0, 32, 112, top)
+      outline(ctx, 0, 80, 256, 32, INK)
+      outline(ctx, 0, 0, 32, 112, INK)
+      outline(ctx, 224, 0, 32, 112, INK)
+      rect(ctx, 0, 81, 256, 1, light)
+      rect(ctx, 0, 108, 256, 4, dark)
+      rect(ctx, 1, 1, 30, 1, light)
+      rect(ctx, 225, 1, 30, 1, light)
+    },
+  },
+
+  /** Telão montado na parede sul da sala de poker. */
+  pokerScreen: {
+    w: 128,
+    h: 32,
+    solid: { x: 0, y: 24, w: 128, h: 8 },
+    baseline: 30,
+    draw(ctx) {
+      chamfer(ctx, 0, 0, 128, 26, "#12161c")
+      outline(ctx, 0, 0, 128, 26, "#3b444d")
+      rect(ctx, 3, 3, 122, 20, "#1b2733")
+      rect(ctx, 46, 9, 36, 8, "#26333f")
+      outline(ctx, 46, 9, 36, 8, "#3b4a58")
+      rect(ctx, 60, 26, 8, 4, "#3b444d")
+      rect(ctx, 3, 30, 122, 2, "rgba(43,30,26,0.25)")
+    },
+  },
+
+  /** Console do host: onde a tecla E abre o painel de controle da sessão. */
+  pokerConsole: {
+    w: 32,
+    h: 30,
+    solid: { x: 0, y: 10, w: 32, h: 18 },
+    baseline: 28,
+    draw(ctx) {
+      tabletop(ctx, 2, 12, 28, 14, "#7d5b41")
+      legs(ctx, 6, 22, 20, 6, "#5a4028")
+      rect(ctx, 8, 4, 16, 9, "#1b2733")
+      outline(ctx, 8, 4, 16, 9, "#3b444d")
+      rect(ctx, 10, 6, 12, 5, "#4a6fa5")
+      rect(ctx, 6, 13, 20, 2, "#c9a04a")
+    },
+  },
 }
 
 export type PropKind = keyof typeof PROPS
