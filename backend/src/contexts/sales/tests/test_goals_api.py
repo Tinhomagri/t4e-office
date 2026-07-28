@@ -1,5 +1,5 @@
 """Testes da API de metas comerciais (Metas & Forecast)."""
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase

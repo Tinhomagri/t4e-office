@@ -1,6 +1,11 @@
 """Rotas do contexto sales (prefixo /api/sales/)."""
 from django.urls import path
 
+from contexts.sales.interface.api.goal_views import (
+    GoalDetailView,
+    GoalForecastView,
+    GoalListCreateView,
+)
 from contexts.sales.interface.api.lead_views import (
     LeadContactedView,
     LeadConvertView,
@@ -9,11 +14,6 @@ from contexts.sales.interface.api.lead_views import (
     LeadImportView,
     LeadListCreateView,
     LeadQualifyView,
-)
-from contexts.sales.interface.api.goal_views import (
-    GoalDetailView,
-    GoalForecastView,
-    GoalListCreateView,
 )
 from contexts.sales.interface.api.metrics_views import PipelineMetricsView
 from contexts.sales.interface.api.proposal_views import (
