@@ -4,6 +4,7 @@
 // de sessão/voto, só a superfície de controle dentro do mundo 3D.
 import { useState } from "react"
 
+import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { useProjects } from "@/features/workspace/workspace.hooks"
 import {
@@ -17,10 +18,15 @@ import {
 import { usePokerRoomStore } from "./pokerRoom.store"
 import "../pc/win98.css"
 
+const HOST_ONLY = "Só o host da sessão pode fazer isso"
+
 export function PokerConsolePanel() {
   const open = usePokerRoomStore((s) => s.consoleOpen)
   const close = usePokerRoomStore((s) => s.closeConsole)
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const myId = useAuthStore((s) => s.user?.id) ?? null
+  const [error, setError] = useState<string | null>(null)
+  const fail = (msg: string) => ({ onError: () => setError(msg) })
   const { data: projects } = useProjects(workspaceId)
   const [projectId, setProjectId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -35,6 +41,9 @@ export function PokerConsolePanel() {
   if (!open) return null
 
   const session = sessions?.find((s) => s.id === sessionId) ?? null
+  // Mesma regra do backend (views.py: `request.user.id != session.created_by`
+  // → 403) e da PokerPage: host é quem criou a sessão.
+  const isHost = !!session && !!myId && session.created_by === myId
 
   return (
     <div className="absolute inset-0 z-30 grid place-items-center bg-black/50">
@@ -84,7 +93,13 @@ export function PokerConsolePanel() {
             <button
               type="button"
               className="win98-btn"
-              onClick={() => createSession.mutate(undefined, { onSuccess: (s) => setSessionId(s.id) })}
+              onClick={() => {
+                setError(null)
+                createSession.mutate(undefined, {
+                  onSuccess: (s) => setSessionId(s.id),
+                  onError: () => setError("Não foi possível criar a sessão neste projeto."),
+                })
+              }}
             >
               Nova sessão
             </button>
@@ -94,20 +109,39 @@ export function PokerConsolePanel() {
             <>
               <p>Status: <b>{session.status}</b></p>
               <p>Cards na fila: {cards?.length ?? 0}</p>
+              {!isHost && (
+                <p className="text-[11px]">
+                  Você não é o host desta sessão — os controles ficam com quem a criou.
+                </p>
+              )}
               <div className="flex gap-1">
                 <button
                   type="button"
                   className="win98-btn flex-1"
-                  disabled={session.status !== "waiting"}
-                  onClick={() => updateSession.mutate({ status: "voting" })}
+                  disabled={!isHost || session.status !== "waiting"}
+                  title={isHost ? undefined : HOST_ONLY}
+                  onClick={() => {
+                    setError(null)
+                    updateSession.mutate(
+                      { status: "voting" },
+                      fail("Não foi possível iniciar a votação."),
+                    )
+                  }}
                 >
                   Iniciar votação
                 </button>
                 <button
                   type="button"
                   className="win98-btn flex-1"
-                  disabled={session.status !== "voting"}
-                  onClick={() => updateSession.mutate({ status: "revealed" })}
+                  disabled={!isHost || session.status !== "voting"}
+                  title={isHost ? undefined : HOST_ONLY}
+                  onClick={() => {
+                    setError(null)
+                    updateSession.mutate(
+                      { status: "revealed" },
+                      fail("Não foi possível revelar os votos."),
+                    )
+                  }}
                 >
                   Revelar
                 </button>
@@ -123,9 +157,14 @@ export function PokerConsolePanel() {
                   <button
                     type="button"
                     className="win98-btn"
-                    disabled={!points}
+                    disabled={!isHost || !points}
+                    title={isHost ? undefined : HOST_ONLY}
                     onClick={() => {
-                      applyPoints.mutate(Number(points))
+                      setError(null)
+                      applyPoints.mutate(
+                        Number(points),
+                        fail("Não foi possível aplicar a pontuação."),
+                      )
                       setPoints("")
                     }}
                   >
@@ -134,6 +173,12 @@ export function PokerConsolePanel() {
                 </div>
               )}
             </>
+          )}
+
+          {error && (
+            <p role="alert" className="text-[11px] font-bold text-[#a00]">
+              {error}
+            </p>
           )}
         </div>
       </div>
