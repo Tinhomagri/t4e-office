@@ -66,6 +66,19 @@ export function relativeTime(iso: string | null, now: Date = new Date()): string
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
 }
 
+/** Data futura em formato curto para exibir o prazo de snooze. */
+export function futureTime(iso: string | null): string {
+  if (!iso) return ""
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 /** Hora no formato da bolha de mensagem (24h, sem segundos). */
 export function messageTime(iso: string | null): string {
   if (!iso) return ""

@@ -35,7 +35,7 @@ import {
   useCommandPalette,
   usePersistedState,
 } from "@/shared/ui/command-center"
-import { Badge, Button, EmptyState, Kbd, PageHeader, Skeleton } from "@/shared/ui/primitives"
+import { Badge, Button, EmptyState, Kbd, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
 
 import { usePipelineMetrics } from "./sales.metrics"
 
@@ -46,11 +46,12 @@ const WINDOWS = [
 ] as const
 
 const SECTIONS: { to: string; label: string; icon: typeof Target }[] = [
-  { to: "/app/comercial", label: "Visão geral", icon: LayoutDashboard },
+  // Mesmo rótulo da sidebar: dois nomes para a mesma tela confundem.
+  { to: "/app/comercial/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/app/comercial/atendimento", label: "Atendimento", icon: MessagesSquare },
   { to: "/app/comercial/leads", label: "Leads", icon: UserSearch },
   { to: "/app/comercial/pipeline", label: "Pipeline", icon: Target },
   { to: "/app/comercial/clientes", label: "Clientes", icon: Building2 },
-  { to: "/app/comercial/atendimento", label: "Atendimento", icon: MessagesSquare },
   { to: "/app/comercial/atividades", label: "Atividades", icon: ListTodo },
   { to: "/app/comercial/propostas", label: "Propostas", icon: FileText },
   { to: "/app/comercial/metas", label: "Metas & forecast", icon: Trophy },
@@ -94,7 +95,7 @@ export function SalesLayout() {
         id: "overdue",
         label: `Ver o que está atrasado (${alerts.deals + alerts.activities})`,
         icon: <AlertTriangle className="size-4" />,
-        run: () => navigate("/app/comercial"),
+        run: () => navigate("/app/comercial/dashboard"),
       },
     ],
     [alerts.deals, alerts.activities, setDays, navigate],
@@ -103,34 +104,48 @@ export function SalesLayout() {
   const { palette, setOpen } = useCommandPalette(actions)
 
   const current = SECTIONS.find((s) =>
-    s.to === "/app/comercial" ? location.pathname === s.to : location.pathname.startsWith(s.to),
+    location.pathname === s.to || location.pathname.startsWith(`${s.to}/`),
   )
 
+  // O deck é uma superfície fechada: tem o próprio seletor de período, os
+  // próprios KPIs e já absorveu o painel de atrasados. Repetir tudo isso acima
+  // dele empilhava três barras de controle dizendo a mesma coisa.
+  const isDeck = location.pathname.startsWith("/app/comercial/dashboard")
+
   return (
-    <div className="flex flex-col gap-4">
+    // Sem gap no deck: ele é a única superfície da rota e compensa o padding do
+    // AppShell por conta própria — qualquer espaço extra aqui vira uma faixa
+    // clara acima do fundo escuro.
+    <div className={cx("flex flex-col", !isDeck && "gap-4")}>
       {palette}
 
-      <PageHeader
-        title={current?.label ?? "Comercial"}
-        subtitle="Funil de vendas, clientes e follow-ups do time."
-      >
-        <Button
-          variant="outline"
-          size="sm"
-          icon={<Sparkles className="size-3.5" />}
-          onClick={() => setOpen(true)}
+      {/* O deck traz o próprio cabeçalho e sangra o fundo escuro com margem
+          negativa — renderizar um PageHeader acima dele fazia o deck subir por
+          cima do subtítulo e comer o texto. Ele também já tem seu seletor de
+          período e sua paleta de comandos, então aqui não sobra nada a mostrar. */}
+      {!isDeck && (
+        <PageHeader
+          title={current?.label ?? "Comercial"}
+          subtitle="Funil de vendas, clientes e follow-ups do time."
         >
-          Comandos <Kbd>{MOD_LABEL}K</Kbd>
-        </Button>
-        <SegmentedControl
-          layoutId="sales-window"
-          size="sm"
-          ariaLabel="Janela de análise"
-          value={days}
-          onChange={setDays}
-          options={WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
-        />
-      </PageHeader>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Sparkles className="size-3.5" />}
+            onClick={() => setOpen(true)}
+          >
+            Comandos <Kbd>{MOD_LABEL}K</Kbd>
+          </Button>
+          <SegmentedControl
+            layoutId="sales-window"
+            size="sm"
+            ariaLabel="Janela de análise"
+            value={days}
+            onChange={setDays}
+            options={WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+          />
+        </PageHeader>
+      )}
 
       {!workspaceId ? (
         <EmptyState
@@ -139,7 +154,7 @@ export function SalesLayout() {
         />
       ) : (
         <>
-          {isLoading ? (
+          {isDeck ? null : isLoading ? (
             <Skeleton className="h-24 rounded-lg" />
           ) : metrics ? (
             <MetricStrip>
@@ -186,10 +201,10 @@ export function SalesLayout() {
             </MetricStrip>
           ) : null}
 
-          {(alerts.deals > 0 || alerts.activities > 0 || alerts.stale > 0) && (
+          {!isDeck && (alerts.deals > 0 || alerts.activities > 0 || alerts.stale > 0) && (
             <button
               type="button"
-              onClick={() => navigate("/app/comercial")}
+              onClick={() => navigate("/app/comercial/dashboard")}
               className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-warning/15 focus-ring"
             >
               <AlertTriangle className="size-4 shrink-0 text-warning" />

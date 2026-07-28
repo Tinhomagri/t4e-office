@@ -5,6 +5,47 @@
 @layer base {
   :root {
     color-scheme: light;
+
+    /* Paleta do Command Deck (comercial) — variáveis por tema. Light é o
+       padrão; `.dark` sobrescreve com os valores originais do cockpit escuro.
+       Ver src/features/sales/deck/deck.theme.ts. */
+    --deck-bg: #F4F5F7;
+    --deck-surface: #FFFFFF;
+    --deck-surface-hi: #FFFFFF;
+    --deck-border: rgb(9 10 12 / 0.10);
+    --deck-border-hi: rgb(9 10 12 / 0.16);
+    --deck-grid: rgb(9 10 12 / 0.06);
+    --deck-text: #14161A;
+    --deck-text-dim: #5B5E66;
+    --deck-text-faint: #90939B;
+    --deck-overlay-1: rgb(9 10 12 / 0.035);
+    --deck-overlay-2: rgb(9 10 12 / 0.06);
+    --deck-overlay-3: rgb(9 10 12 / 0.09);
+    --deck-heat-0: rgb(9 10 12 / 0.05);
+    --deck-heat-1: rgb(56 132 255 / 0.30);
+    --deck-heat-2: rgb(37 110 255 / 0.55);
+    --deck-heat-3: rgb(30 90 235 / 0.78);
+    --deck-heat-4: rgb(20 70 210 / 1);
+  }
+
+  .dark {
+    --deck-bg: #0A0B0D;
+    --deck-surface: #141619;
+    --deck-surface-hi: #1B1E23;
+    --deck-border: rgb(255 255 255 / 0.08);
+    --deck-border-hi: rgb(255 255 255 / 0.14);
+    --deck-grid: rgb(255 255 255 / 0.06);
+    --deck-text: #F1F2F4;
+    --deck-text-dim: #8A8C93;
+    --deck-text-faint: #63656C;
+    --deck-overlay-1: rgb(255 255 255 / 0.03);
+    --deck-overlay-2: rgb(255 255 255 / 0.04);
+    --deck-overlay-3: rgb(255 255 255 / 0.10);
+    --deck-heat-0: rgb(255 255 255 / 0.06);
+    --deck-heat-1: rgb(87 157 255 / 0.32);
+    --deck-heat-2: rgb(90 170 255 / 0.58);
+    --deck-heat-3: rgb(100 185 255 / 0.82);
+    --deck-heat-4: rgb(130 200 255 / 1);
   }
 
   html,

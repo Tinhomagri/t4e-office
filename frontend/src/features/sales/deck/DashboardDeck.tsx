@@ -185,7 +185,7 @@ export function DashboardDeck() {
             leva ao pipeline, que é para onde se vai depois de ler o painel. */}
         <button
           onClick={() => navigate("/app/comercial/pipeline")}
-          className="grid size-8 place-items-center rounded-lg border text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+          className="grid size-8 place-items-center rounded-lg border text-[color:var(--deck-text-dim)] transition-colors hover:bg-[var(--deck-overlay-3)] hover:text-[color:var(--deck-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
           style={{ borderColor: DECK.border }}
           title="Ir para o pipeline"
           aria-label="Ir para o pipeline"
@@ -216,7 +216,7 @@ export function DashboardDeck() {
             onClick={() => refetch()}
             title="Atualizar dados"
             aria-label="Atualizar dados"
-            className="grid size-8 place-items-center rounded-lg border text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+            className="grid size-8 place-items-center rounded-lg border text-[color:var(--deck-text-dim)] transition-colors hover:bg-[var(--deck-overlay-3)] hover:text-[color:var(--deck-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
             style={{ borderColor: DECK.border }}
           >
             <RefreshCw className={cx("size-3.5", isFetching && "animate-spin")} />
@@ -373,7 +373,7 @@ export function DashboardDeck() {
             {...mark(MARK.panel)}
             index={8}
             title="Ritmo de atividade"
-            subtitle="Interações registradas nas últimas 12 semanas"
+            subtitle="Interações registradas no último ano"
             exportName="atividade-comercial"
           >
             <ActivityHeatmap activities={activities ?? []} />
@@ -475,14 +475,16 @@ function SegmentedDark({
             onClick={() => onChange(o.value)}
             className={cx(
               "relative rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
-              active ? "text-white" : "text-white/50 hover:text-white/80",
+              active
+                ? "text-[color:var(--deck-text)]"
+                : "text-[color:var(--deck-text-dim)] hover:text-[color:var(--deck-text)]",
             )}
           >
             {active && (
               <motion.span
                 layoutId="deck-window"
                 transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 400, damping: 30 }}
-                className="absolute inset-0 -z-10 rounded-md bg-white/10"
+                className="absolute inset-0 -z-10 rounded-md bg-[var(--deck-overlay-3)]"
               />
             )}
             {o.label}
@@ -503,7 +505,7 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
       <button
         onClick={onClear}
         aria-label={`Remover filtro ${label}`}
-        className="grid size-4 place-items-center rounded-full text-white/50 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-blue-300"
+        className="grid size-4 place-items-center rounded-full text-[color:var(--deck-text-dim)] transition-colors hover:bg-[var(--deck-overlay-3)] hover:text-[color:var(--deck-text)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-blue-300"
       >
         <X className="size-3" />
       </button>
@@ -594,7 +596,7 @@ function ExportMenu({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+        className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium text-[color:var(--deck-text-dim)] transition-colors hover:bg-[var(--deck-overlay-3)] hover:text-[color:var(--deck-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
         style={{ borderColor: DECK.border }}
       >
         <Download className="size-3.5" />
@@ -621,7 +623,7 @@ function ExportMenu({
                   role="menuitem"
                   disabled={busy != null}
                   onClick={() => run(item.id, item.run)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--deck-overlay-3)] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300"
                 >
                   <item.icon
                     className={cx("size-4 shrink-0", busy === item.id && "animate-pulse")}
@@ -829,7 +831,7 @@ function DealsTable({
               // ter sumido e nascido outra.
               data-flip-id={d.id}
               {...mark(MARK.row)}
-              className="border-t transition-colors hover:bg-white/[0.04]"
+              className="border-t transition-colors hover:bg-[var(--deck-overlay-2)]"
               style={{ borderColor: DECK.border }}
             >
               <Td className="max-w-[220px] truncate font-medium" style={{ color: DECK.text }}>

@@ -1,0 +1,41 @@
+{% extends "identity/email/base.html" %}
+
+{% block subject %}Convite para {{ workspace_name }} — T4E Office{% endblock %}
+{% block preheader %}{{ inviter_name }} convidou você para o workspace {{ workspace_name }}.{% endblock %}
+{% block heading %}Você foi convidado{% endblock %}
+{% block action_label %}Aceitar convite{% endblock %}
+
+{% block content %}
+  <p style="margin:0 0 14px 0; font-size:15px; line-height:1.6; color:#44546F;">
+    <strong style="color:#181A1F;">{{ inviter_name }}</strong> convidou você para participar do
+    workspace <strong style="color:#181A1F;">{{ workspace_name }}</strong> no T4E Office.
+  </p>
+
+  {% comment %}Cartão do workspace: dá contexto visual de ONDE a pessoa está
+  entrando, antes de ela clicar em qualquer coisa.{% endcomment %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="margin:0 0 16px 0; background-color:#F7F8F9; border:1px solid #DCDFE4; border-radius:8px;">
+    <tr>
+      <td style="padding:14px 16px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <p style="margin:0 0 2px 0; font-size:11px; letter-spacing:0.6px; text-transform:uppercase; color:#8590A2;">
+          Workspace
+        </p>
+        <p style="margin:0; font-size:15px; font-weight:600; color:#181A1F;">{{ workspace_name }}</p>
+        {% if role_label %}
+          <p style="margin:6px 0 0 0; font-size:13px; color:#626F86;">
+            Seu acesso: <strong style="color:#44546F;">{{ role_label }}</strong>
+          </p>
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:0 0 4px 0; font-size:14px; line-height:1.6; color:#626F86;">
+    Use o email <strong style="color:#181A1F;">{{ to_email }}</strong> ao entrar ou criar sua
+    conta — o convite é válido apenas para este endereço.
+  </p>
+{% endblock %}
+
+{% block footer %}
+  Se você não esperava este convite, pode ignorar este email com segurança.
+{% endblock %}

@@ -70,5 +70,6 @@ class SendInvitation:
             workspace_name=workspace.name,
             inviter_name=inviter_name or "Um colega",
             token=saved.token,
+            role=saved.role.value,
         )
         return saved

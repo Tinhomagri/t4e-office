@@ -9,7 +9,7 @@
 // lidas entra com spring — é o único overshoot da tela, porque é o que precisa
 // puxar o olho quando chega mensagem.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Search, UserCheck, UserX, Users } from "lucide-react"
+import { Hash, Search, UserCheck, UserX, Users } from "lucide-react"
 
 import { cx } from "@/shared/ui/primitives"
 
@@ -34,30 +34,39 @@ import type {
   ConversationStatus,
   Inbox,
   InboxCounts,
+  Label,
+  Team,
 } from "./inbox.types"
 
 const FOLDERS: { id: AssigneeFilter; label: string; icon: typeof Users }[] = [
   { id: "me", label: "Minhas", icon: UserCheck },
+  { id: "assigned", label: "Atribuídas", icon: Users },
   { id: "unassigned", label: "Não atribuídas", icon: UserX },
   { id: "all", label: "Todas", icon: Users },
 ]
 
-const STATUS_TABS: ConversationStatus[] = ["open", "pending", "resolved"]
+const STATUS_TABS: ConversationStatus[] = ["open", "pending", "resolved", "snoozed"]
 
 interface Props {
   conversations: Conversation[]
   counts?: InboxCounts
   inboxes: Inbox[]
+  teams: Team[]
+  labels: Label[]
   activeId: number | null
   assignee: AssigneeFilter
   status: ConversationStatus
   inboxId?: number
+  teamId?: number
+  selectedLabels: string[]
   search: string
   loading: boolean
   onSelect: (id: number) => void
   onAssigneeChange: (value: AssigneeFilter) => void
   onStatusChange: (value: ConversationStatus) => void
   onInboxChange: (value: number | undefined) => void
+  onTeamChange: (value: number | undefined) => void
+  onLabelsChange: (value: string[]) => void
   onSearchChange: (value: string) => void
   /** Foco programático vindo do atalho de busca (⌘F / Ctrl+F). */
   searchRef?: React.RefObject<HTMLInputElement>
@@ -67,16 +76,22 @@ export function ConversationList({
   conversations,
   counts,
   inboxes,
+  teams,
+  labels: availableLabels,
   activeId,
   assignee,
   status,
   inboxId,
+  teamId,
+  selectedLabels,
   search,
   loading,
   onSelect,
   onAssigneeChange,
   onStatusChange,
   onInboxChange,
+  onTeamChange,
+  onLabelsChange,
   onSearchChange,
   searchRef,
 }: Props) {
@@ -88,6 +103,7 @@ export function ConversationList({
   const folderCount = (id: AssigneeFilter): number | null => {
     if (!counts) return null
     if (id === "me") return counts.mine_count
+    if (id === "assigned") return counts.assigned_count
     if (id === "unassigned") return counts.unassigned_count
     return counts.all_count
   }
@@ -151,21 +167,38 @@ export function ConversationList({
             className="h-8 w-full rounded-md border border-cw-border bg-white pl-8 pr-2 text-[13px] text-cw-ink outline-none transition-colors duration-100 placeholder:text-cw-muted focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
           />
         </div>
-        {inboxes.length > 1 && (
-          <select
-            value={inboxId ?? ""}
-            onChange={(e) => onInboxChange(e.target.value ? Number(e.target.value) : undefined)}
-            aria-label="Filtrar por caixa de entrada"
-            className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
-          >
-            <option value="">Todas as caixas</option>
-            {inboxes.map((box) => (
-              <option key={box.id} value={box.id}>
-                {box.name} · {box.channel_label}
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="grid grid-cols-2 gap-1.5">
+          {inboxes.length > 1 && (
+            <select
+              value={inboxId ?? ""}
+              onChange={(e) => onInboxChange(e.target.value ? Number(e.target.value) : undefined)}
+              aria-label="Filtrar por caixa de entrada"
+              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+            >
+              <option value="">Todas as caixas</option>
+              {inboxes.map((box) => (
+                <option key={box.id} value={box.id}>
+                  {box.name} · {box.channel_label}
+                </option>
+              ))}
+            </select>
+          )}
+          {teams.length > 1 && (
+            <select
+              value={teamId ?? ""}
+              onChange={(e) => onTeamChange(e.target.value ? Number(e.target.value) : undefined)}
+              aria-label="Filtrar por time"
+              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+            >
+              <option value="">Todos os times</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Abas de status */}
@@ -195,6 +228,56 @@ export function ConversationList({
         ))}
       </div>
 
+      {availableLabels.length > 0 && (
+        <div className="border-b border-cw-border px-2 py-2 dark:border-ink-800">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cw-muted">
+              Etiquetas
+            </span>
+            {selectedLabels.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onLabelsChange([])}
+                className="text-[11px] font-medium text-cw-muted transition-colors duration-100 hover:text-cw-600"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {availableLabels.slice(0, 18).map((label) => {
+              const active = selectedLabels.includes(label.title)
+              return (
+                <button
+                  key={label.id}
+                  type="button"
+                  onClick={() =>
+                    onLabelsChange(
+                      active
+                        ? selectedLabels.filter((current) => current !== label.title)
+                        : [...selectedLabels, label.title],
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors duration-100 focus-ring"
+                  style={
+                    active
+                      ? {
+                          borderColor: label.color,
+                          backgroundColor: `${label.color}1f`,
+                          color: label.color,
+                        }
+                      : undefined
+                  }
+                >
+                  <Hash className="size-2.5 shrink-0" />
+                  <span className="max-w-[140px] truncate">{label.title}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Lista */}
       <div className="flex-1 overflow-y-auto">
         {loading && ordered.length === 0 ? (
@@ -211,7 +294,7 @@ export function ConversationList({
           <motion.ul
             // A chave remonta a lista quando o filtro muda — é o que dispara a
             // cascata. Sem isso o stagger só rodaria na primeira renderização.
-            key={`${assignee}:${status}:${inboxId ?? "all"}`}
+            key={`${assignee}:${status}:${inboxId ?? "all"}:${teamId ?? "all"}:${selectedLabels.join(",") || "all"}`}
             variants={reduced ? undefined : listContainer}
             initial="hidden"
             animate="show"

@@ -367,7 +367,7 @@ export function KanbanView({
                   onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
                 />
               ) : (
-                <div className="flex gap-3" style={{ minWidth: `${columns.length * 288}px` }}>
+                <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 288}px` }}>
                   {columns.map((ws, i) => (
                     <Column
                       key={ws.slug}
@@ -391,6 +391,12 @@ export function KanbanView({
                       }
                     />
                   ))}
+                  <AddColumn
+                    projectId={projectId}
+                    onCreate={(name) =>
+                      createWorkflowStatus.mutateAsync({ name, category: "todo", color: "#6b7280" })
+                    }
+                  />
                 </div>
               )}
               <DragOverlay dropAnimation={null}>
@@ -516,7 +522,6 @@ function QuickFilterChips({
           <span key={f.id} className="group/chip relative">
             <button
               onClick={() => (active ? onClear() : onApply(f.jql))}
-              title={f.jql}
               className={cx(
                 "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                 active
@@ -589,7 +594,6 @@ function SaveFilterModal({ projectId, jql, onClose }: { projectId: string; jql: 
         <Field label="Nome">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Bugs urgentes" autoFocus />
         </Field>
-        <p className="rounded-lg bg-paper-100 dark:bg-ink-800 px-3 py-2 font-mono text-xs text-paper-500">{jql}</p>
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>
     </Modal>
@@ -1057,6 +1061,89 @@ function Column({
         <QuickAdd projectId={projectId} status={status} sprintId={sprintId} />
       </div>
     </motion.div>
+  )
+}
+
+// Coluna-fantasma no fim do board, como o "+" do Jira. Criar status vivia só
+// dentro do modal "Workflow" — quem queria mais uma coluna não tinha nenhuma
+// pista disso olhando para o board.
+function AddColumn({
+  projectId,
+  onCreate,
+}: {
+  projectId: string
+  onCreate: (name: string) => Promise<unknown>
+}) {
+  const { can } = useProjectPermissions(projectId)
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Sem permissão de workflow o botão não existe — melhor do que oferecer e
+  // devolver 403 no clique.
+  if (!can("manage_workflow")) return null
+
+  const submit = async () => {
+    const v = name.trim()
+    if (!v) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onCreate(v)
+      setName("")
+      setOpen(false)
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open)
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        title="Criar coluna"
+        className="flex h-11 w-[272px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-paper-300 text-sm font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-700 dark:hover:border-brand-500/50"
+      >
+        <Plus className="size-4" /> Criar coluna
+      </button>
+    )
+
+  return (
+    <div className="flex w-[272px] shrink-0 flex-col gap-2 rounded-2xl border-2 border-brand-300 bg-paper p-2 dark:bg-ink-900">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit()
+          if (e.key === "Escape") {
+            setOpen(false)
+            setName("")
+          }
+        }}
+        placeholder="Nome da coluna"
+        autoFocus
+        className="w-full rounded-lg border border-paper-300 bg-paper px-2 py-1.5 text-sm text-ink outline-none focus:border-brand-400 dark:border-ink-600 dark:bg-ink-900 dark:text-paper"
+      />
+      <div className="flex items-center justify-end gap-1.5">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setOpen(false)
+            setName("")
+          }}
+        >
+          Cancelar
+        </Button>
+        <Button size="sm" onClick={submit} loading={saving} disabled={!name.trim()}>
+          Criar
+        </Button>
+      </div>
+      {error && <p className="text-xs text-danger">{error}</p>}
+    </div>
   )
 }
 
@@ -1550,12 +1637,20 @@ function ManageWorkflowModal({
   const [category, setCategory] = useState<WorkflowStatus["category"]>("todo")
   const [color, setColor] = useState("#6b7280")
   const [saving, setSaving] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const save = async () => {
     if (!name.trim()) return
     setSaving(true)
-    await onCreate({ name: name.trim(), category, color })
-    setName(""); setSaving(false)
+    setCreateError(null)
+    try {
+      await onCreate({ name: name.trim(), category, color })
+      setName("")
+    } catch (e) {
+      setCreateError(errMsg(e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -1616,6 +1711,7 @@ function ManageWorkflowModal({
               Criar
             </Button>
           </div>
+          {createError && <p className="text-xs text-danger">{createError}</p>}
         </div>
       </div>
     </Modal>

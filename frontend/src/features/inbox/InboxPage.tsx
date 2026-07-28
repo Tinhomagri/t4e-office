@@ -50,6 +50,8 @@ export function InboxPage({ workspaceId }: Props) {
   const [assignee, setAssignee] = useState<AssigneeFilter>("all")
   const [status, setStatus] = useState<ConversationStatus>("open")
   const [inboxId, setInboxId] = useState<number | undefined>()
+  const [teamId, setTeamId] = useState<number | undefined>()
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([])
   const [search, setSearch] = useState("")
   const [showSetup, setShowSetup] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -66,6 +68,8 @@ export function InboxPage({ workspaceId }: Props) {
     status,
     assignee_type: assignee,
     inbox_id: inboxId,
+    team_id: teamId,
+    labels: selectedLabels,
     q: search.trim(),
   })
 
@@ -166,6 +170,8 @@ export function InboxPage({ workspaceId }: Props) {
         conversations={conversations}
         counts={counts}
         inboxes={catalog?.inboxes ?? []}
+        teams={catalog?.teams ?? []}
+        labels={catalog?.labels ?? []}
         activeId={activeId}
         assignee={assignee}
         status={status}
@@ -177,6 +183,10 @@ export function InboxPage({ workspaceId }: Props) {
         onAssigneeChange={setAssignee}
         onStatusChange={setStatus}
         onInboxChange={setInboxId}
+        teamId={teamId}
+        onTeamChange={setTeamId}
+        selectedLabels={selectedLabels}
+        onLabelsChange={setSelectedLabels}
         onSearchChange={setSearch}
       />
 
@@ -218,6 +228,9 @@ export function InboxPage({ workspaceId }: Props) {
               onPriority={(priority: ConversationPriority | null) => changePriority.mutate(priority)}
               onLabels={(labels) => setLabels.mutate(labels)}
               onStatus={(next) => changeStatus.mutate({ status: next })}
+              onSnooze={(snoozedUntil) =>
+                changeStatus.mutate({ status: "snoozed", snoozedUntil })
+              }
               onMute={(muted) => setMuted.mutate(muted)}
             />
 

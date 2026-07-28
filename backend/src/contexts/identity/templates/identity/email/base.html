@@ -1,0 +1,100 @@
+{% comment %}
+Layout base dos emails transacionais.
+
+Email não é web: nada de flexbox, grid ou <style> externo — Outlook e Gmail
+descartam boa parte disso. Por isso tudo aqui é tabela aninhada com CSS inline,
+largura fixa de 560px e cores em hex literal (o token do Tailwind não chega até
+aqui). O brand #0C66E4 é o mesmo do frontend.
+
+Comentário em {% comment %} e não em chaves-cerquilha: aquele só vale para uma
+linha, e um bloco de várias linhas vazaria impresso antes do DOCTYPE.
+{% endcomment %}<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>{% block subject %}T4E Office{% endblock %}</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#F7F8F9; -webkit-font-smoothing:antialiased;">
+    {% comment %}Preheader: o trecho que o cliente de email mostra ao lado do
+    assunto na caixa de entrada. Escondido no corpo para não duplicar.{% endcomment %}
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent; height:0; width:0;">
+      {% block preheader %}{% endblock %}
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background-color:#F7F8F9; padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"
+                 style="width:100%; max-width:560px; background-color:#FFFFFF; border:1px solid #DCDFE4; border-radius:12px; overflow:hidden;">
+
+            <!-- Cabeçalho -->
+            <tr>
+              <td style="padding:28px 32px 0 32px;">
+                <span style="display:inline-block; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:700; letter-spacing:-0.2px; color:#181A1F;">
+                  T4E<span style="color:#0C66E4;">&nbsp;Office</span>
+                </span>
+              </td>
+            </tr>
+
+            <!-- Conteúdo -->
+            <tr>
+              <td style="padding:20px 32px 8px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                <h1 style="margin:0 0 12px 0; font-size:22px; line-height:1.3; font-weight:600; letter-spacing:-0.3px; color:#181A1F;">
+                  {% block heading %}{% endblock %}
+                </h1>
+                {% block content %}{% endblock %}
+              </td>
+            </tr>
+
+            <!-- Botão de ação -->
+            <tr>
+              <td align="left" style="padding:8px 32px 4px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="background-color:#0C66E4; border-radius:6px;">
+                      <a href="{{ action_url }}"
+                         style="display:inline-block; padding:12px 24px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#FFFFFF; text-decoration:none;">
+                        {% block action_label %}Abrir{% endblock %}
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            {% comment %}Link cru: alguns clientes bloqueiam o botão, e o
+            usuário precisa copiar o endereço na mão.{% endcomment %}
+            <tr>
+              <td style="padding:20px 32px 0 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                <p style="margin:0 0 6px 0; font-size:13px; line-height:1.5; color:#626F86;">
+                  Se o botão não funcionar, copie e cole este endereço no navegador:
+                </p>
+                <p style="margin:0; font-size:13px; line-height:1.5; word-break:break-all;">
+                  <a href="{{ action_url }}" style="color:#0C66E4; text-decoration:underline;">{{ action_url }}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Rodapé -->
+            <tr>
+              <td style="padding:24px 32px 28px 32px;">
+                <div style="height:1px; background-color:#DCDFE4; font-size:0; line-height:0;">&nbsp;</div>
+                <p style="margin:16px 0 0 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:1.6; color:#8590A2;">
+                  {% block footer %}Você recebeu este email porque ele foi solicitado no T4E Office.{% endblock %}
+                </p>
+              </td>
+            </tr>
+
+          </table>
+
+          <p style="margin:16px 0 0 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; color:#8590A2;">
+            T4E Office &middot; mensagem automática, não responda
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

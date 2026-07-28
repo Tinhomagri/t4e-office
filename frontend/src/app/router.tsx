@@ -11,7 +11,6 @@ import { IntegrationsPage } from "@/features/integrations/IntegrationsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
 import { MarketingDeck } from "@/features/marketing/MarketingDeck"
-import { ImportBoardPage } from "@/features/marketing/ImportBoardPage"
 import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
 import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
 import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
@@ -101,18 +100,12 @@ export const router = createBrowserRouter([
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
       { path: "poker/:sessionId", element: <PokerPage /> },
-      // O deck é a página inicial do comercial e fica FORA do SalesLayout: ele
-      // tem casca escura e cabeçalho próprios. `/comercial/dashboard` continua
-      // resolvendo para não quebrar link salvo de antes da mudança.
-      { path: "comercial", element: <DashboardDeck /> },
-      {
-        path: "comercial/dashboard",
-        element: <Navigate to="/app/comercial" replace />,
-      },
       {
         path: "comercial",
         element: <SalesLayout />,
         children: [
+          { index: true, element: <Navigate to="dashboard" replace /> },
+          { path: "dashboard", element: <DashboardDeck /> },
           { path: "leads", element: <LeadsRoute /> },
           { path: "pipeline", element: <PipelineRoute /> },
           { path: "clientes", element: <CustomersRoute /> },
@@ -125,7 +118,6 @@ export const router = createBrowserRouter([
       { path: "reports", element: <ReportsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
-      { path: "office", element: <OfficePage /> },
       { path: "integrations", element: <IntegrationsPage /> },
       // Marketing também abre no deck; o calendário passa a ser uma rota interna.
       { path: "marketing", element: <MarketingDeck /> },
@@ -133,9 +125,20 @@ export const router = createBrowserRouter([
       { path: "marketing/fila", element: <PublishQueuePage /> },
       { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
       { path: "marketing/redes", element: <SocialAccountsPage /> },
-      { path: "importar", element: <ImportBoardPage /> },
       { path: "avatar", element: <AvatarLabPage /> },
       { path: "copilot", element: <CopilotPage /> },
     ],
+  },
+  {
+    // Fora do AppShell de propósito: o Escritório é uma cena 3D de andar/sala
+    // que ocupa a tela inteira — header e sidebar por cima cortavam área útil
+    // e não faziam sentido sobre um ambiente imersivo. Mantém RequireAuth
+    // porque a rota ainda é privada.
+    path: "/app/office",
+    element: (
+      <RequireAuth>
+        <OfficePage />
+      </RequireAuth>
+    ),
   },
 ])

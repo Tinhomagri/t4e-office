@@ -14,8 +14,6 @@ from contexts.integrations.interface.api.oauth_views import (
 )
 from contexts.integrations.interface.api.views import (
     AnalyticsView,
-    ImportExecuteView,
-    ImportPreviewView,
     PostDetailView,
     PostPublishView,
     PostsView,
@@ -58,6 +56,4 @@ urlpatterns = [
         AccountsHealthView.as_view(),
         name="integrations-accounts-health",
     ),
-    path("import/preview/", ImportPreviewView.as_view(), name="integrations-import-preview"),
-    path("import/execute/", ImportExecuteView.as_view(), name="integrations-import-execute"),
 ]

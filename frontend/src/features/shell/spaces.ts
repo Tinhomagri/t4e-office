@@ -26,7 +26,6 @@ import {
   SquareKanban,
   Target,
   Trophy,
-  Upload,
   UserPlus,
   UserSearch,
   Users,
@@ -82,7 +81,6 @@ export const SPACES: Space[] = [
       "/app/boards",
       "/app/poker",
       "/app/integrations",
-      "/app/importar",
       "/app/reports",
       "/app/portfolio",
     ],
@@ -93,7 +91,6 @@ export const SPACES: Space[] = [
         items: [
           { label: "Planning Poker", to: "/app/poker", icon: Spade },
           { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
-          { label: "Importar Jira/Trello", to: "/app/importar", icon: Upload },
         ],
       },
       {
@@ -145,16 +142,16 @@ export const SPACES: Space[] = [
     label: "Comercial",
     tagline: "CRM completo: leads, funil, clientes e propostas",
     icon: Target,
-    home: "/app/comercial",
+    // Entrada do space = primeiro item da sidebar. Se divergirem, o usuário cai
+    // numa tela e vê outra marcada como ativa logo acima.
+    home: "/app/comercial/dashboard",
     match: ["/app/comercial"],
     groups: [
       {
         heading: "Funil",
         items: [
-          // O Dashboard É a raiz do space — não existe mais uma "Visão geral"
-          // concorrendo com ele. O painel de atrasados que só existia lá foi
-          // absorvido pelo deck.
-          { label: "Dashboard", to: "/app/comercial", icon: Gauge, end: true },
+          { label: "Dashboard", to: "/app/comercial/dashboard", icon: Gauge },
+          { label: "Atendimento", to: "/app/comercial/atendimento", icon: MessagesSquare, end: true },
           { label: "Leads", to: "/app/comercial/leads", icon: UserSearch },
           { label: "Pipeline", to: "/app/comercial/pipeline", icon: Target },
         ],
@@ -163,7 +160,6 @@ export const SPACES: Space[] = [
         heading: "Carteira",
         items: [
           { label: "Clientes", to: "/app/comercial/clientes", icon: Building2 },
-          { label: "Atendimento", to: "/app/comercial/atendimento", icon: MessagesSquare },
           { label: "Atividades", to: "/app/comercial/atividades", icon: ListTodo },
           { label: "Propostas", to: "/app/comercial/propostas", icon: FileText },
         ],
@@ -183,6 +179,19 @@ export const DEFAULT_SPACE: SpaceId = "boards"
 
 export function getSpace(id: SpaceId): Space {
   return SPACES.find((s) => s.id === id) ?? SPACES[0]
+}
+
+/** Todo item de navegação estático do app, de qualquer space. */
+export function allNavItems(): NavItem[] {
+  return [COMMON_GROUP, ...SPACES.flatMap((s) => s.groups)].flatMap((g) => g.items)
+}
+
+/**
+ * Resolve uma rota de volta ao item que a originou — é como Favoritos e
+ * Recentes recuperam rótulo e ícone a partir do que foi guardado (só a rota).
+ */
+export function findNavItem(to: string): NavItem | undefined {
+  return allNavItems().find((i) => i.to === to)
 }
 
 /**

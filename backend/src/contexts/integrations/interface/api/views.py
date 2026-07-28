@@ -5,10 +5,7 @@ Endpoints (todos autenticados, checagem de membership do workspace):
 * posts/<id>/           — PATCH edita/reagenda | DELETE
 * posts/<id>/publish/   — POST publica agora (simulado) e gera métricas
 * analytics/            — GET métricas agregadas por canal
-* import/preview/       — POST {provider, payload} → itens extraídos
-* import/execute/       — POST executa import criando cards no projeto
 """
-from django.db.models import Max
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -21,11 +18,9 @@ from contexts.copilot.infrastructure.django.repositories_impl import (
 )
 from contexts.integrations.infrastructure import providers, publishing_service, social_publisher
 from contexts.integrations.infrastructure.django.models import (
-    ImportJobModel,
     PostMetricModel,
     ScheduledPostModel,
 )
-from contexts.projects.infrastructure.django.models import CardModel, ProjectModel
 from shared.domain.errors import PermissionDeniedError, ValidationError
 
 
@@ -258,93 +253,3 @@ class AnalyticsView(APIView):
         return Response(
             {"totals": totals, "by_channel": by_channel, "posts": posts_out}
         )
-
-
-class ImportPreviewSerializer(serializers.Serializer):
-    workspace_id = serializers.CharField()
-    provider = serializers.ChoiceField(choices=["jira", "trello"])
-    payload = serializers.JSONField()
-
-
-class ImportPreviewView(APIView):
-    """POST extrai itens do export Jira/Trello e devolve o preview."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request: Request) -> Response:
-        serializer = ImportPreviewSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        v = serializer.validated_data
-        workspace_id = str(v["workspace_id"])
-        _require_member(request, workspace_id)
-        try:
-            items = providers.parse_import(v["provider"], v["payload"])
-        except (ValueError, AttributeError, TypeError) as exc:
-            raise ValidationError(f"Export inválido: {exc}") from exc
-        if not items:
-            raise ValidationError(
-                "Nenhum item encontrado no export. Confira o JSON colado."
-            )
-        job = ImportJobModel.objects.create(
-            workspace_id=workspace_id,
-            provider=v["provider"],
-            preview=items,
-            created_by_id=str(request.user.id),
-        )
-        return Response({"job_id": str(job.id), "items": items})
-
-
-class ImportExecuteSerializer(serializers.Serializer):
-    job_id = serializers.CharField()
-    project_id = serializers.CharField()
-    # Índices dos itens do preview a importar; ausente = todos
-    selected = serializers.ListField(
-        child=serializers.IntegerField(min_value=0), required=False, default=None
-    )
-
-
-class ImportExecuteView(APIView):
-    """POST cria cards no projeto a partir do preview de um job."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request: Request) -> Response:
-        serializer = ImportExecuteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        v = serializer.validated_data
-        try:
-            job = ImportJobModel.objects.get(id=v["job_id"])
-        except ImportJobModel.DoesNotExist:
-            raise ValidationError("Job de import não encontrado.") from None
-        _require_member(request, str(job.workspace_id))
-        if job.status == "done":
-            raise ValidationError("Este import já foi executado.")
-        try:
-            project = ProjectModel.objects.get(
-                id=v["project_id"], workspace_id=job.workspace_id
-            )
-        except ProjectModel.DoesNotExist:
-            raise ValidationError("Projeto não encontrado neste workspace.") from None
-        items = job.preview
-        if v["selected"] is not None:
-            items = [items[i] for i in v["selected"] if i < len(items)]
-        agg = CardModel.objects.filter(project=project).aggregate(m=Max("number"))
-        number = (agg["m"] or 0) + 1
-        created = 0
-        for item in items:
-            CardModel.objects.create(
-                project=project,
-                number=number,
-                title=item["title"][:200],
-                description=item.get("description") or "",
-                status=item.get("status") or "todo",
-                type=item.get("type") or "chore",
-                reporter_id=str(request.user.id),
-            )
-            number += 1
-            created += 1
-        job.project = project
-        job.status = "done"
-        job.result = {"created": created, "skipped": len(job.preview) - created}
-        job.save()
-        return Response({"created": created, "project_id": str(project.id)})

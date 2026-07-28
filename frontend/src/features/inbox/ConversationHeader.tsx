@@ -6,12 +6,12 @@
 // 100ms — a barra fica na tela o tempo todo.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useState } from "react"
-import { AlertTriangle, Bell, BellOff, Check, Tag, X } from "lucide-react"
+import { AlertTriangle, Bell, BellOff, Check, Clock3, Tag, X } from "lucide-react"
 
 import { cx } from "@/shared/ui/primitives"
 
 import { chipIn, DUR, respectMotion } from "./inbox.motion"
-import { contactDisplayName, PRIORITY_LABELS, STATUS_LABELS } from "./inbox.shared"
+import { contactDisplayName, futureTime, PRIORITY_LABELS, STATUS_LABELS } from "./inbox.shared"
 import type { Agent, Conversation, ConversationPriority, Label, Team } from "./inbox.types"
 
 /** Cores de status no vocabulário do Chatwoot (verde aberto, âmbar pendente). */
@@ -34,6 +34,7 @@ interface Props {
   onPriority: (priority: ConversationPriority | null) => void
   onLabels: (labels: string[]) => void
   onStatus: (status: string) => void
+  onSnooze: (snoozedUntil: string) => void
   onMute: (muted: boolean) => void
   busy: boolean
 }
@@ -47,6 +48,7 @@ export function ConversationHeader({
   onPriority,
   onLabels,
   onStatus,
+  onSnooze,
   onMute,
   busy,
 }: Props) {
@@ -59,6 +61,11 @@ export function ConversationHeader({
       ? conversation.labels.filter((l) => l !== title)
       : [...conversation.labels, title]
     onLabels(next)
+  }
+
+  function snoozeFor(minutes: number) {
+    const until = new Date(Date.now() + minutes * 60_000)
+    onSnooze(until.toISOString())
   }
 
   return (
@@ -175,6 +182,28 @@ export function ConversationHeader({
           {conversation.muted ? <BellOff className="size-3.5" /> : <Bell className="size-3.5" />}
         </button>
 
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            if (e.target.value === "1h") snoozeFor(60)
+            if (e.target.value === "4h") snoozeFor(240)
+            if (e.target.value === "tomorrow") {
+              const until = new Date()
+              until.setDate(until.getDate() + 1)
+              until.setHours(9, 0, 0, 0)
+              onSnooze(until.toISOString())
+            }
+            e.currentTarget.value = ""
+          }}
+          aria-label="Adiar conversa"
+          className={cx(CONTROL, "w-[116px]")}
+        >
+          <option value="">Adiar</option>
+          <option value="1h">1 hora</option>
+          <option value="4h">4 horas</option>
+          <option value="tomorrow">Amanhã 09:00</option>
+        </select>
+
         <motion.button
           type="button"
           onClick={() => onStatus(resolved ? "open" : "resolved")}
@@ -192,6 +221,15 @@ export function ConversationHeader({
           {resolved ? "Reabrir" : "Resolver"}
         </motion.button>
       </div>
+
+      {conversation.status === "snoozed" && conversation.snoozed_until && (
+        <div className="border-t border-cw-border/70 px-4 py-1.5 dark:border-ink-800">
+          <p className="flex items-center gap-1.5 text-[11px] text-cw-muted">
+            <Clock3 className="size-3.5" />
+            Adiada até {futureTime(conversation.snoozed_until)}
+          </p>
+        </div>
+      )}
 
       {/* Etiquetas aplicadas + gaveta de seleção */}
       <AnimatePresence initial={false}>

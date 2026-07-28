@@ -1,5 +1,5 @@
 // API do contexto integrations — posts sociais agendados, analytics e
-// import de boards externos (Jira/Trello). Publicação simulada no backend.
+// Publicação simulada no backend.
 import { api } from "@/shared/api/client"
 
 export interface PostMetrics {
@@ -179,41 +179,5 @@ export async function getAnalytics(
       ...(projectId ? { project_id: projectId } : {}),
     },
   })
-  return data
-}
-
-// ── Import Jira/Trello ──────────────────────────────────────────────────────
-export type ImportProvider = "jira" | "trello"
-
-export interface ImportItem {
-  external_key: string
-  title: string
-  description: string
-  status: string
-  type: string
-  external_status: string
-}
-
-export async function previewImport(
-  workspaceId: string,
-  provider: ImportProvider,
-  payload: unknown,
-): Promise<{ job_id: string; items: ImportItem[] }> {
-  const { data } = await api.post<{ job_id: string; items: ImportItem[] }>(
-    "/integrations/import/preview/",
-    { workspace_id: workspaceId, provider, payload },
-  )
-  return data
-}
-
-export async function executeImport(
-  jobId: string,
-  projectId: string,
-  selected?: number[],
-): Promise<{ created: number; project_id: string }> {
-  const { data } = await api.post<{ created: number; project_id: string }>(
-    "/integrations/import/execute/",
-    { job_id: jobId, project_id: projectId, ...(selected ? { selected } : {}) },
-  )
   return data
 }
