@@ -16,6 +16,17 @@ class ProjectModel(models.Model):
     key = models.CharField(max_length=10, help_text="Prefixo curto do ID dos cards (ex: MIA)")
     # Template de criação: define workflow inicial (software | campanha | social | conteudo)
     template = models.CharField(max_length=20, default="software")
+    description = models.TextField(blank=True, default="")
+    # Categoria livre para agrupar projetos no portfólio (equivalente ao "Categoria" do Jira).
+    category = models.CharField(max_length=40, blank=True, default="")
+    # Avatar do projeto. Se `avatar_image` existir ela vence; senão cai no par
+    # emoji+cor (estilo Notion), que não exige storage de mídia.
+    avatar_emoji = models.CharField(max_length=8, blank=True, default="")
+    avatar_color = models.CharField(max_length=7, default="#6366f1")
+    avatar_image = models.FileField(upload_to="project-avatars/%Y/%m/", blank=True, null=True)
+    # Lead do projeto e responsável padrão de cards novos (FK por id, como workspace).
+    lead_id = models.UUIDField(null=True, blank=True)
+    default_assignee_id = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -427,6 +438,9 @@ class WorkflowStatusModel(models.Model):
     color = models.CharField(max_length=7, default="#6b7280")
     order = models.PositiveSmallIntegerField(default=0)
     is_default = models.BooleanField(default=False)
+    # Limite de WIP da coluna no board. None = sem limite. Estava no localStorage
+    # do front (board.prefs.store) e passou a ser config de projeto.
+    wip_limit = models.PositiveSmallIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "projects_workflow_status"
@@ -656,3 +670,68 @@ class CardMetricModel(models.Model):
     @property
     def engagement(self) -> int:
         return self.likes + self.comments + self.shares
+
+
+class BoardConfigModel(models.Model):
+    """Configuração do quadro de um projeto (equivalente ao "Board settings" do Jira).
+
+    Uma linha por projeto, criada sob demanda com os defaults abaixo. Substitui o
+    que antes vivia só no localStorage do front (swimlane + WIP), que se perdia
+    entre navegadores e não era compartilhado com o time.
+    """
+
+    SWIMLANE_CHOICES = [
+        ("none", "Sem agrupamento"),
+        ("epic", "Epic"),
+        ("assignee", "Responsável"),
+        ("priority", "Prioridade"),
+        ("subtask", "Subtarefa"),
+    ]
+
+    # Como a cor da borda do card é decidida no board.
+    CARD_COLOR_CHOICES = [
+        ("none", "Sem cor"),
+        ("priority", "Prioridade"),
+        ("issue_type", "Tipo do ticket"),
+        ("assignee", "Responsável"),
+        ("epic", "Epic"),
+    ]
+
+    # Campos que podem ser ligados/desligados no card do board. A chave é o nome
+    # usado pelo front; `summary` não entra porque é sempre visível (como no Jira).
+    AVAILABLE_CARD_FIELDS = [
+        "key", "issue_type", "priority", "assignee", "labels", "epic",
+        "due_date", "start_date", "story_points", "status", "reporter",
+        "subtask_progress", "created_at", "updated_at", "cover_image",
+    ]
+
+    DEFAULT_CARD_FIELDS = [
+        "key", "issue_type", "priority", "assignee", "labels", "epic",
+        "due_date", "story_points", "subtask_progress",
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.OneToOneField(
+        ProjectModel, on_delete=models.CASCADE, related_name="board_config"
+    )
+    swimlane_mode = models.CharField(max_length=12, choices=SWIMLANE_CHOICES, default="none")
+    # Lista de chaves de AVAILABLE_CARD_FIELDS visíveis no card.
+    card_fields = models.JSONField(default=list, blank=True)
+    card_color_rule = models.CharField(max_length=12, choices=CARD_COLOR_CHOICES, default="none")
+    # Mapa valor→cor hex usado quando card_color_rule != "none".
+    # Ex.: {"high": "#ef4444", "low": "#10b981"} para a regra "priority".
+    card_color_map = models.JSONField(default=dict, blank=True)
+    # Esconde cards concluídos há mais de N dias na coluna "done". 0 = nunca esconder.
+    hide_done_after_days = models.PositiveSmallIntegerField(default=0)
+    # Feature flags do projeto (aba "Funções" do Jira).
+    sprints_enabled = models.BooleanField(default=True)
+    estimation_enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "projects_board_config"
+        verbose_name = "Configuração de quadro"
+        verbose_name_plural = "Configurações de quadro"
+
+    def __str__(self) -> str:
+        return f"board-config @ {self.project_id}"

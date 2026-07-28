@@ -6,6 +6,10 @@ import type {
   Attachment,
   AutomationRule,
   AutomationRunLog,
+  BoardConfig,
+  ProjectDetail,
+  UpdateBoardConfigInput,
+  UpdateProjectInput,
   Card,
   Notification,
   CreateAutomationRuleInput,
@@ -380,6 +384,63 @@ export async function updateWorkflowStatus(statusId: string, payload: UpdateWork
 
 export async function deleteWorkflowStatus(statusId: string): Promise<void> {
   await api.delete(`/workflow-statuses/${statusId}/`)
+}
+
+// Aplica a ordem inteira de uma vez: um PATCH por coluna deixaria o board em
+// estado inconsistente entre as respostas durante o drag.
+export async function reorderWorkflowStatuses(
+  projectId: string,
+  statusIds: string[],
+): Promise<WorkflowStatus[]> {
+  const { data } = await api.post<WorkflowStatus[]>(
+    `/projects/${projectId}/workflow-statuses/reorder/`,
+    { status_ids: statusIds },
+  )
+  return data
+}
+
+// ---- Configuração do quadro / projeto ----
+export async function getProject(projectId: string): Promise<ProjectDetail> {
+  const { data } = await api.get<ProjectDetail>(`/projects/${projectId}/`)
+  return data
+}
+
+export async function updateProject(
+  projectId: string,
+  payload: UpdateProjectInput,
+): Promise<ProjectDetail> {
+  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, payload)
+  return data
+}
+
+// Avatar por upload precisa de multipart; passar `null` remove a imagem e o
+// projeto volta a exibir o par emoji+cor.
+export async function updateProjectAvatar(
+  projectId: string,
+  file: File | null,
+): Promise<ProjectDetail> {
+  const form = new FormData()
+  form.append("avatar_image", file ?? "")
+  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  })
+  return data
+}
+
+export async function getBoardConfig(projectId: string): Promise<BoardConfig> {
+  const { data } = await api.get<BoardConfig>(`/projects/${projectId}/board-config/`)
+  return data
+}
+
+export async function updateBoardConfig(
+  projectId: string,
+  payload: UpdateBoardConfigInput,
+): Promise<BoardConfig> {
+  const { data } = await api.patch<BoardConfig>(
+    `/projects/${projectId}/board-config/`,
+    payload,
+  )
+  return data
 }
 
 // ---- Saved Filters (quick filters do board) ----

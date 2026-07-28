@@ -32,17 +32,20 @@ import {
   Pencil,
   Plus,
   Rows3,
+  SlidersHorizontal,
   Trash2,
   X,
   Zap,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
 import { EASE, dropZone, liftCard, popCheck, settleSpring } from "@/shared/lib/motion"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
-import { useBoardPrefs, colKey, type SwimlaneMode } from "../board.prefs.store"
+import { useBoardPrefs, colKey } from "../board.prefs.store"
+import type { SwimlaneMode } from "@/features/workspace/workspace.types"
 import {
   ColoredAvatar,
   InitialsDot,
@@ -60,6 +63,7 @@ import {
   useCreateCard,
   useCreateSavedFilter,
   useCreateSprint,
+  useBoardConfig,
   useCreateWorkflowStatus,
   useDeleteSavedFilter,
   useDeleteWorkflowStatus,
@@ -67,6 +71,7 @@ import {
   useMembers,
   useProjectPermissions,
   useSprints,
+  useUpdateBoardConfig,
   useUpdateCard,
   useUpdateWorkflowStatus,
   useWorkflowStatuses,
@@ -98,6 +103,7 @@ const SWIMLANE_LABEL: Record<SwimlaneMode, string> = {
   epic: "Épico",
   assignee: "Responsável",
   priority: "Prioridade",
+  subtask: "Subtarefa",
 }
 
 export function KanbanView({
@@ -134,8 +140,11 @@ export function KanbanView({
   const [currentJql, setCurrentJql] = useState("")
   const [saveFilterOpen, setSaveFilterOpen] = useState(false)
 
-  const swimlane = useBoardPrefs((s) => s.swimlanes[projectId] ?? "none")
-  const setSwimlane = useBoardPrefs((s) => s.setSwimlane)
+  // Swimlane vem da config do quadro (compartilhada com o time), não mais do
+  // localStorage — assim todo mundo vê o board agrupado do mesmo jeito.
+  const { data: boardConfig } = useBoardConfig(projectId)
+  const updateBoardConfig = useUpdateBoardConfig(projectId)
+  const swimlane: SwimlaneMode = boardConfig?.swimlane_mode ?? "none"
 
   const columns: WorkflowStatus[] = useMemo(
     () => [...(workflowStatuses ?? [])].sort((a, b) => a.order - b.order),
@@ -255,7 +264,10 @@ export function KanbanView({
           )}
 
           {/* Swimlane / agrupar por */}
-          <SwimlaneDropdown mode={swimlane} onChange={(m) => setSwimlane(projectId, m)} />
+          <SwimlaneDropdown
+            mode={swimlane}
+            onChange={(m) => updateBoardConfig.mutate({ swimlane_mode: m })}
+          />
 
           {/* Filter button */}
           <button
@@ -296,6 +308,16 @@ export function KanbanView({
           >
             <Zap className="size-3.5" /> Workflow
           </button>
+
+          {/* Configurações do quadro */}
+          <Link
+            to={`/app/boards/${projectId}/settings`}
+            title="Configurações do quadro"
+            aria-label="Configurações do quadro"
+            className="flex items-center gap-1.5 rounded-full border border-paper-300 px-3 py-1.5 text-xs font-medium text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
+          >
+            <SlidersHorizontal className="size-3.5" /> Configurar
+          </Link>
 
           {/* Global create */}
           <button
@@ -378,6 +400,10 @@ export function KanbanView({
                       members={members ?? []}
                       projectId={projectId}
                       sprintId={currentSprintId}
+                      wipLimit={ws.wip_limit}
+                      onWipChange={(wip_limit) =>
+                        updateWorkflowStatus.mutate({ statusId: ws.id, input: { wip_limit } })
+                      }
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
                       onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
@@ -769,6 +795,13 @@ function SwimlaneBoard({
         { key: "_none", label: "Sem responsável", cards: nonEpic.filter((c) => !c.assignee_id) },
       ]
     }
+    if (mode === "subtask") {
+      // Separa o trabalho que pendura em outro card do trabalho de topo.
+      return [
+        { key: "_parent", label: "Itens principais", cards: nonEpic.filter((c) => !c.parent_id) },
+        { key: "_subtask", label: "Subtarefas", cards: nonEpic.filter((c) => !!c.parent_id) },
+      ]
+    }
     // priority — da mais urgente para a mais baixa (estilo Jira).
     const order: CardPriority[] = ["urgent", "high", "medium", "low"]
     return order.map((p) => ({
@@ -808,6 +841,7 @@ function SwimlaneBoard({
                   members={members}
                   projectId={projectId}
                   sprintId={sprintId}
+                  wipLimit={ws.wip_limit}
                   onAddDetailed={() => onAddDetailed(ws.slug as CardStatus)}
                   onOpen={onOpen}
                   onDone={onDone}
@@ -839,6 +873,8 @@ function Column({
   onRename,
   onMoveLeft,
   onMoveRight,
+  wipLimit,
+  onWipChange,
   compact = false,
 }: {
   status: string
@@ -848,6 +884,9 @@ function Column({
   members: Member[]
   projectId: string
   sprintId: string | null
+  // Ausentes nas swimlanes, onde o WIP é só exibido e não editável.
+  wipLimit?: number | null
+  onWipChange?: (limit: number | null) => void
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
@@ -862,11 +901,11 @@ function Column({
   const displayLabel = label ?? (STATUS_LABEL[status as CardStatus] ?? status)
   const displayColor = color ?? "#6b7280"
 
+  // Colapso segue local: é preferência de visualização de cada pessoa, ao
+  // contrário do WIP, que é regra do time e vem do WorkflowStatus.
   const key = colKey(projectId, status)
-  const wipLimit = useBoardPrefs((s) => s.wipLimits[key])
   const collapsed = useBoardPrefs((s) => s.collapsed[key] ?? false)
   const toggleCollapse = useBoardPrefs((s) => s.toggleCollapse)
-  const setWip = useBoardPrefs((s) => s.setWip)
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(displayLabel)
@@ -1000,8 +1039,10 @@ function Column({
                     min={0}
                     defaultValue={wipLimit ?? ""}
                     placeholder="Sem limite"
-                    onChange={(e) =>
-                      setWip(key, e.target.value === "" ? null : Number(e.target.value))
+                    disabled={!onWipChange}
+                    // Grava no blur, não a cada tecla: cada mudança é um PATCH.
+                    onBlur={(e) =>
+                      onWipChange?.(e.target.value === "" ? null : Number(e.target.value))
                     }
                     className="w-full rounded border border-paper-300 dark:border-ink-600 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
                   />

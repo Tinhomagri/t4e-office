@@ -392,6 +392,7 @@ def _ser_ws(ws: WorkflowStatusModel) -> dict:
         "name": ws.name, "slug": ws.slug,
         "category": ws.category, "color": ws.color,
         "order": ws.order, "is_default": ws.is_default,
+        "wip_limit": ws.wip_limit,
     }
 
 
@@ -439,6 +440,10 @@ class WorkflowStatusDetailView(APIView):
         for f in ("name", "slug", "category", "color", "order"):
             if f in request.data:
                 setattr(ws, f, request.data[f])
+        # 0/"" /null no wip_limit significam "sem limite", não zero cards.
+        if "wip_limit" in request.data:
+            raw = request.data["wip_limit"]
+            ws.wip_limit = int(raw) if raw else None
         ws.save()
         return Response(_ser_ws(ws))
 

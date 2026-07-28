@@ -523,6 +523,69 @@ export function useDeleteWorkflowStatus(projectId: string | null) {
   })
 }
 
+export function useReorderWorkflowStatuses(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (statusIds: string[]) =>
+      wsApi.reorderWorkflowStatuses(projectId!, statusIds),
+    // O servidor devolve a lista já ordenada: grava direto no cache para o board
+    // não piscar na ordem antiga entre a resposta e o refetch.
+    onSuccess: (statuses) =>
+      qc.setQueryData(["workflow-statuses", projectId], statuses),
+  })
+}
+
+// ---- Projeto (aba Geral) e configuração do quadro ----
+
+export function useProject(projectId: string | null) {
+  return useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => wsApi.getProject(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useUpdateProject(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").UpdateProjectInput) =>
+      wsApi.updateProject(projectId!, input),
+    onSuccess: (project) => {
+      qc.setQueryData(["project", projectId], project)
+      // Nome/chave/avatar aparecem na sidebar e no seletor de projeto.
+      qc.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
+}
+
+export function useUpdateProjectAvatar(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File | null) => wsApi.updateProjectAvatar(projectId!, file),
+    onSuccess: (project) => {
+      qc.setQueryData(["project", projectId], project)
+      qc.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
+}
+
+export function useBoardConfig(projectId: string | null) {
+  return useQuery({
+    queryKey: ["board-config", projectId],
+    queryFn: () => wsApi.getBoardConfig(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useUpdateBoardConfig(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").UpdateBoardConfigInput) =>
+      wsApi.updateBoardConfig(projectId!, input),
+    onSuccess: (config) => qc.setQueryData(["board-config", projectId], config),
+  })
+}
+
 // ---- Saved Filters (quick filters do board) ----
 export function useSavedFilters(projectId: string | null) {
   return useQuery({
