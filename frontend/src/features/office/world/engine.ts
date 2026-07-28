@@ -20,6 +20,7 @@ import { keyAction } from "./input"
 import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
 import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
 import { makeCanvas } from "./pixels"
+import { pokerBadgeFor } from "./poker-badge"
 
 const STEP = 1 / 60
 const WALK_SPEED = 46 // px/s — ~3 tiles por segundo, ritmo de Stardew
@@ -47,6 +48,9 @@ export interface Actor {
   sayUntil: number
   emote: string
   emoteUntil: number
+  /** Voto atual na sessão de Planning Poker do andar 2; null = não votou. */
+  pokerVote: string | null
+  pokerRevealed: boolean
   sheet: HTMLCanvasElement
   sheetKey: string
   frames: Record<string, { x: number; y: number }[]>
@@ -195,6 +199,7 @@ export class OfficeEngine {
       id, name, config, x, y, tx: x, ty: y,
       facing: "down", anim: "idle", frame: 0, frameTime: 0,
       self, status, say: "", sayUntil: 0, emote: "", emoteUntil: 0,
+      pokerVote: null, pokerRevealed: false,
       sheet: sheet.canvas, sheetKey: JSON.stringify(config), frames: sheet.frames,
       seatIndex: -1,
     }
@@ -275,6 +280,19 @@ export class OfficeEngine {
     this.me.emote = anim
     this.me.emoteUntil = this.time + 2.2
     this.target = null
+  }
+
+  /**
+   * Estado de voto de todos os atores da sessão de poker ativa — a decisão
+   * de QUEM votou o quê já veio pronta do React (que conversa com o
+   * backend); aqui só reflete no desenho. `votes` é indexado por `actor.id`
+   * (mesmo id de `spawnSelf`/`syncRemote`, que é o `user_id`).
+   */
+  setPokerVotes(votes: Map<string, string | null>, revealed: boolean): void {
+    for (const actor of this.actors.values()) {
+      actor.pokerVote = votes.get(actor.id) ?? null
+      actor.pokerRevealed = revealed
+    }
   }
 
   // ── Entrada ───────────────────────────────────────────────────────────────
@@ -874,6 +892,22 @@ export class OfficeEngine {
       ctx.fill()
       ctx.fillStyle = "#ffffff"
       ctx.fillText(label, sx + 4, by + 7)
+
+      const badge = pokerBadgeFor(actor.pokerVote, actor.pokerRevealed)
+      if (badge) {
+        const bw2 = 18
+        const bx2 = sx - bw2 / 2
+        const by2 = by - 18
+        ctx.fillStyle = badge.revealed ? "#6c5cf0" : "#2b2b3a"
+        roundRect(ctx, bx2, by2, bw2, 16, 4)
+        ctx.fill()
+        ctx.strokeStyle = "rgba(255,255,255,0.4)"
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.fillStyle = "#ffffff"
+        ctx.font = "700 10px -apple-system, system-ui, sans-serif"
+        ctx.fillText(badge.text, sx, by2 + 8)
+      }
     }
   }
 }
