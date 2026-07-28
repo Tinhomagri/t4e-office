@@ -27,13 +27,17 @@ class ChatwootWebhookView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request: Request, secret: str) -> Response:
+        # `request.body` must be read *before* `request.data`: once DRF parses
+        # the stream via `request.data`, Django forbids a second read of the raw
+        # body and raises RawPostDataException.
+        raw_body = request.body
         result = IngestWebhook(
             connections=DjangoConnectionRepository(),
             events=DjangoWebhookEventRepository(),
         ).execute(
             webhook_secret=secret,
             payload=request.data if isinstance(request.data, dict) else {},
-            raw_body=request.body,
+            raw_body=raw_body,
             signature=request.headers.get("X-Chatwoot-Signature"),
         )
         # Sempre 200 quando aceito: o Chatwoot desabilita webhooks que erram.
