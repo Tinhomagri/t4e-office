@@ -15,7 +15,7 @@ import {
 
 describe("integerScale", () => {
   it("usa 4× quando a tela é larga o suficiente", () => {
-    expect(integerScale(1600, 1000)).toBe(4)
+    expect(integerScale(2400, 1500)).toBe(4)
   })
 
   it("nunca passa de 4× por padrão", () => {
@@ -34,7 +34,7 @@ describe("integerScale", () => {
   })
 
   it("aceita teto maior quando a câmera está com foco", () => {
-    expect(integerScale(1600, 1000, 8)).toBe(5)
+    expect(integerScale(2400, 1500, 8)).toBe(5)
     expect(integerScale(4000, 3000, 8)).toBe(8)
   })
 })
@@ -80,11 +80,11 @@ describe("cameraTarget", () => {
 
 describe("escala sob foco", () => {
   it("com teto 8, uma tela média chega a mais zoom do que o normal", () => {
-    const cssW = 1400
-    const cssH = 900
+    const cssW = 2100
+    const cssH = 1350
     expect(integerScale(cssW, cssH)).toBe(4)
     expect(integerScale(cssW, cssH, 8)).toBe(4)
-    expect(integerScale(2600, 1700, 8)).toBe(8)
+    expect(integerScale(3900, 2550, 8)).toBe(8)
   })
 
   it("o teto não reduz a escala abaixo do normal", () => {

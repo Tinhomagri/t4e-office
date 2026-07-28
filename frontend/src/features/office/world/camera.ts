@@ -6,7 +6,11 @@
 
 /** Escala de exibição. Sempre inteira; fracionária faz o pixel-art tremer. */
 export function integerScale(cssW: number, cssH: number, max = 4): number {
-  const fit = Math.min(cssW / 320, cssH / 200)
+  // Base 480×300 (mesma proporção 1.6 da antiga 320×200, só maior): em uma
+  // tela de 1200×800 a escala cai de 3× para 2×, quase dobrando os tiles
+  // visíveis por vez. É o ajuste que tira a sensação de câmera colada no
+  // personagem.
+  const fit = Math.min(cssW / 480, cssH / 300)
   return Math.max(2, Math.min(max, Math.floor(fit)))
 }
 
