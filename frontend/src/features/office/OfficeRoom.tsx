@@ -12,7 +12,7 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
-import { useActivePokerSession } from "@/features/poker/poker.hooks"
+import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
@@ -20,8 +20,9 @@ import { isMyDesk } from "./pc/desk"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
 import { PokerConsolePanel } from "./poker/PokerConsolePanel"
-import { PokerVoteWheel } from "./poker/PokerVoteWheel"
+import { PokerSeatHint, PokerVoteWheel } from "./poker/PokerVoteWheel"
 import { usePokerRoomStore } from "./poker/pokerRoom.store"
+import { buildVoteBadges } from "./poker/voteBadges"
 import { OfficeEngine } from "./world/engine"
 import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
@@ -29,6 +30,9 @@ import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
 
 const KEEPALIVE_MS = 3000
+
+/** Andar da sala de Planning Poker (ver world/floors/index.ts). */
+const POKER_FLOOR = 2
 
 // Emotes: reusam clipes que o gerador de avatar já sabe animar.
 const EMOTES: { anim: string; label: string; icon: string }[] = [
@@ -53,8 +57,15 @@ export function OfficeRoom({
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
 
+  // A listagem do workspace só serve para descobrir QUAL sessão está ativa:
+  // o serializer da lista devolve apenas contadores agregados, sem
+  // `participants`/`votes`. O detalhe (useSession) é quem traz esses campos.
   const activeSession = useActivePokerSession(workspaceId).data ?? null
   const voteSeatId = usePokerRoomStore((s) => s.voteSeatId)
+  const onPokerFloor = floor === POKER_FLOOR
+  // Só polla o detalhe onde ele é usado (as plaquinhas do andar 2).
+  const sessionDetail =
+    useSession(onPokerFloor ? (activeSession?.id ?? null) : null).data ?? null
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -171,21 +182,20 @@ export function OfficeRoom({
 
   // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
   // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
+  // Fora do andar do poker, zera: sem isso as plaquinhas apareciam sobre os
+  // avatares do bullpen (andar 1), que não estão em votação nenhuma.
   useEffect(() => {
     const engine = engineRef.current
     if (!engine) return
-    if (!activeSession) {
+    if (!onPokerFloor || !sessionDetail) {
       engine.setPokerVotes(new Map(), false)
       return
     }
-    const votes = new Map(
-      activeSession.participants.map((p) => {
-        const v = activeSession.votes.find((v) => v.participant_id === p.id)
-        return [p.user_id, v?.has_voted ? v.value : null] as const
-      }),
+    engine.setPokerVotes(
+      buildVoteBadges(sessionDetail),
+      sessionDetail.status === "revealed",
     )
-    engine.setPokerVotes(votes, activeSession.status === "revealed")
-  }, [activeSession])
+  }, [sessionDetail, onPokerFloor, map])
 
   // Keepalive: mantém a presença viva mesmo parado.
   useEffect(() => {
@@ -257,9 +267,26 @@ export function OfficeRoom({
   // Escritório remontaria com a tela ligada e o avatar de pé — teclado morto.
   useEffect(() => () => usePcStore.getState().shutdown(), [])
 
+  // Mesmo motivo para o store do poker — e também a cada troca de andar: sem
+  // isto, pegar o elevador sentado na mesa deixava a roda de cartas flutuando
+  // no andar 1, votando na sessão do andar 2.
+  useEffect(
+    () => () => {
+      const poker = usePokerRoomStore.getState()
+      poker.closeVote()
+      poker.closeConsole()
+    },
+    [map],
+  )
+
   const onCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    engineRef.current?.clickTo(e.clientX - rect.left, e.clientY - rect.top)
+    const engine = engineRef.current
+    if (!engine) return
+    engine.clickTo(e.clientX - rect.left, e.clientY - rect.top)
+    // clickTo levanta o avatar sem passar pelo onInteract — quem estava
+    // sentado na mesa de poker precisa perder a roda de cartas aqui.
+    if (!engine.isSeated()) usePokerRoomStore.getState().closeVote()
   }, [])
 
   const sendChat = () => {
@@ -308,13 +335,20 @@ export function OfficeRoom({
       <Win98Desktop />
 
       <ElevatorPanel />
-      <PokerConsolePanel />
-      {voteSeatId && activeSession && (
-        <PokerVoteWheel
-          sessionId={activeSession.id}
-          onClose={() => usePokerRoomStore.getState().closeVote()}
-        />
-      )}
+      {/* Poker só existe no andar 2 — segunda linha de defesa além do
+          reset do store na troca de andar. */}
+      {onPokerFloor && <PokerConsolePanel />}
+      {onPokerFloor &&
+        voteSeatId &&
+        (activeSession ? (
+          <PokerVoteWheel
+            sessionId={activeSession.id}
+            status={activeSession.status}
+            onClose={() => usePokerRoomStore.getState().closeVote()}
+          />
+        ) : (
+          <PokerSeatHint>Aguardando sessão — abra pelo console</PokerSeatHint>
+        ))}
 
       {/* Rótulo da zona atual — só faz sentido com o PC desligado */}
       <AnimatePresence>
