@@ -9,8 +9,8 @@ describe("registry de apps", () => {
     ])
   })
 
-  it("cobre as 15 rotas do produto", () => {
-    expect(APPS).toHaveLength(15)
+  it("cobre as 14 rotas do produto", () => {
+    expect(APPS).toHaveLength(14)
   })
 
   it("todo app tem id único", () => {

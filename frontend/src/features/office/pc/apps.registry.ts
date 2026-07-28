@@ -38,7 +38,6 @@ const MED = { w: 760, h: 520 }
 export const APPS: AppDef[] = [
   { id: "boards", label: "Boards", group: "trabalho", size: BIG, component: BoardsPage },
   { id: "myday", label: "Meu Dia", group: "trabalho", size: MED, component: null },
-  { id: "poker", label: "Planning Poker", group: "trabalho", size: BIG, component: null },
 
   { id: "comercial", label: "Comercial", group: "comercial", size: BIG, component: DashboardDeck },
   { id: "reports", label: "Relatórios", group: "comercial", size: BIG, component: null },
