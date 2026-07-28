@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildFloor1 } from "../world/floors/floor1"
+import { buildFloor2 } from "../world/floors/floor2"
 import { isMyDesk, myDeskId, pcSeats } from "./desk"
 
 const map = buildFloor1()
@@ -65,9 +66,11 @@ describe("isMyDesk", () => {
     expect(isMyDesk(userId, outra, map.seats)).toBe(false)
   })
 
-  it("não há assento sem computador no bullpen — nada para checar aqui", () => {
-    // O galpão com varanda (kind "view") saiu nesta entrega; todo assento do
-    // bullpen compacto é "pc", então não sobra um caso "sem PC" para testar.
-    expect(map.seats.every((s) => s.kind === "pc")).toBe(true)
+  it("falso para assento sem computador — a mesa de poker nunca liga PC", () => {
+    // O bullpen só tem assentos "pc"; o andar 2 fornece o assento "poker"
+    // necessário para provar o caso negativo de verdade.
+    const poker = buildFloor2().seats.find((s) => s.kind === "poker")!
+    expect(poker).toBeDefined()
+    expect(isMyDesk("ana-123", poker, map.seats)).toBe(false)
   })
 })

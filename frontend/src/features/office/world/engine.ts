@@ -359,7 +359,11 @@ export class OfficeEngine {
     me.y = seat.y
     me.facing = seat.facing
     me.anim =
-      seat.kind === "view" ? "lean" : seat.kind === "lounge" ? "idle" : "type"
+      seat.kind === "view"
+        ? "lean"
+        : seat.kind === "lounge" || seat.kind === "poker"
+          ? "idle"
+          : "type"
     this.viewOffset =
       seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
