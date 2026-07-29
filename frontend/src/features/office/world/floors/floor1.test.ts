@@ -37,8 +37,8 @@ describe("dimensões", () => {
     expect(map.height).toBe(map.rows * TILE)
   })
 
-  it("é 30×41 tiles — bullpen em sala única, 3 blocos de 5 colunas empilhados", () => {
-    expect([map.cols, map.rows]).toEqual([30, 41])
+  it("é 30×38 tiles — bullpen em sala única, 3 blocos de 5 colunas empilhados", () => {
+    expect([map.cols, map.rows]).toEqual([30, 38])
   })
 
   it("o spawn não está dentro de parede", () => {

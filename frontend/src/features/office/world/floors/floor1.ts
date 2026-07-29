@@ -14,7 +14,11 @@ const BLOCKS = 3
 // Distância (em linhas) do topo de um bloco pro topo do próximo — dá espaço
 // pra fileira A, corredor, fileira B e um respiro antes do bloco seguinte.
 const BLOCK_STRIDE = 13
-const ROWS = 1 + BLOCK_STRIDE * BLOCKS + 1
+// Abraça só até o fim do último bloco (+ respiro de 5 linhas) — sobrando
+// ROWS além do conteúdo, vira chão de madeira vazio sem nenhuma parede
+// delimitando (sul/leste não têm parede, estilo Habbo), e em iso aquilo
+// aparece como uma área enorme "vazando pra fora do mapa".
+const ROWS = 1 + BLOCK_STRIDE * (BLOCKS - 1) + 6 + 5
 
 // 5 colunas de baia por bloco, encostadas.
 const CUBICLE_COLS = Array.from({ length: COLS_PER_BLOCK }, (_, i) => 8 + i * 4)
@@ -40,17 +44,19 @@ function fill(grid: Uint8Array, x: number, y: number, w: number, h: number, valu
 }
 
 /**
- * Casca de cômodo estilo Habbo: só as paredes de FUNDO (norte) e ESQUERDA
- * (oeste) existem de verdade, mais altas. Frente (sul) e direita ficam sem
- * parede nenhuma — o chão vai até a borda do mapa; o limite do mundo (não dá
- * pra sair andando) vem do próprio fim da grade (`isSolid` bloqueia fora dos
- * limites), não de um tile de parede.
+ * Casca de cômodo estilo Habbo: só as paredes de FUNDO (norte) e DIREITA
+ * (oeste no grid — a que aparece do lado direito da tela em iso) existem de
+ * verdade, mais altas; a da direita é vidraça inteira, tipo fachada de
+ * prédio. Frente (sul) e a outra lateral ficam sem parede nenhuma — o chão
+ * vai até a borda do mapa; o limite do mundo (não dá pra sair andando) vem
+ * do próprio fim da grade (`isSolid` bloqueia fora dos limites), não de um
+ * tile de parede.
  */
 function room(grid: Uint8Array, x: number, y: number, w: number, h: number, floor: number): void {
   fill(grid, x, y, w, h, floor)
   fill(grid, x, y, w, 1, T.WALL_TOP)
   fill(grid, x, y + 1, w, 1, T.WALL)
-  fill(grid, x, y + 1, 1, h - 1, T.WALL_V)
+  fill(grid, x, y + 1, 1, h - 1, T.GLASS)
 }
 
 export function buildFloor1(): OfficeMap {
@@ -61,6 +67,12 @@ export function buildFloor1(): OfficeMap {
   // Hall do elevador: ladrilho, encostado na parede oeste, sobe pela altura
   // inteira do prédio — dá acesso direto a qualquer um dos 3 blocos.
   fill(floor, 1, 1, 6, ROWS - 2, T.TILEFLOOR)
+
+  // Porta do elevador embutida na parede de fundo — depois do hall pra não
+  // ser sobrescrita por ele (o ladrilho cobre a linha 1 inteira). Cobre as
+  // duas linhas da parede (topo + face), 4 tiles de largura, igual à
+  // vidraça: parte do bloco da parede, não um prop solto na frente dela.
+  fill(floor, 2, 0, 4, 2, T.ELEVATOR_DOOR)
 
   const collision = new Uint8Array(COLS * ROWS)
   for (let y = 0; y < ROWS; y++) {
@@ -73,7 +85,6 @@ export function buildFloor1(): OfficeMap {
   const add = (kind: PropKind, tx: number, ty: number) =>
     props.push({ kind, x: tx * TILE, y: ty * TILE })
 
-  add("elevatorDoors", 2, 2)
   add("waterCooler", 7, 1)
 
   const seatId = (prefix: string, x: number, y: number) =>

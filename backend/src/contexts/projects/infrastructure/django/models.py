@@ -164,6 +164,9 @@ class CardModel(models.Model):
     rank = models.CharField(max_length=64, blank=True, default="", db_index=True)
     # Procedência: marca cards criados pela IA do copiloto (Fase 2)
     source = models.CharField(max_length=20, default="manual")
+    # Observação livre de quem está com o card em "Em andamento" — só o
+    # assignee edita. Mostrada no balão de hover do escritório virtual.
+    working_note = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

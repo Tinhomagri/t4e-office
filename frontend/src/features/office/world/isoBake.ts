@@ -15,10 +15,12 @@ import { makeCanvas } from "./pixels"
  * (norte) e a da esquerda (oeste) — frente e direita não têm mais tile de
  * parede (ver `room()` em cada `floors/*.ts`) — por isso pode ficar bem alta,
  * tipo Habbo, sem tampar a visão de dentro do cômodo. */
-export const WALL_HEIGHT = 32
+export const WALL_HEIGHT = 48
 
 /** Tiles que viram bloco extrudado (2 faces + tampa) em vez de losango raso. */
-const BLOCK_TILES = new Set<number>([T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.GLASS_DOOR])
+const BLOCK_TILES = new Set<number>([
+  T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.GLASS_DOOR, T.ELEVATOR_DOOR,
+])
 
 export interface IsoGround {
   canvas: HTMLCanvasElement
@@ -84,9 +86,15 @@ function drawIsoBlock(
   height: number,
   capSx: number,
   capSy: number,
+  bothFaces = true,
 ): void {
   drawIsoFace(ctx, img, sx, sy, ox, oy, height, "right")
-  drawIsoFace(ctx, img, sx, sy, ox, oy, height, "left")
+  // Vidraça: a montante do padrão (`drawGlass`) só faz sentido numa direção —
+  // desenhar a face "left" (escurecida) também faz cada segmento ler como
+  // duas tiras finas lado a lado (efeito "de lado"), em vez de um pano só
+  // encarando quem está na sala. Paredes opacas (WALL_V/WALL) continuam com
+  // as duas faces — ali a textura é simétrica o bastante pra não incomodar.
+  if (bothFaces) drawIsoFace(ctx, img, sx, sy, ox, oy, height, "left")
   drawIsoFloor(ctx, img, capSx, capSy, ox, oy - height, 0.12)
 }
 
@@ -120,7 +128,8 @@ export function buildIsoGround(map: OfficeMap, atlas: TileAtlas): IsoGround {
     if (id === T.RAILING) {
       drawIsoBlock(ctx, atlas.canvas, sx, sy, ox, oy, WALL_HEIGHT / 2, capSx, capSy)
     } else if (BLOCK_TILES.has(id)) {
-      drawIsoBlock(ctx, atlas.canvas, sx, sy, ox, oy, WALL_HEIGHT, capSx, capSy)
+      const bothFaces = id !== T.GLASS && id !== T.GLASS_DOOR
+      drawIsoBlock(ctx, atlas.canvas, sx, sy, ox, oy, WALL_HEIGHT, capSx, capSy, bothFaces)
     } else {
       drawIsoFloor(ctx, atlas.canvas, sx, sy, ox, oy)
     }

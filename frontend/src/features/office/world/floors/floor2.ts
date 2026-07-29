@@ -24,17 +24,18 @@ function fill(grid: Uint8Array, x: number, y: number, w: number, h: number, valu
 }
 
 /**
- * Casca de cômodo estilo Habbo: só as paredes de FUNDO (norte) e ESQUERDA
- * (oeste) existem de verdade, mais altas. Frente (sul) e direita ficam sem
- * parede nenhuma — o chão vai até a borda do mapa; o limite do mundo vem do
- * fim da grade (`isSolid` bloqueia fora dos limites), não de um tile de
- * parede.
+ * Casca de cômodo estilo Habbo: só as paredes de FUNDO (norte) e DIREITA
+ * (oeste no grid — a que aparece do lado direito da tela em iso) existem de
+ * verdade, mais altas; a da direita é vidraça inteira, tipo fachada de
+ * prédio. Frente (sul) e a outra lateral ficam sem parede nenhuma — o chão
+ * vai até a borda do mapa; o limite do mundo vem do fim da grade
+ * (`isSolid` bloqueia fora dos limites), não de um tile de parede.
  */
 function room(grid: Uint8Array, x: number, y: number, w: number, h: number, floor: number): void {
   fill(grid, x, y, w, h, floor)
   fill(grid, x, y, w, 1, T.WALL_TOP)
   fill(grid, x, y + 1, w, 1, T.WALL)
-  fill(grid, x, y + 1, 1, h - 1, T.WALL_V)
+  fill(grid, x, y + 1, 1, h - 1, T.GLASS)
 }
 
 export function buildFloor2(): OfficeMap {
@@ -42,6 +43,9 @@ export function buildFloor2(): OfficeMap {
 
   room(floor, 0, 0, COLS, ROWS, T.WOOD)
   fill(floor, 1, 1, 6, 6, T.TILEFLOOR)
+  // Porta do elevador embutida na parede de fundo — depois do hall pra não
+  // ser sobrescrita por ele. Igual ao andar 1.
+  fill(floor, 2, 0, 4, 2, T.ELEVATOR_DOOR)
 
   const collision = new Uint8Array(COLS * ROWS)
   for (let y = 0; y < ROWS; y++) {
@@ -54,7 +58,6 @@ export function buildFloor2(): OfficeMap {
   const add = (kind: PropKind, tx: number, ty: number) =>
     props.push({ kind, x: tx * TILE, y: ty * TILE })
 
-  add("elevatorDoors", 2, 2)
   add("pokerConsole", 8, 2)
   add("pokerTable", 6, 6)
   add("pokerScreen", 10, 14)
@@ -141,8 +144,6 @@ export function buildFloor2(): OfficeMap {
     zones,
     lights,
     seats,
-    // `elevatorDoors` (h: 40px) grava pela linha 4 (mesmo padrão do andar 1),
-    // então o spawn desce uma linha, para a 5 — ainda dentro do hall.
     spawn: { x: 4 * TILE, y: 5 * TILE },
   }
 }
