@@ -14,8 +14,16 @@ describe("seatAnim", () => {
     justRevealed: false,
   }
 
-  it("pensa enquanto a votação está aberta e não votou", () => {
-    expect(seatAnim({ ...base, voting: true })).toBe("type")
+  it("fica parado na mesa enquanto a votação está aberta e não votou", () => {
+    // Antes era `type`; o ciclo de digitar lia como braço balançando sem parar.
+    expect(seatAnim({ ...base, voting: true })).toBe("lean")
+  })
+
+  it("emote vence qualquer outro estado", () => {
+    // É o único gesto que a pessoa pediu explicitamente.
+    expect(
+      seatAnim({ ...base, voting: true, cheering: true, throwing: true, emote: "dance" }),
+    ).toBe("dance")
   })
 
   it("relaxa depois de votar", () => {

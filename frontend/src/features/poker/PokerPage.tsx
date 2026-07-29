@@ -35,8 +35,9 @@ import {
   useRounds,
   usePokerSummary,
   useSendReaction,
+  useSendEmote,
 } from "./poker.hooks"
-import { FIBONACCI, REACTION_EMOJIS } from "./poker.types"
+import { FIBONACCI, POKER_EMOTES, REACTION_EMOJIS } from "./poker.types"
 import type { PokerParticipant, PokerCard, PokerSession } from "./poker.types"
 
 // Paleta da sala. Os valores vêm do tailwind.config do projeto (escalas `ink`,
@@ -170,16 +171,19 @@ export function seatAnim(opts: {
   cheering: boolean
   throwing: boolean
   justRevealed: boolean
+  emote?: string | null
 }): string {
-  // Arremessar vence tudo: é a única ação que a pessoa está fazendo agora, e
-  // sem prioridade o gesto sumiria embaixo do estado da rodada.
+  // Emote é o único gesto que a pessoa pediu explicitamente — vence o resto.
+  if (opts.emote) return opts.emote
+  // Arremessar vem depois: é a ação que ela está fazendo agora, e sem
+  // prioridade o gesto sumiria embaixo do estado da rodada.
   if (opts.throwing) return "punch"
   if (opts.cheering) return "wave"          // acabou de receber uma reação
   // Comemorar é um instante, não um estado. `revealed` dura até o host aplicar
   // o peso — amarrar `celebrate` nele deixava todo mundo pulando sem parar.
   if (opts.justRevealed) return "celebrate"
   if (opts.revealed) return "lean"
-  if (opts.voting) return opts.hasVoted ? "lean" : "type"  // votou / pensando
+  if (opts.voting) return "lean"  // votou ou pensando — parado, sem "idle" bobbing (a pedido)
   return "idle"
 }
 
@@ -207,6 +211,8 @@ function Seat({
   cheering,
   throwing,
   facing,
+  emote,
+  onEmote,
 }: {
   participant: PokerParticipant
   hasVoted: boolean
@@ -221,9 +227,13 @@ function Seat({
   cheering: boolean
   throwing: boolean
   facing: Direction
+  emote: string | null
+  /** Só no assento próprio: abre o menu de emotes. */
+  onEmote?: (anim: string) => void
 }) {
   const reduce = useReducedMotion()
   const [barOpen, setBarOpen] = useState(false)
+  const [emoteOpen, setEmoteOpen] = useState(false)
 
   // O poll de 2s devolve um `avatar_config` novo a cada resposta. Sem congelar
   // a referência por valor, o AvatarCanvas remontava o spritesheet e reiniciava
@@ -269,10 +279,22 @@ function Seat({
       // depois de abrir. O botão-gatilho abaixo é o que recebe o foco primeiro.
       onFocusCapture={() => canReact && setBarOpen(true)}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setBarOpen(false)
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setBarOpen(false)
+          setEmoteOpen(false)
+        }
       }}
     >
     <div className="relative flex w-20 flex-col items-center gap-1.5">
+      {onEmote && (
+        <EmoteMenu
+          open={emoteOpen}
+          onPick={(anim) => {
+            onEmote(anim)
+            setEmoteOpen(false)
+          }}
+        />
+      )}
       {canReact && (
         <ReactionBar
           open={barOpen}
@@ -340,9 +362,13 @@ function Seat({
           >
             <AvatarCanvas
               config={avatarConfig}
-              anim={seatAnim({ voting, revealed, hasVoted, cheering, throwing, justRevealed })}
+              anim={seatAnim({ voting, revealed, hasVoted, cheering, throwing, justRevealed, emote })}
               dir={facing}
               scale={SPRITE_SCALE}
+              // Na mesa só anima o que é gesto (emote/reagir/comemorar); a
+              // espera do voto fica em pose parada — o ciclo de idle/lean lia
+              // como "braço balançando sem parar".
+              frozen={!emote && !throwing && !cheering && !justRevealed}
             />
             {/* Borda da mesa: cobre a linha do corte e ancora a pessoa na
                 madeira, senão o tronco pareceria cortado no ar. */}
@@ -359,20 +385,36 @@ function Seat({
         ) : (
           <span className={avatarClass}>{participant.avatar_initials}</span>
         )
-        // O avatar de outra pessoa é o gatilho das reações; o próprio não é
-        // clicável (ninguém reage para si).
-        return canReact ? (
-          <button
-            type="button"
-            onClick={() => setBarOpen((v) => !v)}
-            aria-expanded={barOpen}
-            aria-label={`Reagir para ${participant.user_name}`}
-            className="rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4] focus-visible:outline-offset-2"
-          >
+        // O avatar de outra pessoa é o gatilho das reações; o próprio abre o
+        // menu de emotes (ninguém reage para si).
+        if (canReact) {
+          return (
+            <button
+              type="button"
+              onClick={() => setBarOpen((v) => !v)}
+              aria-expanded={barOpen}
+              aria-label={`Reagir para ${participant.user_name}`}
+              className="rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4] focus-visible:outline-offset-2"
+            >
+              {body}
+            </button>
+          )
+        }
+        if (!onEmote) return body
+        return (
+          <span className="relative inline-flex">
             {body}
-          </button>
-        ) : (
-          body
+            <button
+              type="button"
+              onClick={() => setEmoteOpen((v) => !v)}
+              aria-expanded={emoteOpen}
+              aria-label="Emotes"
+              className="absolute -right-2 -top-1 grid size-5 place-items-center rounded-full border text-[11px] leading-none text-[#B3B9C4] shadow transition-colors hover:bg-[#2E3036] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+              style={{ borderColor: P.border, background: "rgba(33,35,40,0.97)" }}
+            >
+              ⋯
+            </button>
+          </span>
         )
       })()}
       <span className="max-w-[80px] truncate text-center text-[10px] font-medium leading-tight text-[#8590A2]">
@@ -459,6 +501,48 @@ function ReactionBar({
   )
 }
 
+// Menu do próprio assento: escolher um emote para a sala inteira ver. Em
+// grade porque são 8 opções com rótulo — a barra de emoji cabe numa linha, isto
+// não.
+function EmoteMenu({
+  open,
+  onPick,
+}: {
+  open: boolean
+  onPick: (anim: string) => void
+}) {
+  const reduce = useReducedMotion()
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="emotes"
+          className="absolute -top-2 z-30 grid w-40 -translate-y-full grid-cols-4 gap-0.5 rounded-xl border p-1.5 shadow-xl"
+          style={{ borderColor: P.border, background: "rgba(33,35,40,0.98)" }}
+          initial={{ opacity: 0, scale: 0.9, y: 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.16, ease: [0.2, 0, 0, 1] }}
+          role="group"
+          aria-label="Escolher emote"
+        >
+          {POKER_EMOTES.map((e) => (
+            <button
+              key={e.anim}
+              onClick={() => onPick(e.anim)}
+              title={e.label}
+              aria-label={e.label}
+              className="grid size-8 place-items-center rounded-lg text-base transition-colors hover:bg-[#2E3036] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+            >
+              {e.icon}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // Reação em voo: sai do assento de quem mandou, faz um arco por cima da mesa e
 // pousa no assento de quem recebeu. É a única coisa na sala que liga duas
 // pessoas visualmente — daí o arco em vez de uma linha reta.
@@ -476,6 +560,9 @@ export const THROW_GESTURE_MS = (THROW_WINDUP + 0.4) * 1000
 // Instante em que o emoji encosta no alvo — 82% do voo, o keyframe do impacto.
 export const IMPACT_MS = (THROW_WINDUP + FLIGHT_S * 0.82) * 1000
 export const CHEER_MS = 800
+// Duração de um emote na mesa. Alguns ciclos do clipe — o bastante para ler o
+// gesto sem virar um loop permanente.
+export const EMOTE_MS = 3200
 // Duração da comemoração na revelação — um beat, não um estado.
 export const CELEBRATE_MS = 1600
 
@@ -1541,6 +1628,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   const applyPoints = useApplyPoints(sessionId)
   const [copied, setCopied] = useState(false)
   const sendReaction = useSendReaction(sessionId)
+  const sendEmote = useSendEmote(sessionId)
   useHeartbeat(sessionId)
   const project = projects.find((p) => p.id === session?.project_id) ?? null
 
@@ -1555,6 +1643,9 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   // acenar antes de o emoji chegar nele.
   const [throwers, setThrowers] = useState<string[]>([])
   const [cheerers, setCheerers] = useState<string[]>([])
+  // Emote em execução por pessoa. Some sozinho: um emote é um gesto com fim,
+  // não um estado — deixar ligado faria a mesa inteira dançar para sempre.
+  const [emoting, setEmoting] = useState<Record<string, string>>({})
   const timers = useRef<number[]>([])
 
   useEffect(() => () => timers.current.forEach(clearTimeout), [])
@@ -1580,6 +1671,23 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     })
   }
 
+  const playEmote = (userId: string, emote: string) => {
+    setEmoting((prev) => ({ ...prev, [userId]: emote }))
+    timers.current.push(
+      window.setTimeout(
+        () =>
+          setEmoting((prev) => {
+            // Só limpa se ninguém trocou o emote no meio — senão o timer do
+            // gesto antigo apagaria o novo.
+            if (prev[userId] !== emote) return prev
+            const { [userId]: _, ...rest } = prev
+            return rest
+          }),
+        EMOTE_MS,
+      ),
+    )
+  }
+
   useEffect(() => {
     const incoming = session?.reactions ?? []
     const fresh = incoming.filter(
@@ -1589,16 +1697,23 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     )
     if (fresh.length === 0) return
     fresh.forEach((r) => seenReactions.current.add(r.id))
+
+    // Emote não atravessa a mesa: anima só o sprite de quem mandou.
+    const emotes = fresh.filter((r) => r.emote)
+    const thrown = fresh.filter((r) => !r.emote && r.to_user_id)
+    emotes.forEach((r) => playEmote(r.from_user_id, r.emote))
+
+    if (thrown.length === 0) return
     setFlying((prev) => [
       ...prev,
-      ...fresh.map((r) => ({
+      ...thrown.map((r) => ({
         key: r.id,
         emoji: r.emoji,
         from: r.from_user_id,
-        to: r.to_user_id,
+        to: r.to_user_id!,
       })),
     ])
-    fresh.forEach((r) => playThrow(r.from_user_id, r.to_user_id))
+    thrown.forEach((r) => playThrow(r.from_user_id, r.to_user_id!))
   }, [session?.reactions, userId])
 
   const handleReact = (toUserId: string, emoji: string) => {
@@ -1612,6 +1727,22 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     sendReaction.mutate({ toUserId, emoji })
   }
 
+  const handleEmote = (emote: string) => {
+    playEmote(userId, emote)
+    sendEmote.mutate(emote)
+  }
+
+  // O backend devolve todos os votos do card, inclusive de quem já saiu da
+  // sala (`list_by_card` não filtra por presença). Contar esses votos dava
+  // "3 de 2 votaram" e deixava ausente decidindo média e consenso.
+  // Hooks não podem vir depois de um return condicional, então rodam sempre
+  // — mesmo com `session` ainda undefined — usando arrays vazios como fallback.
+  const liveVotes = useMemo(() => {
+    if (!session) return []
+    const seated = new Set(session.participants.map((p) => p.user_id))
+    return session.votes.filter((v) => seated.has(v.participant_id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.votes, session?.participants])
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center text-[#8590A2]" style={{ background: P.bg }}>
@@ -1620,20 +1751,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     )
   }
 
-  // O backend devolve todos os votos do card, inclusive de quem já saiu da
-  // sala (`list_by_card` não filtra por presença). Contar esses votos dava
-  // "3 de 2 votaram" e deixava ausente decidindo média e consenso.
-  const seated = new Set(session.participants.map((p) => p.user_id))
-  const liveVotes = useMemo(
-    () => session.votes.filter((v) => seated.has(v.participant_id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session.votes, session.participants],
-  )
-  const liveSession = useMemo(
-    () => ({ ...session, votes: liveVotes }),
-    [session, liveVotes],
-  )
-
+  const liveSession = { ...session, votes: liveVotes }
   const me = session.participants.find((p) => p.user_id === userId)
   const isHost = session.created_by === userId
   const myVote = liveVotes.find((v) => v.participant_id === userId)?.value ?? null
@@ -1817,6 +1935,8 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                     cheering={cheerers.includes(p.user_id)}
                     throwing={throwers.includes(p.user_id)}
                     facing={seatFacing(i, participants.length)}
+                    emote={emoting[p.user_id] ?? null}
+                    onEmote={p.user_id === userId ? handleEmote : undefined}
                   />
                 )
               })}

@@ -75,13 +75,28 @@ export interface PokerParticipant {
 // Catálogo fechado, espelhando `PokerReactionModel.EMOJIS` no backend.
 export const REACTION_EMOJIS = ["👏", "🔥", "😂", "🤔", "🎯", "❤️"] as const
 
-// Reação efêmera de alguém para alguém. Vive só o tempo de atravessar a mesa:
-// o backend devolve as dos últimos segundos e o cliente já as viu uma vez.
+// Espelha `PokerReactionModel.EMOTES`. O `anim` é o nome do clipe no chibi.ts.
+export const POKER_EMOTES = [
+  { anim: "wave", label: "Acenar", icon: "👋" },
+  { anim: "dance", label: "Dançar", icon: "🕺" },
+  { anim: "jamal", label: "Passinho", icon: "🔥" },
+  { anim: "dab", label: "Dab", icon: "😎" },
+  { anim: "floss", label: "Floss", icon: "🤸" },
+  { anim: "celebrate", label: "Comemorar", icon: "🎉" },
+  { anim: "sleep", label: "Dormir", icon: "😴" },
+  { anim: "coffee", label: "Café", icon: "☕" },
+] as const
+
+// Evento efêmero da sala. Vive só o tempo de atravessar a mesa: o backend
+// devolve os dos últimos segundos e o cliente já os viu uma vez.
+// Duas formas: reação com alvo (`emoji` + `to_user_id`) ou emote sobre si
+// mesmo (`emote`, sem alvo).
 export interface PokerReaction {
   id: string
   from_user_id: string
-  to_user_id: string
+  to_user_id: string | null
   emoji: string
+  emote: string
   created_at: string
 }
 

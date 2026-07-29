@@ -127,7 +127,7 @@ class DjangoPokerParticipantRepository(PokerParticipantRepository):
         cutoff = timezone.now() - ACTIVE_THRESHOLD
         rows = PokerParticipantModel.objects.filter(
             session_id=session_id, last_seen__gte=cutoff
-        ).select_related("user")
+        ).select_related("user").order_by("joined_at")
         result = []
         for row in rows:
             row._user_name = row.user.full_name

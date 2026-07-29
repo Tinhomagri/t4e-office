@@ -140,8 +140,9 @@ def _reaction_dict(r: PokerReactionModel) -> dict:
     return {
         "id": str(r.id),
         "from_user_id": str(r.from_user_id),
-        "to_user_id": str(r.to_user_id),
+        "to_user_id": str(r.to_user_id) if r.to_user_id else None,
         "emoji": r.emoji,
+        "emote": r.emote,
         "created_at": r.created_at.isoformat(),
     }
 
@@ -287,10 +288,14 @@ class PokerReactionView(APIView):
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
 
+        emote = request.data.get("emote")
         emoji = request.data.get("emoji")
-        # Catálogo fechado: aceitar string livre deixaria a sala virar um canal
-        # de texto arbitrário renderizado na tela de todo mundo.
-        if emoji not in PokerReactionModel.EMOJIS:
+        # Catálogo fechado nos dois casos: aceitar string livre deixaria a sala
+        # virar um canal de texto arbitrário renderizado na tela de todo mundo.
+        if emote is not None:
+            if emote not in PokerReactionModel.EMOTES:
+                return Response({"error": "Emote inválido"}, status=400)
+        elif emoji not in PokerReactionModel.EMOJIS:
             return Response({"error": "Reação inválida"}, status=400)
 
         to_user_id = request.data.get("to_user_id")
@@ -298,14 +303,16 @@ class PokerReactionView(APIView):
         in_room = PokerParticipantModel.objects.filter(session_id=session_id)
         if not in_room.filter(user_id=sender_id).exists():
             return Response({"error": "Você não está nesta sala"}, status=403)
-        if not in_room.filter(user_id=to_user_id).exists():
+        # Emote é sobre si mesmo: não tem destinatário para validar.
+        if emote is None and not in_room.filter(user_id=to_user_id).exists():
             return Response({"error": "Destinatário não está na sala"}, status=400)
 
         reaction = PokerReactionModel.objects.create(
             session_id=session_id,
             from_user_id=sender_id,
-            to_user_id=to_user_id,
-            emoji=emoji,
+            to_user_id=None if emote is not None else to_user_id,
+            emoji="" if emote is not None else emoji,
+            emote=emote or "",
         )
         PokerReactionModel.objects.filter(
             session_id=session_id, created_at__lt=timezone.now() - REACTION_TTL

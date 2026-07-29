@@ -98,6 +98,12 @@ class PokerReactionModel(models.Model):
 
     EMOJIS = ["👏", "🔥", "😂", "🤔", "🎯", "❤️"]
 
+    # Emotes são o mesmo tipo de evento efêmero, só que sem destinatário: a
+    # pessoa anima o próprio sprite e a sala inteira vê pelo poll. Catálogo
+    # fechado pelos mesmos motivos do de emojis, e limitado aos clipes que o
+    # chibi.ts sabe desenhar.
+    EMOTES = ["wave", "dance", "jamal", "dab", "floss", "celebrate", "sleep", "coffee"]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         PokerSessionModel, on_delete=models.CASCADE, related_name="reactions"
@@ -111,8 +117,11 @@ class PokerReactionModel(models.Model):
         "identity.UserModel",
         on_delete=models.CASCADE,
         related_name="poker_reactions_received",
+        null=True,
+        blank=True,
     )
-    emoji = models.CharField(max_length=8)
+    emoji = models.CharField(max_length=8, blank=True, default="")
+    emote = models.CharField(max_length=16, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

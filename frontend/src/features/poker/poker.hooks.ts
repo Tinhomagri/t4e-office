@@ -61,6 +61,12 @@ export function useSendReaction(sessionId: string | null) {
   })
 }
 
+export function useSendEmote(sessionId: string | null) {
+  return useMutation({
+    mutationFn: (emote: string) => pokerApi.sendEmote(sessionId!, emote),
+  })
+}
+
 export function useUpdateSession(sessionId: string | null) {
   const qc = useQueryClient()
   return useMutation({
