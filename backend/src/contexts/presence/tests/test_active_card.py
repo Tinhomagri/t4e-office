@@ -2,7 +2,11 @@
 e a checagem de dono na hora de editar a observação."""
 import pytest
 
-from contexts.identity.infrastructure.django.models import UserModel, WorkspaceModel
+from contexts.identity.infrastructure.django.models import (
+    MembershipModel,
+    UserModel,
+    WorkspaceModel,
+)
 from contexts.presence.application.active_card import (
     get_active_card,
     update_working_note,
@@ -24,6 +28,8 @@ def scenario(db):
         email="bob@t4e.com", password="x", full_name="Bob Dev", is_active=True
     )
     ws = WorkspaceModel.objects.create(name="WS", slug="ws", owner=owner)
+    MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
+    MembershipModel.objects.create(workspace=ws, user=dev, role="member")
     project = ProjectModel.objects.create(workspace=ws, name="Mia", key="MIA")
     return {"owner": owner, "dev": dev, "ws": ws, "project": project}
 
@@ -113,6 +119,22 @@ def test_update_working_note_por_outro_usuario_falha(scenario):
 
     with pytest.raises(PermissionDeniedError):
         update_working_note(card_id=str(card.id), user_id=str(scenario["owner"].id), note="x")
+
+
+def test_update_working_note_por_ex_membro_falha(scenario):
+    """Assignee que foi REMOVIDO do workspace (membership apagada) não pode
+    mais editar a observação, mesmo continuando como responsável do card."""
+    dev = scenario["dev"]
+    card = CardModel.objects.create(
+        project=scenario["project"], number=1, title="X", assignee=dev
+    )
+    MembershipModel.objects.filter(workspace=scenario["ws"], user=dev).delete()
+
+    with pytest.raises(PermissionDeniedError):
+        update_working_note(card_id=str(card.id), user_id=str(dev.id), note="ainda edito?")
+
+    card.refresh_from_db()
+    assert card.working_note == ""
 
 
 def test_update_working_note_card_inexistente_falha(scenario):

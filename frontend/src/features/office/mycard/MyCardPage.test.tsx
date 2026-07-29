@@ -20,7 +20,11 @@ vi.mock("../pc/activeCard.hooks", () => ({
 const WORKSPACE_ID = "ws-1"
 const mutate = vi.fn()
 
-function setup(activeCardData: unknown, saveNoteState: { isError?: boolean } = {}) {
+function setup(
+  activeCardData: unknown,
+  saveNoteState: { isError?: boolean } = {},
+  activeCardState: { isError?: boolean } = {},
+) {
   useAuthStore.setState({ user: { id: "bob-2", full_name: "Bob Dev" } as never })
   vi.mocked(useWorkspaces).mockReturnValue({
     data: [{ id: WORKSPACE_ID, name: "WS", slug: "ws" }],
@@ -28,7 +32,11 @@ function setup(activeCardData: unknown, saveNoteState: { isError?: boolean } = {
     activeWorkspaceId: WORKSPACE_ID,
     setActiveWorkspace: vi.fn(),
   } as never)
-  vi.mocked(useActiveCard).mockReturnValue({ data: activeCardData, isLoading: false } as never)
+  vi.mocked(useActiveCard).mockReturnValue({
+    data: activeCardData,
+    isLoading: false,
+    isError: activeCardState.isError ?? false,
+  } as never)
   vi.mocked(useSaveWorkingNote).mockReturnValue({
     mutate,
     isError: saveNoteState.isError ?? false,
@@ -44,6 +52,15 @@ describe("<MyCardPage />", () => {
     setup({ active: false })
     render(<MyCardPage />)
     expect(screen.getByText(/não tem nenhum card em andamento/i)).toBeInTheDocument()
+  })
+
+  it("query falhando mostra erro, não o estado vazio de 'sem card'", () => {
+    setup(undefined, {}, { isError: true })
+    render(<MyCardPage />)
+    expect(screen.getByText(/não foi possível carregar seu card/i)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/não tem nenhum card em andamento/i),
+    ).not.toBeInTheDocument()
   })
 
   it("com card doing mostra título e textarea preenchida com a observação", () => {

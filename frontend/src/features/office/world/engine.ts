@@ -365,6 +365,10 @@ export class OfficeEngine {
       me.anim = "idle"
       this.viewOffset = { dx: 0, dy: 0 }
       this.cb.onInteract?.(null)
+      // Levantar também precisa publicar a posição: updateSelf só dispara
+      // onMove no ramo de movimento, então sem isto a posição transmitida
+      // pro servidor (e daí pros outros clientes) fica presa na do assento.
+      this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
       return
     }
     let best = -1
@@ -401,6 +405,12 @@ export class OfficeEngine {
       seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
     this.cb.onInteract?.(seat)
+    // Sentar encosta a posição no assento; sem publicar isso agora, os outros
+    // clientes continuariam vendo a posição de onde a pessoa estava andando
+    // (updateSelf retorna cedo pra quem está sentado, então o próximo onMove
+    // poderia nunca vir) — e o hit-test de hover, que exige proximidade do
+    // assento, nunca reconheceria o colega como sentado.
+    this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
   }
 
   // ── Física ────────────────────────────────────────────────────────────────

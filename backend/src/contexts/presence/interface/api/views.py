@@ -267,7 +267,8 @@ def _validate_uuid(value: str, field_name: str) -> Response | None:
 class ActiveCardView(APIView):
     """GET /api/presence/active-card/?workspace_id=&user_id= — card em
     'Em andamento' de alguém, com há quanto tempo e a observação. Só
-    owner/admin do workspace veem o card de outra pessoa."""
+    owner/admin do workspace veem o card de OUTRA pessoa; qualquer membro
+    lê o próprio card (é o que a app "Meu Card" faz)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -276,16 +277,27 @@ class ActiveCardView(APIView):
         user_id = str(request.query_params.get("user_id", ""))
         if not workspace_id or not user_id:
             return Response({"error": "workspace_id e user_id obrigatórios"}, status=400)
-        _assert_workspace(workspace_id, str(request.user.id), min_role="admin")
 
+        error = _validate_uuid(workspace_id, "workspace_id")
+        if error:
+            return error
         error = _validate_uuid(user_id, "user_id")
         if error:
             return error
+
+        # Ler o próprio card exige só membership; ler o de outra pessoa exige
+        # admin/owner.
+        min_role = "member" if user_id == str(request.user.id) else "admin"
+        _assert_workspace(workspace_id, str(request.user.id), min_role=min_role)
+
         if not MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id).exists():
             return Response({"error": "Usuário não é membro deste workspace."}, status=400)
 
         result = get_active_card(workspace_id=workspace_id, user_id=user_id)
         return Response(result or {"active": False})
+
+
+MAX_NOTE_LENGTH = 500
 
 
 class ActiveCardNoteView(APIView):
@@ -299,6 +311,11 @@ class ActiveCardNoteView(APIView):
         note = str(request.data.get("note", ""))
         if not card_id:
             return Response({"error": "card_id obrigatório"}, status=400)
+        if len(note) > MAX_NOTE_LENGTH:
+            return Response(
+                {"error": f"observação muito longa (máximo {MAX_NOTE_LENGTH} caracteres)."},
+                status=400,
+            )
         error = _validate_uuid(card_id, "card_id")
         if error:
             return error

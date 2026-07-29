@@ -43,6 +43,17 @@ function MyCardInner({ workspaceId }: { workspaceId: string }) {
     )
   }
 
+  // Falha de rede/permissão não é "você não tem card": mostrar o estado vazio
+  // aqui esconderia o erro e o usuário ficaria esperando um card que existe.
+  if (activeCard.isError) {
+    return (
+      <EmptyState
+        title="Meu Card"
+        description="Não foi possível carregar seu card. Tente de novo."
+      />
+    )
+  }
+
   if (!activeCard.data?.active) {
     return (
       <EmptyState

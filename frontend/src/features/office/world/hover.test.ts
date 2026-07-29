@@ -29,6 +29,14 @@ describe("nearestSeatedUser", () => {
     expect(nearestSeatedUser(actors, SEATS, 500, 500)).toBeNull()
   })
 
+  it("ignora ator de pé PERTO do ponto do mouse (colega passando pela mesa)", () => {
+    // Ator dentro do hoverRadius (20) do ponto consultado, mas a 30px do
+    // assento "pc" mais próximo — bem além do seatSnapRadius (4). É o caso
+    // que a checagem de encaixe no assento existe pra rejeitar.
+    const actors = [{ id: "u1", x: 130, y: 100 }]
+    expect(nearestSeatedUser(actors, SEATS, 128, 100)).toBeNull()
+  })
+
   it("com dois candidatos sentados, escolhe o mais perto", () => {
     const actors = [
       { id: "longe", x: 300, y: 300 },

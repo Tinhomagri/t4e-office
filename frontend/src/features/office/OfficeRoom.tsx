@@ -92,6 +92,8 @@ export function OfficeRoom({
 
   const [hoverUserId, setHoverUserId] = useState<string | null>(null)
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
+  // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
+  const hoverPosRef = useRef<{ x: number; y: number } | null>(null)
   const activeCard = useActiveCard(workspaceId, hoverUserId, canManageDesks)
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -352,11 +354,25 @@ export function OfficeRoom({
     const localY = e.clientY - rect.top
     const userId = engine.hoverSeatAt(localX, localY)
     setHoverUserId(userId)
-    setHoverPos(userId ? { x: localX, y: localY } : null)
+    // Mousemove dispara dezenas de vezes por segundo; sem limiar, cada pixel
+    // re-renderizava a árvore toda. A ref espelha o último valor aplicado pra
+    // comparar sem entrar nas deps do callback (que precisa ser estável).
+    if (!userId) {
+      if (hoverPosRef.current !== null) {
+        hoverPosRef.current = null
+        setHoverPos(null)
+      }
+      return
+    }
+    const prev = hoverPosRef.current
+    if (prev && Math.abs(prev.x - localX) <= 2 && Math.abs(prev.y - localY) <= 2) return
+    hoverPosRef.current = { x: localX, y: localY }
+    setHoverPos({ x: localX, y: localY })
   }, [])
 
   const onCanvasMouseLeave = useCallback(() => {
     setHoverUserId(null)
+    hoverPosRef.current = null
     setHoverPos(null)
   }, [])
 
@@ -408,7 +424,9 @@ export function OfficeRoom({
       {canManageDesks && hoverUserId && hoverPos && activeCard.data && (
         <div
           className="pointer-events-none absolute z-20 max-w-[220px] rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
-          style={{ left: hoverPos.x, top: hoverPos.y - 70 }}
+          /* Clamp no topo: sem isto, passar o mouse num avatar perto da borda
+             de cima jogava o balão pra `top` negativo (cortado, invisível). */
+          style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4) }}
         >
           {activeCard.data.active ? (
             <>

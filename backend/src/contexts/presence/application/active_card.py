@@ -4,6 +4,7 @@ app projects — mesmo padrão de assign_desk.py, sem passar pela camada de
 domínio pesada do projects (aqui é leitura/escrita de um campo só)."""
 from __future__ import annotations
 
+from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.infrastructure.django.models import CardHistoryModel, CardModel
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
@@ -54,11 +55,18 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
 
 
 def update_working_note(*, card_id: str, user_id: str, note: str) -> None:
-    """Atualiza a observação do card — só quem é o assignee pode."""
-    card = CardModel.objects.filter(id=card_id).first()
+    """Atualiza a observação do card — só quem é o assignee E ainda é membro
+    do workspace do card pode. Sem a checagem de membership, quem foi removido
+    do workspace mas continua como responsável do card seguiria editando a
+    observação indefinidamente."""
+    card = CardModel.objects.filter(id=card_id).select_related("project").first()
     if card is None:
         raise NotFoundError("Card não encontrado.")
     if str(card.assignee_id) != str(user_id):
         raise PermissionDeniedError("Só o responsável pelo card pode editar a observação.")
+    if not MembershipModel.objects.filter(
+        workspace_id=card.project.workspace_id, user_id=user_id
+    ).exists():
+        raise PermissionDeniedError("Você não tem acesso a este workspace.")
     card.working_note = note
     card.save(update_fields=["working_note"])

@@ -65,6 +65,36 @@ def test_member_comum_nao_pode_ver_card_de_outro(scenario):
     assert r.status_code == 403
 
 
+def test_member_comum_ve_o_proprio_card(scenario):
+    """A app "Meu Card" é habilitada pra todo mundo: um member comum tem que
+    conseguir ler o PRÓPRIO card ativo (200, não 403)."""
+    c = _client(scenario["dev"])
+    r = c.get(
+        f"/api/presence/active-card/?workspace_id={scenario['ws'].id}&user_id={scenario['dev'].id}"
+    )
+    assert r.status_code == 200
+    assert r.data["active"] is True
+    assert r.data["card"]["title"] == "Card ativo"
+
+
+def test_outsider_sem_membership_nao_ve_o_proprio_card(scenario):
+    """Sem membership nenhuma, nem o próprio card sai (min_role=member já
+    barra: quem não é membro não passa)."""
+    c = _client(scenario["outsider"])
+    r = c.get(
+        f"/api/presence/active-card/?workspace_id={scenario['ws'].id}&user_id={scenario['outsider'].id}"
+    )
+    assert r.status_code == 403
+
+
+def test_workspace_id_invalido_da_400(scenario):
+    c = _client(scenario["owner"])
+    r = c.get(
+        f"/api/presence/active-card/?workspace_id=not-a-uuid&user_id={scenario['dev'].id}"
+    )
+    assert r.status_code == 400
+
+
 def test_outsider_sem_membership_nao_ve_nada(scenario):
     c = _client(scenario["outsider"])
     r = c.get(
@@ -122,6 +152,30 @@ def test_card_id_invalido_da_400(scenario):
         format="json",
     )
     assert r.status_code == 400
+
+
+def test_observacao_longa_demais_da_400(scenario):
+    c = _client(scenario["dev"])
+    r = c.patch(
+        "/api/presence/active-card/note/",
+        {"card_id": str(scenario["card"].id), "note": "x" * 501},
+        format="json",
+    )
+    assert r.status_code == 400
+    scenario["card"].refresh_from_db()
+    assert scenario["card"].working_note == ""
+
+
+def test_observacao_no_limite_passa(scenario):
+    c = _client(scenario["dev"])
+    r = c.patch(
+        "/api/presence/active-card/note/",
+        {"card_id": str(scenario["card"].id), "note": "x" * 500},
+        format="json",
+    )
+    assert r.status_code == 200
+    scenario["card"].refresh_from_db()
+    assert scenario["card"].working_note == "x" * 500
 
 
 def test_card_ativo_de_outro_workspace_nao_aparece_na_api(scenario):
