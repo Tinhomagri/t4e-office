@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
+from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.presence.infrastructure.django.models import DeskAssignmentModel
 
 
@@ -37,9 +38,18 @@ def assign_desk(
 def list_desk_assignments(
     *, workspace_id: str, floor: int
 ) -> list[DeskAssignmentModel]:
-    """Todas as atribuições do andar, com o usuário já carregado (sem N+1)."""
+    """Todas as atribuições do andar, com o usuário já carregado (sem N+1).
+
+    Exclui atribuições de gente que já saiu do workspace: remover um membro
+    não apaga a `DeskAssignmentModel` dele (tabelas de contextos diferentes),
+    então sem este filtro o nome continuaria aparecendo pra sempre como
+    plaquinha flutuante sobre a mesa antiga.
+    """
+    member_ids = MembershipModel.objects.filter(workspace_id=workspace_id).values_list(
+        "user_id", flat=True
+    )
     return list(
         DeskAssignmentModel.objects.filter(
-            workspace_id=workspace_id, floor=floor
+            workspace_id=workspace_id, floor=floor, user_id__in=member_ids
         ).select_related("user")
     )

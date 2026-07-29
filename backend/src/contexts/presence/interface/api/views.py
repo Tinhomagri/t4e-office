@@ -1,6 +1,7 @@
 """Views da API de Presença (Escritório Virtual — MVP)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from rest_framework import status
@@ -234,6 +235,18 @@ class AssignDeskView(APIView):
         floor = _clamp_floor(request.data.get("floor", 1))
         raw_user_id = request.data.get("user_id")
         user_id = str(raw_user_id) if raw_user_id else None
+
+        if user_id is not None:
+            try:
+                uuid.UUID(user_id)
+            except (ValueError, AttributeError):
+                return Response({"error": "user_id inválido."}, status=400)
+            if not MembershipModel.objects.filter(
+                workspace_id=workspace_id, user_id=user_id
+            ).exists():
+                return Response(
+                    {"error": "Usuário não é membro deste workspace."}, status=400
+                )
 
         assign_desk(
             workspace_id=workspace_id, floor=floor, seat_id=seat_id, user_id=user_id

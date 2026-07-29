@@ -18,6 +18,7 @@ import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
 import { isMyDesk } from "./pc/desk"
+import type { DeskAssignment } from "./pc/desks.api"
 import { useDeskAssignments } from "./pc/desks.hooks"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
@@ -90,6 +91,15 @@ export function OfficeRoom({
   // Id da zona atual (não o rótulo): é o que diferencia "elevador" de
   // qualquer outra zona no onInteract, sem esperar o próximo render.
   const zoneIdRef = useRef<string | null>(null)
+  // onInteract é criado uma única vez (efeito de montagem do motor, deps
+  // [map]) — fechar sobre `deskAssignments.data`/`canManageDesks` direto
+  // congelaria os valores de quando o engine foi criado (undefined/[] e
+  // false, respectivamente, já que as queries ainda não resolveram nesse
+  // instante). Guardamos os valores atuais em refs, atualizados sempre que
+  // mudam, e o onInteract lê `.current` — mesmo motivo do
+  // `useWorldStore.getState()` no branch do elevador logo abaixo.
+  const deskAssignmentsRef = useRef<DeskAssignment[]>([])
+  const canManageDesksRef = useRef(false)
 
   const [zone, setZone] = useState<{ label: string; hint: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -148,8 +158,8 @@ export function OfficeRoom({
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
         // outro assento continua sendo só sentar. Assento da mesa de poker
         // abre a roda de votos em vez de ligar o PC.
-        const mine = seat && me?.id && isMyDesk(me.id, seat, deskAssignments.data ?? [])
-        if (seat && seat.kind === "pc" && (mine || canManageDesks)) bootPc(seat.id)
+        const mine = seat && me?.id && isMyDesk(me.id, seat, deskAssignmentsRef.current)
+        if (seat && seat.kind === "pc" && (mine || canManageDesksRef.current)) bootPc(seat.id)
         else if (seat && seat.kind === "poker") {
           usePokerRoomStore.getState().openVote(seat.id)
         } else if (!seat) {
@@ -194,9 +204,16 @@ export function OfficeRoom({
     const engine = engineRef.current
     if (!engine) return
     const rows = deskAssignments.data ?? []
+    deskAssignmentsRef.current = rows
     engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
     engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
   }, [deskAssignments.data, me?.id, map])
+
+  // canManageDesks só é conhecido depois que useMembers resolve — atualiza a
+  // ref lida pelo onInteract (ver comentário acima de canManageDesksRef).
+  useEffect(() => {
+    canManageDesksRef.current = canManageDesks
+  }, [canManageDesks])
 
   // Presença dos outros → atores da cena.
   useEffect(() => {

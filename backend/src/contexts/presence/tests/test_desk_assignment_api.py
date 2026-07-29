@@ -99,6 +99,37 @@ def test_owner_atribui_e_qualquer_membro_ve(scenario):
     assert r_get.data == r.data
 
 
+def test_atribuir_a_nao_membro_e_400(scenario):
+    """Usuário real, mas de fora do workspace — não pode virar rótulo no mundo."""
+    owner_c = _client(scenario["owner"])
+    r = owner_c.post(
+        "/api/presence/desks/assign/",
+        {
+            "workspace_id": str(scenario["ws"].id),
+            "floor": 1,
+            "seat_id": "ws-9-4",
+            "user_id": str(scenario["outsider"].id),
+        },
+        format="json",
+    )
+    assert r.status_code == 400
+
+
+def test_atribuir_com_user_id_malformado_e_400(scenario):
+    owner_c = _client(scenario["owner"])
+    r = owner_c.post(
+        "/api/presence/desks/assign/",
+        {
+            "workspace_id": str(scenario["ws"].id),
+            "floor": 1,
+            "seat_id": "ws-9-4",
+            "user_id": "nao-e-um-uuid",
+        },
+        format="json",
+    )
+    assert r.status_code == 400
+
+
 def test_desatribuir_com_user_id_none(scenario):
     owner_c = _client(scenario["owner"])
     owner_c.post(

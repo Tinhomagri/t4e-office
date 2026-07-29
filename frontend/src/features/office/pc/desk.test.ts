@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import type { DeskAssignment } from "./desks.api"
 import { buildFloor1 } from "../world/floors/floor1"
+// buildFloor2 especificamente para pegar um assento que não é "pc" (andar 1
+// só tem mesas de PC) — precisamos de um assento de mesa de poker de verdade
+// para provar que isMyDesk nunca liga PC nele.
+import { buildFloor2 } from "../world/floors/floor2"
 import { isMyDesk, pcSeats } from "./desk"
 
 const map = buildFloor1()
@@ -44,8 +48,9 @@ describe("isMyDesk", () => {
   })
 
   it("falso para assento sem computador — a mesa de poker nunca liga PC", () => {
-    const naoP = map.seats.find((s) => s.kind !== "pc")
-    if (naoP) expect(isMyDesk("ana-123", naoP, assignments)).toBe(false)
+    const naoP = buildFloor2().seats.find((s) => s.kind !== "pc")
+    expect(naoP).toBeDefined()
+    expect(isMyDesk("ana-123", naoP!, assignments)).toBe(false)
   })
 
   it("id de usuário vazio nunca é dono de nada", () => {

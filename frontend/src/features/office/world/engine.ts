@@ -131,7 +131,7 @@ export class OfficeEngine {
   /** Desligado enquanto o PC do escritório está aberto. */
   private inputEnabled = true
 
-  /** Assento da própria mesa (ver `desk.ts`/`myDeskId`) — só pra desenhar a
+  /** Assento da própria mesa (ver `desk.ts`) — só pra desenhar a
    * seta indicativa acima dela. Não afeta física nem interação. */
   private myDeskSeatId: string | null = null
 
@@ -314,7 +314,7 @@ export class OfficeEngine {
     this.deskLabels = labels
   }
 
-  // ── Entrada───────────────────────────────────────────────────────────────
+  // ── Entrada ───────────────────────────────────────────────────────────────
 
   /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
   setInputEnabled(enabled: boolean): void {

@@ -2,6 +2,7 @@
 import pytest
 
 from contexts.identity.infrastructure.django.models import (
+    MembershipModel,
     UserModel,
     WorkspaceModel,
 )
@@ -21,6 +22,8 @@ def scenario(db):
         email="bob@t4e.com", password="x", full_name="Bob Dev", is_active=True
     )
     ws = WorkspaceModel.objects.create(name="WS", slug="ws", owner=owner)
+    MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
+    MembershipModel.objects.create(workspace=ws, user=other, role="member")
     return {"owner": owner, "other": other, "ws": ws}
 
 
@@ -67,6 +70,23 @@ def test_user_id_none_desatribui(scenario):
         workspace_id=ws_id, floor=1, seat_id="ws-9-4", user_id=str(scenario["owner"].id)
     )
     assign_desk(workspace_id=ws_id, floor=1, seat_id="ws-9-4", user_id=None)
+    assert list_desk_assignments(workspace_id=ws_id, floor=1) == []
+
+
+def test_list_ignora_atribuicao_de_quem_saiu_do_workspace(scenario):
+    """Remover o membro (aqui, direto a MembershipModel) some com a mesa dele
+    da listagem — sem isso o nome ficaria pra sempre como plaquinha flutuante
+    sobre a mesa antiga."""
+    ws_id = str(scenario["ws"].id)
+    assign_desk(
+        workspace_id=ws_id, floor=1, seat_id="ws-9-4", user_id=str(scenario["other"].id)
+    )
+    assert len(list_desk_assignments(workspace_id=ws_id, floor=1)) == 1
+
+    MembershipModel.objects.filter(
+        workspace_id=ws_id, user_id=scenario["other"].id
+    ).delete()
+
     assert list_desk_assignments(workspace_id=ws_id, floor=1) == []
 
 
