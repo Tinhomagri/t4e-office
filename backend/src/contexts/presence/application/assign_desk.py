@@ -1,9 +1,12 @@
 """Caso de uso: atribuir/desatribuir mesa. Sem request/response — puro Django ORM."""
 from __future__ import annotations
 
+from django.db import transaction
+
 from contexts.presence.infrastructure.django.models import DeskAssignmentModel
 
 
+@transaction.atomic
 def assign_desk(
     *, workspace_id: str, floor: int, seat_id: str, user_id: str | None
 ) -> None:
