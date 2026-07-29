@@ -7,6 +7,7 @@ import type { ComponentType } from "react"
 
 import { BoardsPage } from "@/features/boards/BoardsPage"
 import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
+import { MyCardPage } from "@/features/office/mycard/MyCardPage"
 import { DashboardDeck } from "@/features/sales/deck/DashboardDeck"
 
 export type AppGroupId = "trabalho" | "comercial" | "marketing" | "sistema"
@@ -39,6 +40,7 @@ const MED = { w: 760, h: 520 }
 export const APPS: AppDef[] = [
   { id: "boards", label: "Boards", group: "trabalho", size: BIG, component: BoardsPage },
   { id: "myday", label: "Meu Dia", group: "trabalho", size: MED, component: null },
+  { id: "my-card", label: "Meu Card", group: "trabalho", size: MED, component: MyCardPage },
 
   { id: "comercial", label: "Comercial", group: "comercial", size: BIG, component: DashboardDeck },
   { id: "reports", label: "Relatórios", group: "comercial", size: BIG, component: null },
