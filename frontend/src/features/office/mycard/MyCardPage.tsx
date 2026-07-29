@@ -79,12 +79,17 @@ function MyCardInner({ workspaceId }: { workspaceId: string }) {
           type="button"
           className="mt-2 rounded-md border border-gray-400 bg-white px-3 py-1 text-sm text-black"
           onClick={() => {
-            saveNote.mutate({ cardId: card.id, note: shownNote })
-            setDirty(false)
+            saveNote.mutate(
+              { cardId: card.id, note: shownNote },
+              { onSuccess: () => setDirty(false) },
+            )
           }}
         >
           Salvar
         </button>
+        {saveNote.isError ? (
+          <p className="mt-1 text-sm text-red-600">Erro ao salvar. Tente de novo.</p>
+        ) : null}
       </div>
     </div>
   )
