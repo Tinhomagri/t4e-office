@@ -16,16 +16,22 @@ import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./p
 import {
   cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
 } from "./camera"
+import { nearestSeatedUser } from "./hover"
 import { keyAction } from "./input"
-import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
-import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
-import { makeCanvas } from "./pixels"
+import { isoToWorld, worldToIso } from "./iso"
+import { buildIsoGround } from "./isoBake"
+import { type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
+import { TILE, buildTileAtlas } from "./tiles"
+import { pokerBadgeFor } from "./poker-badge"
 
 const STEP = 1 / 60
 const WALK_SPEED = 46 // px/s — ~3 tiles por segundo, ritmo de Stardew
 const RUN_SPEED = 82
 /** Raio do corpo usado na colisão: o avatar ocupa menos que o tile inteiro. */
 const BODY_R = 4
+/** Quantos px da base do sprite (pernas/pés) somem quando o avatar senta —
+ * lê como "atrás do encosto da cadeira" em vez de "de pé do lado dela". */
+const SIT_CROP = 6
 
 export interface Actor {
   id: string
@@ -47,6 +53,9 @@ export interface Actor {
   sayUntil: number
   emote: string
   emoteUntil: number
+  /** Voto atual na sessão de Planning Poker do andar 2; null = não votou. */
+  pokerVote: string | null
+  pokerRevealed: boolean
   sheet: HTMLCanvasElement
   sheetKey: string
   frames: Record<string, { x: number; y: number }[]>
@@ -79,8 +88,9 @@ export class OfficeEngine {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private ground!: HTMLCanvasElement
-  private lightBuf: HTMLCanvasElement
-  private lightCtx: CanvasRenderingContext2D
+  /** Deslocamento a somar em `worldToIso(x, y)` para cair dentro de `ground`. */
+  private isoOriginX = 0
+  private isoOriginY = 0
   private props: Record<string, PropSprite>
   private shadow: PropSprite
   private sky: SkyLayers
@@ -122,6 +132,14 @@ export class OfficeEngine {
   /** Desligado enquanto o PC do escritório está aberto. */
   private inputEnabled = true
 
+  /** Assento da própria mesa (ver `desk.ts`) — só pra desenhar a
+   * seta indicativa acima dela. Não afeta física nem interação. */
+  private myDeskSeatId: string | null = null
+
+  /** Rótulos "de quem é a mesa" — vêm do backend (DeskAssignment), visíveis
+   * pra QUALQUER pessoa, não só a dona da mesa (diferente da seta acima). */
+  private deskLabels: { seatId: string; name: string }[] = []
+
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
 
@@ -139,10 +157,6 @@ export class OfficeEngine {
 
     // Buffer de luz em 1/4 da resolução do mundo visível: o desfoque natural
     // do upscale vira o "falloff" suave das lâmpadas, de graça.
-    const lb = makeCanvas(320, 200)
-    this.lightBuf = lb.canvas
-    this.lightCtx = lb.ctx
-
     this.particles = Array.from({ length: POOL }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0, size: 1, color: "#fff", kind: 0,
     }))
@@ -153,30 +167,24 @@ export class OfficeEngine {
 
   // ── Construção estática ───────────────────────────────────────────────────
 
-  /** Assa piso + paredes num canvas do tamanho do mapa. Roda uma vez. */
+  /**
+   * Assa piso + paredes num raster ISOMÉTRICO. Roda uma vez por troca de
+   * andar. O piso vira losango e a parede vira bloco extrudado (2 faces +
+   * tampa) — a projeção mora em `isoBake.ts`; aqui só delega e guarda a
+   * origem para a câmera/clique converterem depois. Ver MASTER.md.
+   */
   private bakeGround(): void {
     const atlas = buildTileAtlas()
-    const { canvas, ctx } = makeCanvas(this.map.width, this.map.height)
-    for (let y = 0; y < this.map.rows; y++) {
-      for (let x = 0; x < this.map.cols; x++) {
-        const id = this.map.floor[y * this.map.cols + x]
-        if (id === T.VOID) continue
-        const [sx, sy] = atlas.at(id, tileVariant(x, y))
-        ctx.drawImage(atlas.canvas, sx, sy, TILE, TILE, x * TILE, y * TILE, TILE, TILE)
-      }
-    }
-    // Sombra projetada das paredes sobre o piso — dá espessura ao ambiente.
-    ctx.fillStyle = "rgba(43,30,26,0.14)"
-    for (let y = 0; y < this.map.rows - 1; y++) {
-      for (let x = 0; x < this.map.cols; x++) {
-        const here = this.map.floor[y * this.map.cols + x]
-        const below = this.map.floor[(y + 1) * this.map.cols + x]
-        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.GLASS
-        const openBelow = below !== T.WALL && below !== T.WALL_TOP && below !== T.VOID
-        if (wallHere && openBelow) ctx.fillRect(x * TILE, (y + 1) * TILE, TILE, 3)
-      }
-    }
-    this.ground = canvas
+    const iso = buildIsoGround(this.map, atlas)
+    this.ground = iso.canvas
+    this.isoOriginX = iso.originX
+    this.isoOriginY = iso.originY
+  }
+
+  /** Projeta um ponto do mundo cartesiano para o espaço do raster iso assado. */
+  private toIso(x: number, y: number): { x: number; y: number } {
+    const p = worldToIso(x, y)
+    return { x: p.x + this.isoOriginX, y: p.y + this.isoOriginY }
   }
 
   // ── Atores ────────────────────────────────────────────────────────────────
@@ -195,6 +203,7 @@ export class OfficeEngine {
       id, name, config, x, y, tx: x, ty: y,
       facing: "down", anim: "idle", frame: 0, frameTime: 0,
       self, status, say: "", sayUntil: 0, emote: "", emoteUntil: 0,
+      pokerVote: null, pokerRevealed: false,
       sheet: sheet.canvas, sheetKey: JSON.stringify(config), frames: sheet.frames,
       seatIndex: -1,
     }
@@ -277,6 +286,31 @@ export class OfficeEngine {
     this.target = null
   }
 
+  /**
+   * Estado de voto de todos os atores da sessão de poker ativa — a decisão
+   * de QUEM votou o quê já veio pronta do React (que conversa com o
+   * backend); aqui só reflete no desenho. `votes` é indexado por `actor.id`
+   * (mesmo id de `spawnSelf`/`syncRemote`, que é o `user_id`).
+   */
+  setPokerVotes(votes: Map<string, string | null>, revealed: boolean): void {
+    for (const actor of this.actors.values()) {
+      actor.pokerVote = votes.get(actor.id) ?? null
+      actor.pokerRevealed = revealed
+    }
+  }
+
+  /** Marca qual assento é o da própria mesa — desenha uma seta em cima dela.
+   * `null` some com a seta (ex.: andar sem baias, como o de poker). */
+  setMyDesk(seatId: string | null): void {
+    this.myDeskSeatId = seatId
+  }
+
+  /** Rótulos com nome acima de cada mesa atribuída — vindos do backend,
+   * visíveis pra todo mundo (a seta de `setMyDesk` só o dono vê). */
+  setDeskLabels(labels: { seatId: string; name: string }[]): void {
+    this.deskLabels = labels
+  }
+
   // ── Entrada ───────────────────────────────────────────────────────────────
 
   /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
@@ -299,9 +333,10 @@ export class OfficeEngine {
     this.keys.delete(e.key.toLowerCase())
   }
 
-  /** Clique na tela → alvo de caminhada no mundo. */
+  /** Clique na tela → alvo de caminhada no mundo (passa pela inversa iso). */
   clickTo(screenX: number, screenY: number): void {
-    const { x, y } = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
     if (isSolid(this.map, x, y)) return
     this.target = { x, y }
     if (this.me) this.me.seatIndex = -1
@@ -310,6 +345,15 @@ export class OfficeEngine {
   /** O avatar do usuário está sentado? */
   isSeated(): boolean {
     return (this.me?.seatIndex ?? -1) >= 0
+  }
+
+  /** Usuário sentado numa baia perto do ponto de tela — null se não houver
+   * ninguém ali perto. Usado pro balão de card ativo (hover, não clique). */
+  hoverSeatAt(screenX: number, screenY: number): string | null {
+    const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
+    const actors = [...this.actors.values()].map((a) => ({ id: a.id, x: a.x, y: a.y }))
+    return nearestSeatedUser(actors, this.map.seats, x, y)
   }
 
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
@@ -321,6 +365,10 @@ export class OfficeEngine {
       me.anim = "idle"
       this.viewOffset = { dx: 0, dy: 0 }
       this.cb.onInteract?.(null)
+      // Levantar também precisa publicar a posição: updateSelf só dispara
+      // onMove no ramo de movimento, então sem isto a posição transmitida
+      // pro servidor (e daí pros outros clientes) fica presa na do assento.
+      this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
       return
     }
     let best = -1
@@ -334,18 +382,35 @@ export class OfficeEngine {
         best = i
       }
     })
-    if (best < 0) return
+    if (best < 0) {
+      // Nenhum assento por perto: ainda assim avisa o React com "sem
+      // assento" — é o que deixa interações de zona sem assento (elevador,
+      // console do poker) funcionarem. Sem isso, apertar E de pé fora de
+      // qualquer assento nunca chegava ao onInteract e a zona nunca reagia.
+      this.cb.onInteract?.(null)
+      return
+    }
     const seat = this.map.seats[best]
     me.seatIndex = best
     me.x = seat.x
     me.y = seat.y
     me.facing = seat.facing
     me.anim =
-      seat.kind === "view" ? "lean" : seat.kind === "lounge" ? "idle" : "type"
+      seat.kind === "view"
+        ? "lean"
+        : seat.kind === "lounge" || seat.kind === "poker"
+          ? "idle"
+          : "type"
     this.viewOffset =
       seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
     this.cb.onInteract?.(seat)
+    // Sentar encosta a posição no assento; sem publicar isso agora, os outros
+    // clientes continuariam vendo a posição de onde a pessoa estava andando
+    // (updateSelf retorna cedo pra quem está sentado, então o próximo onMove
+    // poderia nunca vir) — e o hit-test de hover, que exige proximidade do
+    // assento, nunca reconheceria o colega como sentado.
+    this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
   }
 
   // ── Física ────────────────────────────────────────────────────────────────
@@ -382,6 +447,20 @@ export class OfficeEngine {
       return
     }
     if (me.seatIndex >= 0) return
+
+    // Checagem de zona roda todo frame, parado ou andando — antes só rodava
+    // dentro do bloco de movimento, então quem chegava a uma zona e ficava
+    // parado sem antes se mexer (ex.: spawn dentro da própria zona) nunca
+    // disparava onZoneChange, e o E não fazia nada.
+    const zone = zoneAt(this.map, me.x, me.y)
+    const zoneId = zone?.id ?? null
+    if (zoneId !== this.currentZone) {
+      this.currentZone = zoneId
+      this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
+      if (zone) {
+        for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
+      }
+    }
 
     let dx = 0
     let dy = 0
@@ -433,16 +512,6 @@ export class OfficeEngine {
     if (this.moveAccum > 0.2) {
       this.moveAccum = 0
       this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
-    }
-
-    const zone = zoneAt(this.map, me.x, me.y)
-    const zoneId = zone?.id ?? null
-    if (zoneId !== this.currentZone) {
-      this.currentZone = zoneId
-      this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
-      if (zone) {
-        for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
-      }
     }
   }
 
@@ -615,16 +684,17 @@ export class OfficeEngine {
     const { viewW, viewH } = viewportFor(this.cssW, this.cssH, this.scale)
     this.viewW = viewW
     this.viewH = viewH
-    this.lightBuf.width = Math.max(1, Math.ceil(this.viewW / 2))
-    this.lightBuf.height = Math.max(1, Math.ceil(this.viewH / 2))
   }
 
   /**
    * Trava a câmera num ponto do mundo com zoom. `zoom` é piso, não alvo exato:
-   * `focusScale` mantém a escala inteira e dentro do teto.
+   * `focusScale` mantém a escala inteira e dentro do teto. `x, y` chegam em
+   * coordenadas de mundo cartesiano (ex.: `seat.x/y`) — guarda já projetado,
+   * porque `updateCamera` trabalha inteiramente em espaço iso.
    */
   focusOn(x: number, y: number, zoom = 6): void {
-    this.focus = { x, y, zoom }
+    const iso = this.toIso(x, y)
+    this.focus = { x: iso.x, y: iso.y, zoom }
     this.applyScale()
   }
 
@@ -634,14 +704,15 @@ export class OfficeEngine {
   }
 
   private updateCamera(): void {
-    const anchor = this.focus ?? this.me
+    // `focus` já chega projetado (ver `focusOn`); `me` é cartesiano e precisa
+    // passar pela projeção iso antes de virar alvo de câmera.
+    const anchor = this.focus ?? (this.me ? this.toIso(this.me.x, this.me.y) : null)
     if (!anchor) return
-    const base = cameraTarget(
-      anchor.x, anchor.y, this.viewW, this.viewH, this.map.width, this.map.height,
-    )
+    const groundW = this.ground.width
+    const groundH = this.ground.height
+    const base = cameraTarget(anchor.x, anchor.y, this.viewW, this.viewH, groundW, groundH)
     const { x: cx, y: cy } = offsetCamera(
-      base, this.viewOffset.dx, this.viewOffset.dy,
-      this.viewW, this.viewH, this.map.width, this.map.height,
+      base, this.viewOffset.dx, this.viewOffset.dy, this.viewW, this.viewH, groundW, groundH,
     )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
@@ -676,9 +747,11 @@ export class OfficeEngine {
       }
     }
 
+    // Só céu + nuvens — a skyline (far/near) foi desenhada pra aparecer em
+    // fatias finas de vidro; com a parede de frente removida (ver
+    // isoBake.ts), sobra área aberta grande demais e a repetição da faixa
+    // de prédios ficava com costura visível ("bugando").
     blit(this.sky.sky, 0)
-    blit(this.sky.far, SKY_PARALLAX.far)
-    blit(this.sky.near, SKY_PARALLAX.near)
     ctx.drawImage(
       this.sky.clouds,
       cloudOffset(camX, this.time), 0, vw, vh,
@@ -692,20 +765,32 @@ export class OfficeEngine {
       0, 0, this.viewW * s, this.viewH * s,
     )
 
-    // Zonas: um brilho tênue no chão, sob tudo.
+    // Zonas: um brilho tênue no chão, sob tudo. Um retângulo em mundo
+    // cartesiano vira PARALELOGRAMO na tela iso (transform linear) — desenha
+    // como polígono de 4 pontos em vez de fillRect.
     for (const zone of this.map.zones) {
-      const zx = (zone.x * TILE - camX) * s
-      const zy = (zone.y * TILE - camY) * s
-      const zw = zone.w * TILE * s
-      const zh = zone.h * TILE * s
-      if (zx > this.viewW * s || zy > this.viewH * s || zx + zw < 0 || zy + zh < 0) continue
+      const x0 = zone.x * TILE
+      const y0 = zone.y * TILE
+      const x1 = x0 + zone.w * TILE
+      const y1 = y0 + zone.h * TILE
+      const corners = [
+        this.toIso(x0, y0), this.toIso(x1, y0), this.toIso(x1, y1), this.toIso(x0, y1),
+      ].map((p) => ({ x: (p.x - camX) * s, y: (p.y - camY) * s }))
+      const xs = corners.map((c) => c.x)
+      const ys = corners.map((c) => c.y)
+      if (Math.min(...xs) > vw * s || Math.min(...ys) > vh * s || Math.max(...xs) < 0 || Math.max(...ys) < 0) continue
       ctx.globalAlpha = zone.id === this.currentZone ? 0.14 : 0.05
       ctx.fillStyle = zone.accent
-      ctx.fillRect(zx, zy, zw, zh)
+      ctx.beginPath()
+      ctx.moveTo(corners[0].x, corners[0].y)
+      for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y)
+      ctx.closePath()
+      ctx.fill()
       ctx.globalAlpha = 1
     }
 
-    // Ordenação por profundidade: props e atores no mesmo balde, por baseline.
+    // Ordenação por profundidade isométrica: chave = soma cartesiana x+y do
+    // "pé" (quem está mais para baixo-direita no grid desenha por cima).
     type Drawable = { base: number; draw(): void }
     const queue: Drawable[] = []
 
@@ -713,34 +798,48 @@ export class OfficeEngine {
       const def = PROPS[p.kind]
       const sprite = this.props[p.kind]
       if (!sprite) continue
-      const sx = (p.x - camX) * s
-      const sy = (p.y - camY) * s
+      // O sprite já nasce projetado em iso (`isoProps.ts` — caixa com 3
+      // faces, ou painel em pé pros presos na parede): aqui é só blit plano,
+      // igual ator. `anchor` diz que ponto do canvas corresponde à posição
+      // de mundo `p.x, p.y` (canto norte da pegada); sem `anchor`, cai no
+      // canto superior-esquerdo do canvas (props antigos, ainda achatados).
+      const iso = this.toIso(p.x, p.y)
+      const anchor = def.anchor ?? { x: 0, y: 0 }
+      const sx = (iso.x - camX) * s - anchor.x * s
+      const sy = (iso.y - camY) * s - anchor.y * s
       if (sx > this.viewW * s || sy > this.viewH * s || sx + def.w * s < 0 || sy + def.h * s < 0) continue
       queue.push({
-        base: p.y + (def.baseline ?? def.h),
+        base: p.x + p.y + (def.baseline ?? def.h),
         draw: () => ctx.drawImage(sprite.canvas, sx, sy, def.w * s, def.h * s),
       })
     }
 
     for (const actor of this.actors.values()) {
-      const sx = Math.round(actor.x - FW / 2 - camX) * s
-      const sy = Math.round(actor.y - FH - camY) * s
+      const isoA = this.toIso(actor.x, actor.y)
+      const sx = Math.round(isoA.x - FW / 2 - camX) * s
+      const sy = Math.round(isoA.y - FH - camY) * s
       if (sx > this.viewW * s || sy > this.viewH * s || sx + FW * s < 0 || sy + FH * s < 0) continue
       const key = `${actor.facing}_${actor.anim}`
       const frames = actor.frames[key] ?? actor.frames[`down_${actor.anim}`] ?? actor.frames["down_idle"]
       const fr = frames[actor.frame % frames.length]
+      // Sentado: corta a base do sprite (pernas/pés) e desenha mais embaixo —
+      // some atrás do encosto da cadeira, lendo como "sentado" de verdade em
+      // vez de "de pé do lado da cadeira". A cabeça/torso não mudam de lugar.
+      const sitCrop = actor.seatIndex >= 0 ? SIT_CROP : 0
+      const frameH = FH - sitCrop
+      const drawY = sy + sitCrop * s
       queue.push({
-        base: actor.y,
+        base: actor.x + actor.y,
         draw: () => {
           // Sombra de contato antes do corpo.
           ctx.drawImage(
             this.shadow.canvas,
-            Math.round(actor.x - this.shadow.w / 2 - camX) * s,
-            Math.round(actor.y - 3 - camY) * s,
+            Math.round(isoA.x - this.shadow.w / 2 - camX) * s,
+            Math.round(isoA.y - 3 - camY) * s,
             this.shadow.w * s,
             this.shadow.h * s,
           )
-          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, FH, sx, sy, FW * s, FH * s)
+          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, frameH, sx, drawY, FW * s, frameH * s)
         },
       })
     }
@@ -752,75 +851,78 @@ export class OfficeEngine {
     for (let i = 0; i < this.alive; i++) {
       const p = this.particles[i]
       const t = p.life / p.maxLife
+      const iso = this.toIso(p.x, p.y)
       ctx.globalAlpha = p.kind === 3 ? 0.35 * (1 - t) : 0.8 * (1 - t)
       ctx.fillStyle = p.color
       ctx.fillRect(
-        Math.round(p.x - camX) * s,
-        Math.round(p.y - camY) * s,
+        Math.round(iso.x - camX) * s,
+        Math.round(iso.y - camY) * s,
         p.size * s,
         p.size * s,
       )
     }
     ctx.globalAlpha = 1
 
-    this.renderLighting(camX, camY, s)
+    this.renderMyDeskArrow(camX, camY, s)
+    this.renderDeskLabels(camX, camY, s)
     this.renderNameplates(camX, camY, s)
   }
 
-  /**
-   * Camada de luz: um véu de cor por cima da cena (mais forte à noite),
-   * furado pelas lâmpadas com gradiente radial em `destination-out`.
-   */
-  private renderLighting(camX: number, camY: number, s: number): void {
-    const lc = this.lightCtx
-    const lw = this.lightBuf.width
-    const lh = this.lightBuf.height
-    const half = 0.5 // buffer roda em metade da resolução da viewport
+  /** Seta dourada balançando em cima da própria mesa — só um indicador
+   * visual, não afeta física nem quem senta onde. */
+  private renderMyDeskArrow(camX: number, camY: number, s: number): void {
+    if (!this.myDeskSeatId) return
+    const seat = this.map.seats.find((st) => st.id === this.myDeskSeatId)
+    if (!seat) return
+    const iso = this.toIso(seat.x, seat.y)
+    const bob = Math.sin(this.time * 3) * 3
+    const sx = (iso.x - camX) * s
+    const sy = (iso.y - camY) * s - 34 * s + bob * s
+    if (sx < -40 || sy < -40 || sx > this.viewW * s + 40 || sy > this.viewH * s + 40) return
 
-    // Curva do dia: azul frio de madrugada → neutro ao meio-dia → âmbar à noite.
-    const phase = this.dayPhase
-    const night = Math.max(0, 1 - Math.sin(Math.PI * phase) * 1.35)
-    if (night <= 0.02) return
+    const ctx = this.ctx
+    ctx.save()
+    ctx.fillStyle = "#f0c05a"
+    ctx.strokeStyle = "#2b1e1a"
+    ctx.lineWidth = 1
+    const w = 6 * s
+    const h = 8 * s
+    ctx.beginPath()
+    ctx.moveTo(sx, sy + h) // ponta, apontando pra baixo
+    ctx.lineTo(sx - w, sy)
+    ctx.lineTo(sx - w / 2, sy)
+    ctx.lineTo(sx - w / 2, sy - h * 0.6)
+    ctx.lineTo(sx + w / 2, sy - h * 0.6)
+    ctx.lineTo(sx + w / 2, sy)
+    ctx.lineTo(sx + w, sy)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
 
-    lc.clearRect(0, 0, lw, lh)
-    lc.globalCompositeOperation = "source-over"
-    lc.fillStyle = phase < 0.5 ? "#1b2440" : "#3a2418"
-    lc.globalAlpha = Math.min(0.62, night * 0.7)
-    lc.fillRect(0, 0, lw, lh)
-    lc.globalAlpha = 1
-
-    lc.globalCompositeOperation = "destination-out"
-    for (const light of this.map.lights) {
-      const lx = (light.x - camX) * half
-      const ly = (light.y - camY) * half
-      const r = light.radius * half
-      if (lx + r < 0 || ly + r < 0 || lx - r > lw || ly - r > lh) continue
-      const flick = light.flicker
-        ? 1 + Math.sin(this.time * 9 + light.x) * light.flicker
-        : 1
-      const g = lc.createRadialGradient(lx, ly, 0, lx, ly, r * flick)
-      g.addColorStop(0, "rgba(0,0,0,0.95)")
-      g.addColorStop(0.55, "rgba(0,0,0,0.55)")
-      g.addColorStop(1, "rgba(0,0,0,0)")
-      lc.fillStyle = g
-      lc.fillRect(lx - r, ly - r, r * 2, r * 2)
+  /** Nome de quem senta em cada mesa atribuída — pequeno, acima da mesa,
+   * visível pra qualquer pessoa (não só a dona). */
+  private renderDeskLabels(camX: number, camY: number, s: number): void {
+    if (this.deskLabels.length === 0) return
+    const ctx = this.ctx
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.font = "600 9px -apple-system, system-ui, sans-serif"
+    for (const label of this.deskLabels) {
+      const seat = this.map.seats.find((st) => st.id === label.seatId)
+      if (!seat) continue
+      const iso = this.toIso(seat.x, seat.y)
+      const sx = (iso.x - camX) * s
+      const sy = (iso.y - camY) * s - 26 * s
+      if (sx < -60 || sy < -20 || sx > this.viewW * s + 60 || sy > this.viewH * s + 20) continue
+      const tw = ctx.measureText(label.name).width
+      const bw = tw + 10
+      ctx.fillStyle = "rgba(23,27,33,0.7)"
+      ctx.fillRect(sx - bw / 2, sy - 7, bw, 14)
+      ctx.fillStyle = "#ffffff"
+      ctx.fillText(label.name, sx, sy)
     }
-    // O jogador carrega uma luz fraca — nunca fica no escuro absoluto.
-    if (this.me) {
-      const lx = (this.me.x - camX) * half
-      const ly = (this.me.y - 12 - camY) * half
-      const r = 46 * half
-      const g = lc.createRadialGradient(lx, ly, 0, lx, ly, r)
-      g.addColorStop(0, "rgba(0,0,0,0.6)")
-      g.addColorStop(1, "rgba(0,0,0,0)")
-      lc.fillStyle = g
-      lc.fillRect(lx - r, ly - r, r * 2, r * 2)
-    }
-    lc.globalCompositeOperation = "source-over"
-
-    this.ctx.imageSmoothingEnabled = true // o borrão aqui É o falloff da luz
-    this.ctx.drawImage(this.lightBuf, 0, 0, this.viewW * s, this.viewH * s)
-    this.ctx.imageSmoothingEnabled = false
   }
 
   /** Nomes, status e balões — texto nítido, fora da grade de pixels. */
@@ -830,8 +932,9 @@ export class OfficeEngine {
     ctx.textBaseline = "middle"
 
     for (const actor of this.actors.values()) {
-      const sx = (actor.x - camX) * s
-      const sy = (actor.y - FH - camY) * s
+      const isoA = this.toIso(actor.x, actor.y)
+      const sx = (isoA.x - camX) * s
+      const sy = (isoA.y - FH - camY) * s
       if (sx < -80 || sy < -80 || sx > this.viewW * s + 80 || sy > this.viewH * s + 80) continue
 
       if (actor.say) {
@@ -874,6 +977,22 @@ export class OfficeEngine {
       ctx.fill()
       ctx.fillStyle = "#ffffff"
       ctx.fillText(label, sx + 4, by + 7)
+
+      const badge = pokerBadgeFor(actor.pokerVote, actor.pokerRevealed)
+      if (badge) {
+        const bw2 = 18
+        const bx2 = sx - bw2 / 2
+        const by2 = by - 18
+        ctx.fillStyle = badge.revealed ? "#6c5cf0" : "#2b2b3a"
+        roundRect(ctx, bx2, by2, bw2, 16, 4)
+        ctx.fill()
+        ctx.strokeStyle = "rgba(255,255,255,0.4)"
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.fillStyle = "#ffffff"
+        ctx.font = "700 10px -apple-system, system-ui, sans-serif"
+        ctx.fillText(badge.text, sx, by2 + 8)
+      }
     }
   }
 }

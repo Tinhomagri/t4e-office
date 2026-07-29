@@ -5,6 +5,7 @@
 import type { OfficeMap } from "../map"
 
 import { buildFloor1 } from "./floor1"
+import { buildFloor2 } from "./floor2"
 
 export interface FloorDef {
   /** 1-based — é o número que aparece no painel do elevador. */
@@ -16,7 +17,7 @@ export interface FloorDef {
 
 export const FLOORS: FloorDef[] = [
   { n: 1, label: "Bullpen", build: buildFloor1 },
-  { n: 2, label: "Reunião" },
+  { n: 2, label: "Planning Poker", build: buildFloor2 },
   { n: 3, label: "Copa e lounge" },
   { n: 4, label: "Foco" },
 ]

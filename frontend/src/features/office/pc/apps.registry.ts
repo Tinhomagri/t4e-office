@@ -6,6 +6,8 @@
 import type { ComponentType } from "react"
 
 import { BoardsPage } from "@/features/boards/BoardsPage"
+import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
+import { MyCardPage } from "@/features/office/mycard/MyCardPage"
 import { DashboardDeck } from "@/features/sales/deck/DashboardDeck"
 
 export type AppGroupId = "trabalho" | "comercial" | "marketing" | "sistema"
@@ -38,7 +40,7 @@ const MED = { w: 760, h: 520 }
 export const APPS: AppDef[] = [
   { id: "boards", label: "Boards", group: "trabalho", size: BIG, component: BoardsPage },
   { id: "myday", label: "Meu Dia", group: "trabalho", size: MED, component: null },
-  { id: "poker", label: "Planning Poker", group: "trabalho", size: BIG, component: null },
+  { id: "my-card", label: "Meu Card", group: "trabalho", size: MED, component: MyCardPage },
 
   { id: "comercial", label: "Comercial", group: "comercial", size: BIG, component: DashboardDeck },
   { id: "reports", label: "Relatórios", group: "comercial", size: BIG, component: null },
@@ -52,6 +54,7 @@ export const APPS: AppDef[] = [
   { id: "integrations", label: "Integrações", group: "sistema", size: MED, component: null },
   { id: "avatar", label: "Avatar", group: "sistema", size: BIG, component: null },
   { id: "members", label: "Membros", group: "sistema", size: MED, component: null },
+  { id: "desks", label: "Mesas", group: "sistema", size: MED, component: DesksManagerPage },
   { id: "copilot", label: "Copiloto", group: "sistema", size: MED, component: null },
   { id: "importar", label: "Importar", group: "sistema", size: MED, component: null },
 ]

@@ -15,5 +15,36 @@ window.matchMedia = window.matchMedia || ((query: string) => ({
   dispatchEvent: () => false,
 }))
 
+// jsdom não implementa canvas 2D por padrão; mock para permitir testes de pixel art.
+HTMLCanvasElement.prototype.getContext = function(contextType: string) {
+  if (contextType === "2d") {
+    return {
+      imageSmoothingEnabled: true,
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      fillRect: () => {},
+      strokeRect: () => {},
+      clearRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      fill: () => {},
+      closePath: () => {},
+      arc: () => {},
+      quadraticCurveTo: () => {},
+      // Móveis isométricos colam cada face torta via transform+drawImage
+      // (`isoProps.ts`/`isoBake.ts`) — precisa desse trio a mais.
+      save: () => {},
+      restore: () => {},
+      clip: () => {},
+      setTransform: () => {},
+      drawImage: () => {},
+    } as any
+  }
+  return null
+}
+
 // Desmonta a árvore React entre testes para evitar vazamento de estado no DOM.
 afterEach(() => cleanup())

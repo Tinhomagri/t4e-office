@@ -7,9 +7,10 @@ describe("registry de andares", () => {
     expect(FLOORS.map((f) => f.n)).toEqual([1, 2, 3, 4])
   })
 
-  it("só o andar 1 tem planta; os outros estão em obras", () => {
+  it("andares 1 e 2 têm planta; 3 e 4 estão em obras", () => {
     expect(typeof floorDef(1)?.build).toBe("function")
-    for (const n of [2, 3, 4]) expect(floorDef(n)?.build).toBeUndefined()
+    expect(typeof floorDef(2)?.build).toBe("function")
+    for (const n of [3, 4]) expect(floorDef(n)?.build).toBeUndefined()
   })
 
   it("todo andar tem rótulo não vazio", () => {
@@ -23,7 +24,16 @@ describe("registry de andares", () => {
   })
 
   it("buildFloor recusa andar em obras e andar inexistente", () => {
-    expect(() => buildFloor(2)).toThrow(/em obras/i)
+    expect(() => buildFloor(3)).toThrow(/em obras/i)
     expect(() => buildFloor(99)).toThrow(/inexistente/i)
+  })
+
+  it("buildFloor devolve o mapa do andar 2 (poker)", () => {
+    const map = buildFloor(2)
+    expect(map.seats.filter((s) => s.kind === "poker")).toHaveLength(16)
+  })
+
+  it("buildFloor recusa andar em obras", () => {
+    expect(() => buildFloor(3)).toThrow(/em obras/i)
   })
 })

@@ -26,8 +26,16 @@ describe("ElevatorPanel", () => {
 
   it("marca os andares em obras como desabilitados", () => {
     render(<ElevatorPanel />)
-    expect(screen.getByRole("button", { name: /andar 2/i })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /andar 3/i })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /andar 4/i })).toBeDisabled()
     expect(screen.getAllByText(/em obras/i).length).toBeGreaterThan(0)
+  })
+
+  it("andar 2 (Planning Poker) está destravado e habilitado", () => {
+    render(<ElevatorPanel />)
+    const botao = screen.getByRole("button", { name: /andar 2 — planning poker/i })
+    expect(botao).not.toBeDisabled()
+    expect(screen.getByText(/planning poker/i)).toBeInTheDocument()
   })
 
   it("o andar atual aparece marcado e não é clicável", () => {

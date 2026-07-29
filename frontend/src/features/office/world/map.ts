@@ -37,8 +37,9 @@ export interface LightSource {
   flicker?: number
 }
 
-/** "pc" tem computador; "view" é o guarda-corpo da varanda. */
-export type SeatKind = "pc" | "meeting" | "lounge" | "view"
+/** "pc" tem computador; "view" é o guarda-corpo da varanda; "poker" é a mesa
+ * em U do andar 2 — sentar entra na sessão de Planning Poker ativa. */
+export type SeatKind = "pc" | "meeting" | "lounge" | "view" | "poker"
 
 export interface Seat {
   /**
