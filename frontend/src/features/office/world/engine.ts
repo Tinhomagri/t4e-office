@@ -352,7 +352,8 @@ export class OfficeEngine {
   hoverSeatAt(screenX: number, screenY: number): string | null {
     const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
     const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
-    return nearestSeatedUser([...this.actors.values()], this.map.seats, x, y)
+    const actors = [...this.actors.values()].map((a) => ({ id: a.id, x: a.x, y: a.y }))
+    return nearestSeatedUser(actors, this.map.seats, x, y)
   }
 
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
