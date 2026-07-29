@@ -143,6 +143,7 @@ export function AppShell() {
     setStatus(PRESENCE_ORDER[(PRESENCE_ORDER.indexOf(status) + 1) % PRESENCE_ORDER.length])
 
   const isPoker = location.pathname.startsWith("/app/poker")
+  const isFullBleed = isPoker || location.pathname.startsWith("/app/comercial/atendimento")
 
   return (
     // Estrutura do Jira: a top bar atravessa a tela inteira e a sidebar começa
@@ -319,11 +320,16 @@ export function AppShell() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: EASE }}
           className={cx(
-            "min-w-0 flex-1 overflow-y-auto bg-paper scrollbar-slim dark:bg-ink-950",
-            isPoker ? "p-0" : "px-4 py-5 sm:px-6 sm:py-6",
+            "flex min-w-0 flex-1 flex-col bg-paper scrollbar-slim dark:bg-ink-950",
+            // Full-bleed (inbox, poker) gerencia a própria rolagem por dentro.
+            // Deixar `overflow-y-auto` aqui fazia a tela inteira crescer e a
+            // última linha da lista ficar cortada abaixo da viewport.
+            isFullBleed
+              ? "overflow-hidden p-0"
+              : "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6",
           )}
         >
-          <div className={cx("w-full", isPoker && "h-full")}>
+          <div className={cx("w-full", isFullBleed && "flex min-h-0 flex-1 flex-col")}>
             <Outlet />
           </div>
         </motion.main>

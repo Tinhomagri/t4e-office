@@ -35,6 +35,29 @@ export interface Project {
   template?: ProjectTemplate
 }
 
+// /projects/<id>/ — projeto com os campos da aba "Geral" da configuração do quadro.
+// A lista (/projects/) devolve só o `Project` enxuto acima.
+export interface ProjectDetail extends Project {
+  description: string
+  category: string
+  avatar_emoji: string
+  avatar_color: string
+  avatar_url: string | null
+  lead_id: string | null
+  default_assignee_id: string | null
+}
+
+export interface UpdateProjectInput {
+  name?: string
+  key?: string
+  description?: string
+  category?: string
+  avatar_emoji?: string
+  avatar_color?: string
+  lead_id?: string | null
+  default_assignee_id?: string | null
+}
+
 export interface Card {
   id: string
   ref: string // ex.: MIA-142
@@ -195,6 +218,8 @@ export interface WorkflowStatus {
   color: string
   order: number
   is_default: boolean
+  // null = coluna sem limite de WIP.
+  wip_limit: number | null
 }
 
 export interface CreateWorkflowStatusInput {
@@ -209,7 +234,51 @@ export interface UpdateWorkflowStatusInput {
   category?: WorkflowCategory
   color?: string
   order?: number
+  wip_limit?: number | null
 }
+
+// ---- Configuração do quadro (swimlanes, layout do card, cores) ----
+
+export type SwimlaneMode = "none" | "epic" | "assignee" | "priority" | "subtask"
+
+export type CardColorRule = "none" | "priority" | "issue_type" | "assignee" | "epic"
+
+// Chaves aceitas em `card_fields`. Espelha BoardConfigModel.AVAILABLE_CARD_FIELDS
+// no backend; `summary` não entra porque é sempre visível.
+export type CardFieldKey =
+  | "key"
+  | "issue_type"
+  | "priority"
+  | "assignee"
+  | "labels"
+  | "epic"
+  | "due_date"
+  | "start_date"
+  | "story_points"
+  | "status"
+  | "reporter"
+  | "subtask_progress"
+  | "created_at"
+  | "updated_at"
+  | "cover_image"
+
+export interface BoardConfig {
+  project_id: string
+  swimlane_mode: SwimlaneMode
+  card_fields: CardFieldKey[]
+  card_color_rule: CardColorRule
+  card_color_map: Record<string, string>
+  // 0 = nunca esconder cards concluídos.
+  hide_done_after_days: number
+  sprints_enabled: boolean
+  estimation_enabled: boolean
+  // Devolvido pelo servidor para o front montar a lista de toggles.
+  available_card_fields: CardFieldKey[]
+}
+
+export type UpdateBoardConfigInput = Partial<
+  Omit<BoardConfig, "project_id" | "available_card_fields">
+>
 
 export interface SavedFilter {
   id: string

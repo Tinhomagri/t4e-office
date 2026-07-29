@@ -14,6 +14,11 @@ from contexts.projects.interface.api.automation_views import (
     AutomationRuleRunView,
     AutomationRunLogView,
 )
+from contexts.projects.interface.api.board_config_views import (
+    BoardConfigView,
+    ProjectDetailView,
+    WorkflowStatusReorderView,
+)
 from contexts.projects.interface.api.card_views import (
     CardCommentView,
     CardDetailView,
@@ -73,6 +78,18 @@ from contexts.projects.interface.api.views import ProjectListCreateView
 
 urlpatterns = [
     path("projects/", ProjectListCreateView.as_view(), name="project-list-create"),
+    # Configuração de quadro/projeto (aba Geral + swimlanes/layout/cores)
+    path("projects/<uuid:project_id>/", ProjectDetailView.as_view(), name="project-detail"),
+    path(
+        "projects/<uuid:project_id>/board-config/",
+        BoardConfigView.as_view(),
+        name="board-config",
+    ),
+    path(
+        "projects/<uuid:project_id>/workflow-statuses/reorder/",
+        WorkflowStatusReorderView.as_view(),
+        name="workflow-status-reorder",
+    ),
     path(
         "projects/<uuid:project_id>/cards/",
         CardListCreateView.as_view(),
