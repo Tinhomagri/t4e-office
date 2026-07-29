@@ -34,6 +34,8 @@ _TYPE = [
     "post", "peca", "campanha", "artigo", "email",
 ]
 _PRIORITY = ["low", "medium", "high", "urgent"]
+# Desfecho do card — espelha CardResolution no domínio.
+_RESOLUTION = ["done", "wont_do", "duplicate", "cannot_reproduce", "incomplete"]
 _SPRINT_STATUS = ["planned", "active", "closed"]
 
 
@@ -84,6 +86,18 @@ class UpdateCardSerializer(serializers.Serializer):
     )
     channel = serializers.CharField(required=False, allow_blank=True, max_length=30)
     publish_date = serializers.DateField(required=False, allow_null=True)
+    # `allow_blank` para permitir limpar o desfecho ("" → None no caso de uso) e
+    # reabrir o card sem precisar mexer no status.
+    resolution = serializers.ChoiceField(
+        choices=_RESOLUTION, required=False, allow_blank=True, allow_null=True
+    )
+    original_estimate_seconds = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0
+    )
+    remaining_estimate_seconds = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0
+    )
+    archived = serializers.BooleanField(required=False)
 
 
 class CardSerializer(serializers.Serializer):
@@ -112,6 +126,12 @@ class CardSerializer(serializers.Serializer):
     labels = serializers.ListField(child=serializers.CharField())
     channel = serializers.CharField(allow_blank=True, default="")
     publish_date = serializers.DateField(allow_null=True, default=None)
+    resolution = serializers.CharField(allow_null=True, default=None)
+    resolved_at = serializers.DateTimeField(allow_null=True, default=None)
+    original_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
+    remaining_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
+    archived = serializers.BooleanField(default=False)
+    archived_at = serializers.DateTimeField(allow_null=True, default=None)
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

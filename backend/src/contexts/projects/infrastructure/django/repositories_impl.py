@@ -5,6 +5,7 @@ from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.domain.entities.card import (
     Card,
     CardPriority,
+    CardResolution,
     CardStatus,
     CardType,
 )
@@ -31,6 +32,7 @@ from contexts.projects.infrastructure.django.models import (
     IssueLinkModel,
     ProjectModel,
     SprintModel,
+    WorkflowStatusModel,
 )
 
 
@@ -71,6 +73,13 @@ def _card_to_entity(row: CardModel) -> Card:
         labels=list(row.labels or []),
         channel=row.channel,
         publish_date=row.publish_date,
+        # "" no banco (CharField não-nulo) ↔ None no domínio: a ausência de
+        # desfecho é um estado real, não uma string vazia.
+        resolution=CardResolution(row.resolution) if row.resolution else None,
+        resolved_at=row.resolved_at,
+        original_estimate_seconds=row.original_estimate_seconds,
+        remaining_estimate_seconds=row.remaining_estimate_seconds,
+        archived_at=row.archived_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -159,11 +168,20 @@ class DjangoCardRepository(CardRepository):
             labels=card.labels,
             channel=card.channel,
             publish_date=card.publish_date,
+            resolution=card.resolution.value if card.resolution else "",
+            resolved_at=card.resolved_at,
+            original_estimate_seconds=card.original_estimate_seconds,
+            remaining_estimate_seconds=card.remaining_estimate_seconds,
+            archived_at=card.archived_at,
         )
         return _card_to_entity(row)
 
-    def list_by_project(self, *, project_id: str) -> list[Card]:
+    def list_by_project(
+        self, *, project_id: str, include_archived: bool = False
+    ) -> list[Card]:
         rows = CardModel.objects.filter(project_id=project_id)
+        if not include_archived:
+            rows = rows.filter(archived_at__isnull=True)
         return [_card_to_entity(r) for r in rows]
 
     def get(self, *, card_id: str) -> Card | None:
@@ -191,6 +209,11 @@ class DjangoCardRepository(CardRepository):
             labels=card.labels,
             channel=card.channel,
             publish_date=card.publish_date,
+            resolution=card.resolution.value if card.resolution else "",
+            resolved_at=card.resolved_at,
+            original_estimate_seconds=card.original_estimate_seconds,
+            remaining_estimate_seconds=card.remaining_estimate_seconds,
+            archived_at=card.archived_at,
         )
         row = CardModel.objects.get(id=card.id)
         return _card_to_entity(row)
@@ -349,3 +372,26 @@ class DjangoWorkspaceAccess(WorkspaceAccess):
         return MembershipModel.objects.filter(
             workspace_id=workspace_id, user_id=user_id
         ).exists()
+
+
+class DjangoStatusCategoryResolver:
+    """Resolve a categoria da coluna consultando o workflow do projeto.
+
+    Fallback para os slugs canônicos quando o projeto não tem WorkflowStatus na
+    tabela: projetos criados antes do workflow configurável seguem os defaults
+    (`done` é concluído; `publicado`, no template de marketing, também).
+    """
+
+    _FALLBACK_DONE = {"done", "publicado"}
+
+    def category_of(self, *, project_id: str, status: str) -> str | None:
+        row = (
+            WorkflowStatusModel.objects.filter(project_id=project_id, slug=status)
+            .values_list("category", flat=True)
+            .first()
+        )
+        if row is not None:
+            return row
+        if not WorkflowStatusModel.objects.filter(project_id=project_id).exists():
+            return "done" if status in self._FALLBACK_DONE else "todo"
+        return None

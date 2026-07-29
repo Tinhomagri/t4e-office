@@ -1,7 +1,10 @@
 """Caso de uso: atualização de card (editar, mover de coluna, atribuir)."""
+from datetime import UTC, datetime
+
 from contexts.projects.domain.entities.card import (
     Card,
     CardPriority,
+    CardResolution,
     CardStatus,
     CardType,
 )
@@ -11,6 +14,9 @@ from contexts.projects.domain.repositories.history_repository import HistoryRepo
 from contexts.projects.domain.repositories.project_repository import (
     ProjectRepository,
     WorkspaceAccess,
+)
+from contexts.projects.domain.repositories.workflow_status_repository import (
+    StatusCategoryResolver,
 )
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
@@ -34,6 +40,10 @@ _TRACKED = [
     "labels",
     "channel",
     "publish_date",
+    "resolution",
+    "original_estimate_seconds",
+    "remaining_estimate_seconds",
+    "archived_at",
 ]
 
 
@@ -55,6 +65,14 @@ def _repr(card: Card) -> dict[str, str]:
         "labels": ", ".join(card.labels),
         "channel": card.channel,
         "publish_date": "" if card.publish_date is None else str(card.publish_date),
+        "resolution": card.resolution.value if card.resolution else "",
+        "original_estimate_seconds": (
+            "" if card.original_estimate_seconds is None else str(card.original_estimate_seconds)
+        ),
+        "remaining_estimate_seconds": (
+            "" if card.remaining_estimate_seconds is None else str(card.remaining_estimate_seconds)
+        ),
+        "archived_at": "" if card.archived_at is None else str(card.archived_at),
     }
 
 
@@ -70,11 +88,15 @@ class UpdateCard:
         card_repository: CardRepository,
         workspace_access: WorkspaceAccess,
         history_repository: HistoryRepository,
+        status_category_resolver: StatusCategoryResolver | None = None,
     ):
         self.project_repository = project_repository
         self.card_repository = card_repository
         self.workspace_access = workspace_access
         self.history_repository = history_repository
+        # Opcional: sem ele a resolução automática não roda e o desfecho só muda
+        # quando o cliente manda explicitamente.
+        self.status_category_resolver = status_category_resolver
 
     def execute(
         self,
@@ -99,6 +121,10 @@ class UpdateCard:
         labels=_UNSET,
         channel=_UNSET,
         publish_date=_UNSET,
+        resolution=_UNSET,
+        original_estimate_seconds=_UNSET,
+        remaining_estimate_seconds=_UNSET,
+        archived=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
         if card is None:
@@ -149,6 +175,25 @@ class UpdateCard:
             card.channel = channel
         if publish_date is not _UNSET:
             card.publish_date = publish_date
+        if original_estimate_seconds is not _UNSET:
+            card.original_estimate_seconds = original_estimate_seconds
+        if remaining_estimate_seconds is not _UNSET:
+            card.remaining_estimate_seconds = remaining_estimate_seconds
+        if archived is not _UNSET:
+            # Idempotente: rearquivar não reescreve a data original.
+            if archived and card.archived_at is None:
+                card.archived_at = datetime.now(UTC)
+            elif not archived:
+                card.archived_at = None
+
+        # Desfecho. O explícito do cliente vence; na ausência dele, mover para uma
+        # coluna `done` resolve como entregue e sair dela reabre. `resolved_at`
+        # anda sempre junto — o domínio recusa um sem o outro.
+        if resolution is not _UNSET:
+            card.resolution = CardResolution(resolution) if resolution else None
+            card.resolved_at = datetime.now(UTC) if card.resolution else None
+        elif status is not _UNSET:
+            self._sync_resolution_with_status(card)
 
         # Revalida invariantes do domínio após a mutação.
         card.__post_init__()
@@ -170,3 +215,20 @@ class UpdateCard:
                 )
 
         return updated
+
+    def _sync_resolution_with_status(self, card: Card) -> None:
+        """Alinha o desfecho à categoria da coluna de destino."""
+        if self.status_category_resolver is None:
+            return
+        category = self.status_category_resolver.category_of(
+            project_id=card.project_id, status=card.status.value
+        )
+        if category == "done":
+            # Não sobrescreve um desfecho já escolhido (ex.: "não será feito"):
+            # a pessoa pode arrastar o card para Concluído *depois* de marcar isso.
+            if card.resolution is None:
+                card.resolution = CardResolution.DONE
+                card.resolved_at = datetime.now(UTC)
+        elif category is not None and card.resolution is not None:
+            card.resolution = None
+            card.resolved_at = None

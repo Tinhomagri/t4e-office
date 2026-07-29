@@ -31,6 +31,9 @@ class ProjectModel(models.Model):
     # Lead do projeto e responsável padrão de cards novos (FK por id, como workspace).
     lead_id = models.UUIDField(null=True, blank=True)
     default_assignee_id = models.UUIDField(null=True, blank=True)
+    # Projeto arquivado sai das listas e do seletor, mas continua acessível por
+    # link direto — deletar perdia todo o histórico de decisão junto.
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -112,6 +115,13 @@ class CardModel(models.Model):
         ("high", "Alta"),
         ("urgent", "Urgente"),
     ]
+    RESOLUTION_CHOICES = [
+        ("done", "Entregue"),
+        ("wont_do", "Não será feito"),
+        ("duplicate", "Duplicado"),
+        ("cannot_reproduce", "Não reproduzido"),
+        ("incomplete", "Incompleto"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(
@@ -182,6 +192,17 @@ class CardModel(models.Model):
     # Observação livre de quem está com o card em "Em andamento" — só o
     # assignee edita. Mostrada no balão de hover do escritório virtual.
     working_note = models.TextField(blank=True, default="")
+    # Desfecho: "está em Concluído" e "foi entregue" são coisas diferentes. Sem
+    # isto, card cancelado e card entregue pesam igual na velocity.
+    resolution = models.CharField(
+        max_length=20, choices=RESOLUTION_CHOICES, blank=True, default="", db_index=True
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    # Tempo em segundos, para casar com WorklogModel.time_seconds.
+    original_estimate_seconds = models.PositiveIntegerField(null=True, blank=True)
+    remaining_estimate_seconds = models.PositiveIntegerField(null=True, blank=True)
+    # Arquivado sai do board e dos relatórios, mas preserva o histórico.
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

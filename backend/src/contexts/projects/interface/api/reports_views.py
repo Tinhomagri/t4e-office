@@ -53,12 +53,20 @@ def _burndown(sprints: list, cards: list) -> dict:
         remaining = round(total_pts * (1 - i / max(days - 1, 1)), 1)
         ideal.append({"date": d.isoformat(), "points": remaining})
 
-    # Actual: conta pontos de cards concluídos por dia (aproximação via updated_at)
+    # Actual: pontos entregues por dia. Conta por DESFECHO, não por coluna: um
+    # card cancelado ("não será feito") está em Concluído mas não foi entregue, e
+    # somá-lo achatava a linha como se a equipe tivesse produzido.
+    # `resolved_at` é o instante real da entrega — `updated_at` mudava a cada
+    # edição posterior e movia a entrega de dia.
     done_by_day: dict[str, float] = {}
     for c in sprint_cards:
-        if c.status == "done" and c.updated_at:
-            day = c.updated_at.date().isoformat()
-            done_by_day[day] = done_by_day.get(day, 0) + (c.points or 0)
+        if not _is_delivered(c):
+            continue
+        when = c.resolved_at or c.updated_at
+        if when is None:
+            continue
+        day = when.date().isoformat()
+        done_by_day[day] = done_by_day.get(day, 0) + (c.points or 0)
 
     actual = []
     remaining = float(total_pts)
@@ -74,6 +82,18 @@ def _burndown(sprints: list, cards: list) -> dict:
     }
 
 
+def _is_delivered(card) -> bool:
+    """O card conta como trabalho entregue?
+
+    Preferimos o desfecho quando ele existe. Cards antigos sem desfecho caem no
+    status — o backfill da migration 0023 cobre o histórico, mas um card criado
+    fora do fluxo normal ainda pode chegar aqui sem `resolution`.
+    """
+    if card.resolution is not None:
+        return card.resolution.counts_as_delivered
+    return card.status.value == "done"
+
+
 # ── Velocidade ────────────────────────────────────────────────────────────────
 
 def _velocity(sprints: list, cards: list) -> list:
@@ -84,7 +104,7 @@ def _velocity(sprints: list, cards: list) -> list:
         pts = sum(
             c.points or 0
             for c in cards
-            if str(c.sprint_id) == str(s.id) and c.status == "done"
+            if str(c.sprint_id) == str(s.id) and _is_delivered(c)
         )
         committed = sum(c.points or 0 for c in cards if str(c.sprint_id) == str(s.id))
         result.append({
