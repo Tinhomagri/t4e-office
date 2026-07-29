@@ -37,7 +37,8 @@ import {
   X,
   Zap,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { forwardRef, useEffect, useMemo, useState } from "react"
+import type { Ref } from "react"
 import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
@@ -1399,17 +1400,21 @@ function QuickAdd({
 
 // ─── card components ──────────────────────────────────────────────────────────
 
-function DraggableCard({
-  card,
-  members,
-  onOpen,
-  onDone,
-}: {
+function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
+  return (node: T) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") ref(node)
+      else if (ref && typeof ref === "object") (ref as { current: T }).current = node
+    }
+  }
+}
+
+const DraggableCard = forwardRef<HTMLDivElement, {
   card: Card
   members: Member[]
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
-}) {
+}>(function DraggableCard({ card, members, onOpen, onDone }, forwardedRef) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
   // Enquanto QUALQUER card está sendo arrastado, desligamos a animação de layout:
   // ela reflui os vizinhos a cada frame do ponteiro (e quando o indicador de drop
@@ -1419,7 +1424,7 @@ function DraggableCard({
   const dragActive = active != null
   return (
     <motion.div
-      ref={setNodeRef}
+      ref={mergeRefs<HTMLDivElement>(setNodeRef, forwardedRef)}
       {...attributes}
       {...listeners}
       layout={dragActive ? false : "position"}
@@ -1441,7 +1446,7 @@ function DraggableCard({
       <CardCell card={card} members={members} onDone={onDone} />
     </motion.div>
   )
-}
+})
 
 export function CardCell({
   card,
