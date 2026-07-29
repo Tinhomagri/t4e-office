@@ -4,6 +4,7 @@ import { nearestSeatedUser } from "./hover"
 
 const SEATS = [
   { x: 100, y: 100, kind: "pc" },
+  { x: 300, y: 300, kind: "pc" },
   { x: 200, y: 200, kind: "poker" },
 ]
 
@@ -14,8 +15,8 @@ describe("nearestSeatedUser", () => {
   })
 
   it("ignora atores de pé (não perto de nenhum assento)", () => {
-    const actors = [{ id: "u1", x: 300, y: 300 }]
-    expect(nearestSeatedUser(actors, SEATS, 300, 300)).toBeNull()
+    const actors = [{ id: "u1", x: 500, y: 500 }]
+    expect(nearestSeatedUser(actors, SEATS, 500, 500)).toBeNull()
   })
 
   it("ignora assento de poker (kind !== pc)", () => {
@@ -30,7 +31,7 @@ describe("nearestSeatedUser", () => {
 
   it("com dois candidatos sentados, escolhe o mais perto", () => {
     const actors = [
-      { id: "longe", x: 200, y: 200 },
+      { id: "longe", x: 300, y: 300 },
       { id: "perto", x: 100, y: 100 },
     ]
     expect(nearestSeatedUser(actors, SEATS, 102, 100)).toBe("perto")
