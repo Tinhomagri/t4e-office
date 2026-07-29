@@ -391,7 +391,7 @@ export function CardDrawer({
               {parent ? (
                 <span
                   className="inline-flex max-w-full items-center gap-1 truncate rounded px-1.5 py-0.5 text-xs font-medium text-white"
-                  style={{ backgroundColor: parent.epic_color || "#6b7280" }}
+                  style={{ backgroundColor: parent.epic_color || "#626F86" }}
                   title={parent.title}
                 >
                   <span className="font-mono">{parent.ref}</span>

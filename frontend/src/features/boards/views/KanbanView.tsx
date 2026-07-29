@@ -10,10 +10,9 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-  useDndContext,
 } from "@dnd-kit/core"
 import { useQueryClient } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,7 +41,7 @@ import type { Ref } from "react"
 import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
-import { EASE, dropZone, liftCard, popCheck, settleSpring } from "@/shared/lib/motion"
+import { cardFade, dragLift, dropFlight, popCheck, settleSpring } from "@/shared/lib/motion"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
 import { useBoardPrefs, colKey } from "../board.prefs.store"
@@ -50,7 +49,6 @@ import type { SwimlaneMode } from "@/features/workspace/workspace.types"
 import {
   ColoredAvatar,
   InitialsDot,
-  PRIORITY_BAR,
   PRIORITY_LABEL,
   STATUS_LABEL,
   TYPE_COLOR,
@@ -152,6 +150,9 @@ export function KanbanView({
   )
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  // O voo do clone é uma animação WAAPI de duração fixa, fora do alcance do
+  // framer: sem este guarda ele ignoraria `prefers-reduced-motion`.
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     const active = sprints?.find((s) => s.status === "active")
@@ -406,17 +407,22 @@ export function KanbanView({
                   <AddColumn
                     projectId={projectId}
                     onCreate={(name) =>
-                      createWorkflowStatus.mutateAsync({ name, category: "todo", color: "#6b7280" })
+                      createWorkflowStatus.mutateAsync({ name, category: "todo", color: "#626F86" })
                     }
                   />
                 </div>
               )}
-              <DragOverlay dropAnimation={null}>
+              {/* `key` e `id` são obrigatórios: o AnimationManager do dnd-kit só
+                  segura o clone durante o voo de drop se o filho tiver os dois —
+                  sem eles a animação era descartada e o card teleportava. */}
+              <DragOverlay dropAnimation={reduceMotion ? null : dropFlight}>
                 {activeCard ? (
                   <motion.div
-                    initial={{ scale: 1, rotate: 0 }}
-                    animate={{ scale: 1.04, rotate: -2.5 }}
-                    transition={liftCard}
+                    key={activeCard.id}
+                    id={activeCard.id}
+                    initial={{ scale: 1 }}
+                    animate={{ scale: 1.02 }}
+                    transition={dragLift}
                     className="cursor-grabbing"
                   >
                     <CardCell card={activeCard} members={members ?? []} dragging />
@@ -910,7 +916,7 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: status })
   const totalPoints = cards.reduce((acc, c) => acc + (c.points ?? 0), 0)
   const displayLabel = label ?? (STATUS_LABEL[status as CardStatus] ?? status)
-  const displayColor = color ?? "#6b7280"
+  const displayColor = color ?? "#626F86"
 
   // Colapso segue local: é preferência de visualização de cada pessoa, ao
   // contrário do WIP, que é regra do time e vem do WorkflowStatus.
@@ -953,22 +959,26 @@ function Column({
   }
 
   return (
-    <motion.div
+    // Sem `motion` nem `scale` no drop: escalar o painel arrastava junto o header
+    // e todos os cards de dentro. A troca de cor/borda abaixo (transição CSS) já
+    // diz "solta aqui" sem mover nada — e sai o `will-change` permanente, que
+    // mantinha uma camada de composição por coluna sem necessidade.
+    <div
       ref={setNodeRef}
-      variants={dropZone}
-      animate={isOver ? "over" : "idle"}
       className={cx(
-        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out will-change-transform",
+        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
         compact ? "max-h-[300px]" : "max-h-[calc(100vh-22rem)]",
         isOver
           ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow"
           : overWip
             ? "border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10"
-            : "border-transparent bg-paper-100/70 dark:bg-ink-900/60",
+            // Opaco, não `/60`: com alpha a coluna se misturava à página e o board
+            // perdia a leitura de "painel". Um passo acima da página, como no Jira.
+            : "border-transparent bg-paper-100/70 dark:bg-ink-900",
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+      <div className="group/head flex items-center justify-between gap-2 px-3 pt-3 pb-2">
         <div className="flex min-w-0 items-center gap-2">
           <button
             onClick={() => toggleCollapse(key)}
@@ -991,16 +1001,20 @@ function Column({
               className="w-28 rounded border border-brand-300 bg-paper dark:bg-ink-900 px-1 py-0.5 text-[12px] font-bold uppercase tracking-wider text-ink dark:text-paper outline-none"
             />
           ) : (
-            <span className="truncate text-[12px] font-bold uppercase tracking-wider text-paper-600 dark:text-paper-400">
+            // Sem uppercase + bold + tracking: o Jira usa o rótulo em caixa
+            // normal, e o peso todo no header competia com o título dos cards.
+            <span className="truncate text-[13px] font-medium text-paper-600 dark:text-paper-300">
               {displayLabel}
             </span>
           )}
           <span
             className={cx(
               "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-semibold",
+              // Fora do estouro de WIP a contagem é texto solto, sem pílula: no
+              // Jira ela é informação de apoio, não um badge disputando atenção.
               overWip
-                ? "bg-red-100 text-red-700"
-                : "bg-paper-200 dark:bg-ink-800 text-paper-600 dark:text-paper-400",
+                ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                : "text-paper-400",
             )}
             title={wipLimit != null ? `${cards.length} de ${wipLimit} (limite WIP)` : undefined}
           >
@@ -1010,7 +1024,17 @@ function Column({
             <span className="shrink-0 text-[10px] font-medium text-paper-400 tabular">peso {totalPoints}</span>
           )}
         </div>
-        <div className="relative flex items-center gap-0.5">
+        {/* Ações só no hover/foco da coluna (como no Jira): dois ícones fixos por
+            coluna somavam mais controles que conteúdo num board com 5 colunas.
+            `focus-visible:opacity-100` mantém o acesso por teclado. */}
+        <div
+          className={cx(
+            "relative flex items-center gap-0.5 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100",
+            // Com o menu aberto tem de continuar visível: o dropdown é filho
+            // deste wrapper e sairia da tela junto ao tirar o mouse.
+            menu ? "opacity-100" : "opacity-0",
+          )}
+        >
           <button
             onClick={onAddDetailed}
             className="grid size-6 place-items-center rounded-md text-paper-400 transition-colors hover:bg-paper-200 dark:hover:bg-ink-700 hover:text-ink dark:hover:text-paper"
@@ -1075,25 +1099,9 @@ function Column({
         </div>
       </div>
 
-      {/* Drop zone hint — entra/sai animado */}
-      <AnimatePresence initial={false}>
-        {isOver && (
-          <motion.div
-            key="drop-hint"
-            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.18, ease: EASE }}
-            className="mx-2 overflow-hidden rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 py-2 text-center text-xs font-medium text-brand-500 dark:bg-brand-900/20"
-          >
-            Soltar aqui
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Card list */}
       <div className="flex min-h-[60px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
-        <AnimatePresence mode="popLayout" initial={false}>
+        <AnimatePresence initial={false}>
           {cards.map((card) => (
             <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
           ))}
@@ -1112,7 +1120,7 @@ function Column({
       <div className="p-2 pt-0">
         <QuickAdd projectId={projectId} status={status} sprintId={sprintId} />
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -1426,34 +1434,42 @@ const DraggableCard = forwardRef<HTMLDivElement, {
   onDone?: (cardId: string) => void
 }>(function DraggableCard({ card, members, onOpen, onDone }, forwardedRef) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
-  // Enquanto QUALQUER card está sendo arrastado, desligamos a animação de layout:
-  // ela reflui os vizinhos a cada frame do ponteiro (e quando o indicador de drop
-  // aparece), o que causava o "tremido". No drop, `active` volta a null e a
-  // animação religa, fazendo o card deslizar suavemente para a nova coluna.
-  const { active } = useDndContext()
-  const dragActive = active != null
   return (
     <motion.div
       ref={mergeRefs<HTMLDivElement>(setNodeRef, forwardedRef)}
       {...attributes}
       {...listeners}
-      layout={dragActive ? false : "position"}
-      layoutId={card.id}
-      initial={{ opacity: 0, scale: 0.97 }}
-      // O card de origem "esvazia" enquanto o clone é carregado no overlay:
-      // encolhe e apaga, como se tivesse sido retirado do lugar.
-      animate={{
-        opacity: isDragging ? 0.35 : 1,
-        scale: isDragging ? 0.96 : 1,
-        filter: isDragging ? "grayscale(0.4)" : "grayscale(0)",
-      }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      // Assentamento elástico no drop (quando religa o layout).
-      transition={settleSpring}
+      // Uma única autoridade sobre o transform. Antes havia três disputando o
+      // mesmo elemento — `layoutId` (FLIP de shared element entre colunas),
+      // `layout="position"` e o `mode="popLayout"` do AnimatePresence —, e o
+      // resultado era o card tremendo e saltando no drop. Quem move o card de
+      // uma coluna para a outra agora é só o voo do clone no DragOverlay; aqui
+      // ficam apenas entrada e saída da lista.
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={cardFade}
       onClick={() => onOpen(card)}
       className="cursor-grab touch-none active:cursor-grabbing"
     >
-      <CardCell card={card} members={members} onDone={onDone} />
+      {/* Slot fantasma: o card sai de cena e fica o buraco do tamanho exato,
+          então a coluna não reflui durante o arrasto. `visibility` (e não
+          `display`) preserva a altura, e o clone no cursor é o único conteúdo
+          visível — sem cópia pálida competindo com ele. */}
+      <div
+        className={cx(
+          // Transição nas cores: sem isto a moldura tracejada piscava de uma vez
+          // no primeiro frame do arrasto.
+          "rounded-md border border-dashed transition-colors duration-150",
+          isDragging
+            ? "border-paper-300 dark:border-ink-600 bg-paper-100/50 dark:bg-ink-900/40"
+            : "border-transparent",
+        )}
+      >
+        <div className={cx(isDragging && "invisible")}>
+          <CardCell card={card} members={members} onDone={onDone} />
+        </div>
+      </div>
     </motion.div>
   )
 })
@@ -1485,22 +1501,19 @@ export function CardCell({
       className={cx(
         "group relative overflow-hidden rounded-md border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
         "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
-        "hover:-translate-y-1 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
+        // Levantar 4px a cada hover fazia a coluna inteira "respirar" ao passar o
+        // mouse; 2px já dá o retorno sem agitar o board.
+        "hover:-translate-y-0.5 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
         "active:translate-y-0 active:shadow-card active:duration-75",
         dragging && "shadow-pop ring-1 ring-ink/10",
         isEpic ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800" : "border-paper-200 dark:border-ink-700",
         isDone && "opacity-60",
       )}
     >
-      {/* Barra de prioridade (cor cheia à esquerda) — engrossa no hover */}
-      <span
-        className={cx(
-          "absolute inset-y-0 left-0 w-1 origin-left transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-[2.2]",
-          PRIORITY_BAR[card.priority],
-        )}
-      />
-
-      <div className="px-3 py-2.5 pl-4">
+      {/* Sem barra de prioridade: o sinal já vem do PriorityIcon no rodapé, e a
+          faixa colorida cheia (que ainda engrossava no hover) era o que fazia o
+          board parecer carregado ao lado do Jira. */}
+      <div className="px-3 py-2.5">
         {/* Título + checkbox de conclusão */}
         <div className="flex items-start gap-2">
           {onDone && (
