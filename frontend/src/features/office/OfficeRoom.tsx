@@ -16,7 +16,7 @@ import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
-import { isMyDesk } from "./pc/desk"
+import { isMyDesk, myDeskId } from "./pc/desk"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
 import { PokerConsolePanel } from "./poker/PokerConsolePanel"
@@ -148,6 +148,7 @@ export function OfficeRoom({
     engineRef.current = engine
 
     engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
+    engine.setMyDesk(me?.id ? myDeskId(me.id, map.seats) : null)
 
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect

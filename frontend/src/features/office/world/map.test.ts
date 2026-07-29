@@ -11,10 +11,11 @@ describe("assentos", () => {
   })
 
   it("id deriva do tile do assento, não do índice do array", () => {
-    // Primeira baia, coluna 8: a cadeira do lado "cubicle" cai no tile (9,4),
-    // a do lado "cubicleFlip" em (10,4) — as duas na fileira do corredor.
+    // Primeira baia, coluna 8: assento da fileira de cima cai no tile (9,4),
+    // o da fileira de baixo em (10,10) — mesma orientação, corredor largo
+    // entre as duas.
     expect(map.seats.some((s) => s.id === "ws-9-4")).toBe(true)
-    expect(map.seats.some((s) => s.id === "ws-10-4")).toBe(true)
+    expect(map.seats.some((s) => s.id === "ws-10-10")).toBe(true)
   })
 
   it("baias são kind 'pc' — 30 no total", () => {

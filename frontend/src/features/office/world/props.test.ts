@@ -34,9 +34,10 @@ describe("props novos do bullpen", () => {
 })
 
 describe("baia", () => {
-  it("ocupa 4×3 tiles", () => {
-    expect(PROPS.cubicle.w).toBe(4 * TILE)
-    expect(PROPS.cubicle.h).toBe(3 * TILE)
+  it("ocupa 4×3 tiles de colisão — canvas (w/h) agora é o losango iso projetado, maior que a pegada", () => {
+    const solid = PROPS.cubicle.solid!
+    expect(solid.w).toBe(4 * TILE)
+    expect(solid.h).toBeLessThan(3 * TILE) // fileira de baixo livre, é a entrada
   })
 
   it("deixa a faixa de baixo livre — é por onde se entra na baia", () => {
@@ -58,7 +59,7 @@ describe("baia", () => {
 
 describe("portas do elevador", () => {
   it("ocupam a largura da cabine (4 tiles) e bloqueiam", () => {
-    expect(PROPS.elevatorDoors.w).toBe(4 * TILE)
+    expect(PROPS.elevatorDoors.solid!.w).toBe(4 * TILE)
     expect(PROPS.elevatorDoors.solid).toBeTruthy()
   })
 })

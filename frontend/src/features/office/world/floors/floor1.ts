@@ -1,20 +1,29 @@
-// Andar 1 — bullpen compacto.
+// Andar 1 — bullpen em sala única: hall do elevador de um lado, 15 pares de
+// baia do outro. As duas fileiras olham pro MESMO lado (sul) — o corredor
+// central fica de frente pra fileira de cima e de costas pra fileira de
+// baixo (a divisória dela é que encara o corredor), não "encaradas" uma coma
+// outra. O corredor também ficou mais largo.
 //
-// Um corredor central com 30 baias (15 de cada lado), todas com o mesmo
-// assento voltado para baixo — nenhuma de costas para a câmera. Reduz o
-// galpão com varanda e fachada de vidro da entrega anterior: aqui o andar é
-// só a estação de trabalho, do tamanho de um escritório real.
-import type { LightSource, OfficeMap, PlacedProp, Seat, SeatKind, Zone } from "../map"
+// Chegou a existir uma versão em 3 salas conectadas por corredor — o pedido
+// era corrigir a leitura ruim da câmera isométrica num corredor de 70×10.
+// Voltou pra sala única a pedido: o visual de duas fileiras sem paredes
+// cortando o ambiente valeu mais que a proporção mais quadrada.
+import type { LightSource, OfficeMap, PlacedProp, Seat, Zone } from "../map"
 import { PROPS, type PropKind } from "../props"
 import { SOLID_TILES, T, TILE } from "../tiles"
 
 const COLS = 70
-const ROWS = 10
+const ROWS = 13
 
-// 15 colunas de baia, encostadas — o corredor central é o único acesso, não
-// há mais vãos verticais entre clusters como no galpão antigo.
+// 15 colunas de baia, encostadas.
 const CUBICLE_COLS = Array.from({ length: 15 }, (_, i) => 8 + i * 4)
-const TOP_TY = 1
+
+// Fileira de cima: abre pro corredor (linha TOP_TY_A+3 = 4).
+const TOP_TY_A = 1
+// Corredor largo entre as duas fileiras: linhas 4 a 6 (3 tiles livres, era 1).
+// Fileira de baixo usa a MESMA orientação da de cima ("cubicle", não
+// "cubicleFlip"): a divisória dela (não a abertura) é que encara o corredor.
+const TOP_TY_B = 7
 
 function idx(x: number, y: number): number {
   return y * COLS + x
@@ -57,20 +66,41 @@ export function buildFloor1(): OfficeMap {
   const add = (kind: PropKind, tx: number, ty: number) =>
     props.push({ kind, x: tx * TILE, y: ty * TILE })
 
-  // Um par cubicle/cubicleFlip por coluna — mesma peça e colisão da entrega
-  // anterior. A diferença fica só no assento (ver abaixo): as duas fileiras
-  // olham para baixo agora, em vez de uma olhar para cima.
+  // As duas fileiras usam "cubicle" — mesma orientação, ninguém de costas
+  // pra câmera, mas a fileira de baixo fica de costas pro CORREDOR (a
+  // divisória dela encara quem anda ali), não de frente pra fileira de cima.
   for (const tx of CUBICLE_COLS) {
-    add("cubicle", tx, TOP_TY)
-    add("cubicleFlip", tx, TOP_TY + 4)
+    add("cubicle", tx, TOP_TY_A)
+    add("cubicle", tx, TOP_TY_B)
   }
 
   add("elevatorDoors", 2, 2)
   add("waterCooler", 7, 1)
   add("plant", 68, 3)
-  add("plant", 68, 6)
+  add("plant", 68, 9)
   add("lamp", 36, 1)
   add("lamp", 36, 7)
+
+  const seatId = (prefix: string, x: number, y: number) =>
+    `${prefix}-${Math.floor(x / TILE)}-${Math.floor(y / TILE)}`
+
+  const seats: Seat[] = []
+  for (const tx of CUBICLE_COLS) {
+    const s1x = (tx + 1) * TILE
+    const s1y = (TOP_TY_A + 3) * TILE + 4
+    const s2x = (tx + 2) * TILE
+    const s2y = (TOP_TY_B + 3) * TILE + 4
+    // A mesa fica ao NORTE do assento (a divisória do cubicle é que fica ao
+    // sul, na borda de entrada) — sentado, o avatar precisa olhar pra cima
+    // pra encarar a própria mesa, não pra baixo (que olharia pro corredor).
+    seats.push({ id: seatId("ws", s1x, s1y), x: s1x, y: s1y, facing: "up", label: "Baia", kind: "pc" })
+    seats.push({ id: seatId("ws", s2x, s2y), x: s2x, y: s2y, facing: "up", label: "Baia", kind: "pc" })
+    // Cadeira visível bem embaixo do assento (não em tile arredondado — o
+    // desalinho de até meio tile é o que fazia ela cair longe do teclado).
+    // O centro do estofado da cadeira fica a (6,6) da própria âncora.
+    props.push({ kind: "chair", x: s1x - 6, y: s1y - 6 })
+    props.push({ kind: "chair", x: s2x - 6, y: s2y - 6 })
+  }
 
   // Props gravam colisão pelo retângulo que ocupam.
   for (const p of props) {
@@ -105,31 +135,10 @@ export function buildFloor1(): OfficeMap {
   ]
 
   const lights: LightSource[] = [
-    { x: 36 * TILE + 8, y: 1 * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
-    { x: 36 * TILE + 8, y: 7 * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
+    { x: 36 * TILE + 8, y: (TOP_TY_A) * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
+    { x: 36 * TILE + 8, y: (TOP_TY_B) * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 },
     { x: 4 * TILE, y: 2 * TILE, radius: 36, color: "#e8d24a", flicker: 0.14 },
   ]
-
-  const seatId = (prefix: string, x: number, y: number) =>
-    `${prefix}-${Math.floor(x / TILE)}-${Math.floor(y / TILE)}`
-
-  const seats: Seat[] = []
-  const addSeat = (
-    prefix: string,
-    x: number,
-    y: number,
-    facing: Seat["facing"],
-    label: string,
-    kind: SeatKind,
-  ) => seats.push({ id: seatId(prefix, x, y), x, y, facing, label, kind })
-
-  // Um assento por baia, os dois no corredor livre entre o par (ty+3): as
-  // duas fileiras olham para baixo — nenhum avatar de costas para a câmera,
-  // o problema que a planta anterior tinha (metade das baias olhava para cima).
-  for (const tx of CUBICLE_COLS) {
-    addSeat("ws", (tx + 1) * TILE, (TOP_TY + 3) * TILE + 4, "down", "Baia", "pc")
-    addSeat("ws", (tx + 2) * TILE, (TOP_TY + 3) * TILE + 12, "down", "Baia", "pc")
-  }
 
   return {
     cols: COLS,
@@ -142,9 +151,6 @@ export function buildFloor1(): OfficeMap {
     zones,
     lights,
     seats,
-    // Spawn no hall, em frente ao elevador. `elevatorDoors` (h: 40px) grava
-    // colisão até a linha 4 (ty 2..4): a linha 4 original caía dentro da porta,
-    // então o spawn desce uma linha, para a 5 — ainda dentro do hall ladrilhado.
     spawn: { x: 4 * TILE, y: 5 * TILE },
   }
 }

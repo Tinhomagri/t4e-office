@@ -17,8 +17,10 @@ import {
   cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
 } from "./camera"
 import { keyAction } from "./input"
+import { isoToWorld, worldToIso } from "./iso"
+import { buildIsoGround } from "./isoBake"
 import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
-import { T, TILE, buildTileAtlas, tileVariant } from "./tiles"
+import { TILE, buildTileAtlas } from "./tiles"
 import { makeCanvas } from "./pixels"
 import { pokerBadgeFor } from "./poker-badge"
 
@@ -83,6 +85,9 @@ export class OfficeEngine {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private ground!: HTMLCanvasElement
+  /** Deslocamento a somar em `worldToIso(x, y)` para cair dentro de `ground`. */
+  private isoOriginX = 0
+  private isoOriginY = 0
   private lightBuf: HTMLCanvasElement
   private lightCtx: CanvasRenderingContext2D
   private props: Record<string, PropSprite>
@@ -126,6 +131,10 @@ export class OfficeEngine {
   /** Desligado enquanto o PC do escritório está aberto. */
   private inputEnabled = true
 
+  /** Assento da própria mesa (ver `desk.ts`/`myDeskId`) — só pra desenhar a
+   * seta indicativa acima dela. Não afeta física nem interação. */
+  private myDeskSeatId: string | null = null
+
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
 
@@ -157,30 +166,24 @@ export class OfficeEngine {
 
   // ── Construção estática ───────────────────────────────────────────────────
 
-  /** Assa piso + paredes num canvas do tamanho do mapa. Roda uma vez. */
+  /**
+   * Assa piso + paredes num raster ISOMÉTRICO. Roda uma vez por troca de
+   * andar. O piso vira losango e a parede vira bloco extrudado (2 faces +
+   * tampa) — a projeção mora em `isoBake.ts`; aqui só delega e guarda a
+   * origem para a câmera/clique converterem depois. Ver MASTER.md.
+   */
   private bakeGround(): void {
     const atlas = buildTileAtlas()
-    const { canvas, ctx } = makeCanvas(this.map.width, this.map.height)
-    for (let y = 0; y < this.map.rows; y++) {
-      for (let x = 0; x < this.map.cols; x++) {
-        const id = this.map.floor[y * this.map.cols + x]
-        if (id === T.VOID) continue
-        const [sx, sy] = atlas.at(id, tileVariant(x, y))
-        ctx.drawImage(atlas.canvas, sx, sy, TILE, TILE, x * TILE, y * TILE, TILE, TILE)
-      }
-    }
-    // Sombra projetada das paredes sobre o piso — dá espessura ao ambiente.
-    ctx.fillStyle = "rgba(43,30,26,0.14)"
-    for (let y = 0; y < this.map.rows - 1; y++) {
-      for (let x = 0; x < this.map.cols; x++) {
-        const here = this.map.floor[y * this.map.cols + x]
-        const below = this.map.floor[(y + 1) * this.map.cols + x]
-        const wallHere = here === T.WALL || here === T.WALL_TOP || here === T.GLASS
-        const openBelow = below !== T.WALL && below !== T.WALL_TOP && below !== T.VOID
-        if (wallHere && openBelow) ctx.fillRect(x * TILE, (y + 1) * TILE, TILE, 3)
-      }
-    }
-    this.ground = canvas
+    const iso = buildIsoGround(this.map, atlas)
+    this.ground = iso.canvas
+    this.isoOriginX = iso.originX
+    this.isoOriginY = iso.originY
+  }
+
+  /** Projeta um ponto do mundo cartesiano para o espaço do raster iso assado. */
+  private toIso(x: number, y: number): { x: number; y: number } {
+    const p = worldToIso(x, y)
+    return { x: p.x + this.isoOriginX, y: p.y + this.isoOriginY }
   }
 
   // ── Atores ────────────────────────────────────────────────────────────────
@@ -295,6 +298,12 @@ export class OfficeEngine {
     }
   }
 
+  /** Marca qual assento é o da própria mesa — desenha uma seta em cima dela.
+   * `null` some com a seta (ex.: andar sem baias, como o de poker). */
+  setMyDesk(seatId: string | null): void {
+    this.myDeskSeatId = seatId
+  }
+
   // ── Entrada ───────────────────────────────────────────────────────────────
 
   /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
@@ -317,9 +326,10 @@ export class OfficeEngine {
     this.keys.delete(e.key.toLowerCase())
   }
 
-  /** Clique na tela → alvo de caminhada no mundo. */
+  /** Clique na tela → alvo de caminhada no mundo (passa pela inversa iso). */
   clickTo(screenX: number, screenY: number): void {
-    const { x, y } = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
     if (isSolid(this.map, x, y)) return
     this.target = { x, y }
     if (this.me) this.me.seatIndex = -1
@@ -654,10 +664,13 @@ export class OfficeEngine {
 
   /**
    * Trava a câmera num ponto do mundo com zoom. `zoom` é piso, não alvo exato:
-   * `focusScale` mantém a escala inteira e dentro do teto.
+   * `focusScale` mantém a escala inteira e dentro do teto. `x, y` chegam em
+   * coordenadas de mundo cartesiano (ex.: `seat.x/y`) — guarda já projetado,
+   * porque `updateCamera` trabalha inteiramente em espaço iso.
    */
   focusOn(x: number, y: number, zoom = 6): void {
-    this.focus = { x, y, zoom }
+    const iso = this.toIso(x, y)
+    this.focus = { x: iso.x, y: iso.y, zoom }
     this.applyScale()
   }
 
@@ -667,14 +680,15 @@ export class OfficeEngine {
   }
 
   private updateCamera(): void {
-    const anchor = this.focus ?? this.me
+    // `focus` já chega projetado (ver `focusOn`); `me` é cartesiano e precisa
+    // passar pela projeção iso antes de virar alvo de câmera.
+    const anchor = this.focus ?? (this.me ? this.toIso(this.me.x, this.me.y) : null)
     if (!anchor) return
-    const base = cameraTarget(
-      anchor.x, anchor.y, this.viewW, this.viewH, this.map.width, this.map.height,
-    )
+    const groundW = this.ground.width
+    const groundH = this.ground.height
+    const base = cameraTarget(anchor.x, anchor.y, this.viewW, this.viewH, groundW, groundH)
     const { x: cx, y: cy } = offsetCamera(
-      base, this.viewOffset.dx, this.viewOffset.dy,
-      this.viewW, this.viewH, this.map.width, this.map.height,
+      base, this.viewOffset.dx, this.viewOffset.dy, this.viewW, this.viewH, groundW, groundH,
     )
     const ease = this.reduceMotion ? 1 : 0.14
     this.camX += (cx - this.camX) * ease
@@ -725,20 +739,32 @@ export class OfficeEngine {
       0, 0, this.viewW * s, this.viewH * s,
     )
 
-    // Zonas: um brilho tênue no chão, sob tudo.
+    // Zonas: um brilho tênue no chão, sob tudo. Um retângulo em mundo
+    // cartesiano vira PARALELOGRAMO na tela iso (transform linear) — desenha
+    // como polígono de 4 pontos em vez de fillRect.
     for (const zone of this.map.zones) {
-      const zx = (zone.x * TILE - camX) * s
-      const zy = (zone.y * TILE - camY) * s
-      const zw = zone.w * TILE * s
-      const zh = zone.h * TILE * s
-      if (zx > this.viewW * s || zy > this.viewH * s || zx + zw < 0 || zy + zh < 0) continue
+      const x0 = zone.x * TILE
+      const y0 = zone.y * TILE
+      const x1 = x0 + zone.w * TILE
+      const y1 = y0 + zone.h * TILE
+      const corners = [
+        this.toIso(x0, y0), this.toIso(x1, y0), this.toIso(x1, y1), this.toIso(x0, y1),
+      ].map((p) => ({ x: (p.x - camX) * s, y: (p.y - camY) * s }))
+      const xs = corners.map((c) => c.x)
+      const ys = corners.map((c) => c.y)
+      if (Math.min(...xs) > vw * s || Math.min(...ys) > vh * s || Math.max(...xs) < 0 || Math.max(...ys) < 0) continue
       ctx.globalAlpha = zone.id === this.currentZone ? 0.14 : 0.05
       ctx.fillStyle = zone.accent
-      ctx.fillRect(zx, zy, zw, zh)
+      ctx.beginPath()
+      ctx.moveTo(corners[0].x, corners[0].y)
+      for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y)
+      ctx.closePath()
+      ctx.fill()
       ctx.globalAlpha = 1
     }
 
-    // Ordenação por profundidade: props e atores no mesmo balde, por baseline.
+    // Ordenação por profundidade isométrica: chave = soma cartesiana x+y do
+    // "pé" (quem está mais para baixo-direita no grid desenha por cima).
     type Drawable = { base: number; draw(): void }
     const queue: Drawable[] = []
 
@@ -746,30 +772,38 @@ export class OfficeEngine {
       const def = PROPS[p.kind]
       const sprite = this.props[p.kind]
       if (!sprite) continue
-      const sx = (p.x - camX) * s
-      const sy = (p.y - camY) * s
+      // O sprite já nasce projetado em iso (`isoProps.ts` — caixa com 3
+      // faces, ou painel em pé pros presos na parede): aqui é só blit plano,
+      // igual ator. `anchor` diz que ponto do canvas corresponde à posição
+      // de mundo `p.x, p.y` (canto norte da pegada); sem `anchor`, cai no
+      // canto superior-esquerdo do canvas (props antigos, ainda achatados).
+      const iso = this.toIso(p.x, p.y)
+      const anchor = def.anchor ?? { x: 0, y: 0 }
+      const sx = (iso.x - camX) * s - anchor.x * s
+      const sy = (iso.y - camY) * s - anchor.y * s
       if (sx > this.viewW * s || sy > this.viewH * s || sx + def.w * s < 0 || sy + def.h * s < 0) continue
       queue.push({
-        base: p.y + (def.baseline ?? def.h),
+        base: p.x + p.y + (def.baseline ?? def.h),
         draw: () => ctx.drawImage(sprite.canvas, sx, sy, def.w * s, def.h * s),
       })
     }
 
     for (const actor of this.actors.values()) {
-      const sx = Math.round(actor.x - FW / 2 - camX) * s
-      const sy = Math.round(actor.y - FH - camY) * s
+      const isoA = this.toIso(actor.x, actor.y)
+      const sx = Math.round(isoA.x - FW / 2 - camX) * s
+      const sy = Math.round(isoA.y - FH - camY) * s
       if (sx > this.viewW * s || sy > this.viewH * s || sx + FW * s < 0 || sy + FH * s < 0) continue
       const key = `${actor.facing}_${actor.anim}`
       const frames = actor.frames[key] ?? actor.frames[`down_${actor.anim}`] ?? actor.frames["down_idle"]
       const fr = frames[actor.frame % frames.length]
       queue.push({
-        base: actor.y,
+        base: actor.x + actor.y,
         draw: () => {
           // Sombra de contato antes do corpo.
           ctx.drawImage(
             this.shadow.canvas,
-            Math.round(actor.x - this.shadow.w / 2 - camX) * s,
-            Math.round(actor.y - 3 - camY) * s,
+            Math.round(isoA.x - this.shadow.w / 2 - camX) * s,
+            Math.round(isoA.y - 3 - camY) * s,
             this.shadow.w * s,
             this.shadow.h * s,
           )
@@ -785,11 +819,12 @@ export class OfficeEngine {
     for (let i = 0; i < this.alive; i++) {
       const p = this.particles[i]
       const t = p.life / p.maxLife
+      const iso = this.toIso(p.x, p.y)
       ctx.globalAlpha = p.kind === 3 ? 0.35 * (1 - t) : 0.8 * (1 - t)
       ctx.fillStyle = p.color
       ctx.fillRect(
-        Math.round(p.x - camX) * s,
-        Math.round(p.y - camY) * s,
+        Math.round(iso.x - camX) * s,
+        Math.round(iso.y - camY) * s,
         p.size * s,
         p.size * s,
       )
@@ -797,7 +832,41 @@ export class OfficeEngine {
     ctx.globalAlpha = 1
 
     this.renderLighting(camX, camY, s)
+    this.renderMyDeskArrow(camX, camY, s)
     this.renderNameplates(camX, camY, s)
+  }
+
+  /** Seta dourada balançando em cima da própria mesa — só um indicador
+   * visual, não afeta física nem quem senta onde. */
+  private renderMyDeskArrow(camX: number, camY: number, s: number): void {
+    if (!this.myDeskSeatId) return
+    const seat = this.map.seats.find((st) => st.id === this.myDeskSeatId)
+    if (!seat) return
+    const iso = this.toIso(seat.x, seat.y)
+    const bob = Math.sin(this.time * 3) * 3
+    const sx = (iso.x - camX) * s
+    const sy = (iso.y - camY) * s - 34 * s + bob * s
+    if (sx < -40 || sy < -40 || sx > this.viewW * s + 40 || sy > this.viewH * s + 40) return
+
+    const ctx = this.ctx
+    ctx.save()
+    ctx.fillStyle = "#f0c05a"
+    ctx.strokeStyle = "#2b1e1a"
+    ctx.lineWidth = 1
+    const w = 6 * s
+    const h = 8 * s
+    ctx.beginPath()
+    ctx.moveTo(sx, sy + h) // ponta, apontando pra baixo
+    ctx.lineTo(sx - w, sy)
+    ctx.lineTo(sx - w / 2, sy)
+    ctx.lineTo(sx - w / 2, sy - h * 0.6)
+    ctx.lineTo(sx + w / 2, sy - h * 0.6)
+    ctx.lineTo(sx + w / 2, sy)
+    ctx.lineTo(sx + w, sy)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
   }
 
   /**
@@ -824,8 +893,9 @@ export class OfficeEngine {
 
     lc.globalCompositeOperation = "destination-out"
     for (const light of this.map.lights) {
-      const lx = (light.x - camX) * half
-      const ly = (light.y - camY) * half
+      const isoL = this.toIso(light.x, light.y)
+      const lx = (isoL.x - camX) * half
+      const ly = (isoL.y - camY) * half
       const r = light.radius * half
       if (lx + r < 0 || ly + r < 0 || lx - r > lw || ly - r > lh) continue
       const flick = light.flicker
@@ -840,8 +910,9 @@ export class OfficeEngine {
     }
     // O jogador carrega uma luz fraca — nunca fica no escuro absoluto.
     if (this.me) {
-      const lx = (this.me.x - camX) * half
-      const ly = (this.me.y - 12 - camY) * half
+      const isoMe = this.toIso(this.me.x, this.me.y)
+      const lx = (isoMe.x - camX) * half
+      const ly = (isoMe.y - 12 - camY) * half
       const r = 46 * half
       const g = lc.createRadialGradient(lx, ly, 0, lx, ly, r)
       g.addColorStop(0, "rgba(0,0,0,0.6)")
@@ -863,8 +934,9 @@ export class OfficeEngine {
     ctx.textBaseline = "middle"
 
     for (const actor of this.actors.values()) {
-      const sx = (actor.x - camX) * s
-      const sy = (actor.y - FH - camY) * s
+      const isoA = this.toIso(actor.x, actor.y)
+      const sx = (isoA.x - camX) * s
+      const sy = (isoA.y - FH - camY) * s
       if (sx < -80 || sy < -80 || sx > this.viewW * s + 80 || sy > this.viewH * s + 80) continue
 
       if (actor.say) {

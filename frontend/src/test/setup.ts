@@ -34,6 +34,13 @@ HTMLCanvasElement.prototype.getContext = function(contextType: string) {
       closePath: () => {},
       arc: () => {},
       quadraticCurveTo: () => {},
+      // Móveis isométricos colam cada face torta via transform+drawImage
+      // (`isoProps.ts`/`isoBake.ts`) — precisa desse trio a mais.
+      save: () => {},
+      restore: () => {},
+      clip: () => {},
+      setTransform: () => {},
+      drawImage: () => {},
     } as any
   }
   return null

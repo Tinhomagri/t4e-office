@@ -32,13 +32,13 @@ const REACH = reachable()
 const tileOf = (x: number, y: number) => Math.floor(y / TILE) * map.cols + Math.floor(x / TILE)
 
 describe("dimensões", () => {
-  it("é 70×10 tiles — bullpen compacto, não o galpão antigo", () => {
-    expect([map.cols, map.rows]).toEqual([70, 10])
+  it("width/height batem com a grade", () => {
+    expect(map.width).toBe(map.cols * TILE)
+    expect(map.height).toBe(map.rows * TILE)
   })
 
-  it("width/height batem com a grade", () => {
-    expect(map.width).toBe(70 * TILE)
-    expect(map.height).toBe(10 * TILE)
+  it("é 70×13 tiles — bullpen em sala única, corredor largo entre as duas fileiras", () => {
+    expect([map.cols, map.rows]).toEqual([70, 13])
   })
 
   it("o spawn não está dentro de parede", () => {
@@ -51,8 +51,8 @@ describe("assentos", () => {
     expect(map.seats.filter((s) => s.kind === "pc")).toHaveLength(30)
   })
 
-  it("todo assento olha para baixo — nenhum de costas para a câmera", () => {
-    for (const s of map.seats) expect(s.facing).toBe("down")
+  it("todo assento olha pra cima — de frente pra própria mesa (que fica ao norte)", () => {
+    for (const s of map.seats) expect(s.facing).toBe("up")
   })
 
   it("nenhum id de assento repetido", () => {
