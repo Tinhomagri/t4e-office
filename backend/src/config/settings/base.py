@@ -104,6 +104,12 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# Uploads (anexos de card, avatar de projeto). Sem MEDIA_URL o Django devolve
+# em `FileField.url` só o caminho relativo, e a imagem quebra no navegador.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {

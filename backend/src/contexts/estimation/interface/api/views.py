@@ -1,6 +1,9 @@
 """Views da Planning Poker API."""
 
+from datetime import timedelta
+
 from django.db.models import Avg
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +20,7 @@ from contexts.estimation.domain.entities.poker_session import (
 )
 from contexts.estimation.infrastructure.django.models import (
     PokerParticipantModel,
+    PokerReactionModel,
     PokerRoundModel,
 )
 from contexts.estimation.infrastructure.django.repositories_impl import (
@@ -25,6 +29,7 @@ from contexts.estimation.infrastructure.django.repositories_impl import (
     DjangoPokerVoteRepository,
 )
 from contexts.identity.infrastructure.django.models import WorkspaceModel
+from contexts.presence.infrastructure.django.models import UserAvatarModel
 from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.permissions import (
@@ -84,14 +89,30 @@ def _round_dict(r: PokerRoundModel) -> dict:
     }
 
 
-def _participant_dict(p: PokerParticipant) -> dict:
+def _participant_dict(p: PokerParticipant, avatars: dict | None = None) -> dict:
     return {
         "id": p.id,
         "user_id": p.user_id,
         "user_name": p.user_name,
         "avatar_initials": p.avatar_initials,
         "is_host": p.is_host,
+        # Sprite pixel-art da pessoa (mesmo avatar do Escritório). `None` para
+        # quem nunca criou um — o front cai nas iniciais e oferece criar.
+        "avatar_config": (avatars or {}).get(p.user_id),
     }
+
+
+def _avatars_for(participants: list[PokerParticipant]) -> dict[str, dict]:
+    """Config de avatar de todos os participantes numa query só.
+
+    Buscar dentro de `_participant_dict` daria um SELECT por assento numa rota
+    que o cliente chama a cada 2 segundos.
+    """
+    ids = [p.user_id for p in participants]
+    rows = UserAvatarModel.objects.filter(user_id__in=ids).values_list(
+        "user_id", "config"
+    )
+    return {str(uid): config for uid, config in rows}
 
 
 def _vote_dict(v: PokerVote, revealed: bool, viewer_id: str) -> dict:
@@ -106,8 +127,48 @@ def _vote_dict(v: PokerVote, revealed: bool, viewer_id: str) -> dict:
     }
 
 
+# Janela de vida de uma reação. O cliente faz poll de 2s, então precisa ser
+# folgada o bastante para ninguém perder a animação por causa do intervalo, e
+# curta o bastante para a mesma reação não voar duas vezes na tela.
+REACTION_WINDOW = timedelta(seconds=6)
+# Depois disso a linha não serve mais para nada — o POST aproveita a passagem
+# para limpar, o que dispensa uma tarefa agendada só para isso.
+REACTION_TTL = timedelta(minutes=5)
+
+
+def _reaction_dict(r: PokerReactionModel) -> dict:
+    return {
+        "id": str(r.id),
+        "from_user_id": str(r.from_user_id),
+        "to_user_id": str(r.to_user_id),
+        "emoji": r.emoji,
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+def _recent_reactions(session_id: str) -> list[dict]:
+    since = timezone.now() - REACTION_WINDOW
+    qs = PokerReactionModel.objects.filter(session_id=session_id, created_at__gte=since)
+    return [_reaction_dict(r) for r in qs]
+
+
 def _workspace_for_user(user_id: str) -> WorkspaceModel | None:
     return WorkspaceModel.objects.filter(accesses__user_id=user_id).first()
+
+
+
+def _session_or_404(session_id: str, user_id: str) -> PokerSession | None:
+    """Carrega a sala garantindo que o usuário pertence ao workspace dela.
+
+    Sem isto qualquer usuário autenticado com o link lia e votava numa sala de
+    projeto alheio — as demais rotas do contexto já passavam por
+    `assert_project_member`, estas tinham ficado de fora.
+    """
+    session = _session_repo.get(session_id)
+    if session is None:
+        return None
+    assert_project_member(project_id=session.project_id, user_id=user_id)
+    return session
 
 
 class PokerSessionListCreateView(APIView):
@@ -153,10 +214,11 @@ class PokerSessionDetailView(APIView):
 
     @extend_schema(responses={200: dict})
     def get(self, request: Request, session_id: str) -> Response:
-        session = _session_repo.get(session_id)
+        session = _session_or_404(session_id, str(request.user.id))
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
         participants = _participant_repo.list_active(session_id)
+        avatars = _avatars_for(participants)
         votes = []
         if session.current_card_id:
             votes = _vote_repo.list_by_card(session_id, session.current_card_id)
@@ -164,14 +226,18 @@ class PokerSessionDetailView(APIView):
         viewer_id = str(request.user.id)
         return Response({
             **_session_dict(session),
-            "participants": [_participant_dict(p) for p in participants],
+            "participants": [_participant_dict(p, avatars) for p in participants],
             "votes": [_vote_dict(v, revealed, viewer_id) for v in votes],
+            # Vão junto do detalhe (que já roda em poll de 2s) em vez de num
+            # endpoint próprio: uma reação só vale animada, e um segundo poll
+            # dobraria o tráfego da sala para transportar quase sempre nada.
+            "reactions": _recent_reactions(session_id),
         })
 
     @extend_schema(request=dict, responses={200: dict})
     def patch(self, request: Request, session_id: str) -> Response:
         """Host atualiza status, current_card_id ou card_ids."""
-        session = _session_repo.get(session_id)
+        session = _session_or_404(session_id, str(request.user.id))
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
         if str(request.user.id) != session.created_by:
@@ -193,7 +259,7 @@ class PokerJoinView(APIView):
 
     @extend_schema(responses={200: dict})
     def post(self, request: Request, session_id: str) -> Response:
-        session = _session_repo.get(session_id)
+        session = _session_or_404(session_id, str(request.user.id))
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
 
@@ -210,11 +276,51 @@ class PokerJoinView(APIView):
         return Response(_participant_dict(participant))
 
 
+class PokerReactionView(APIView):
+    """Manda uma reação para outra pessoa da sala."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=dict, responses={201: dict})
+    def post(self, request: Request, session_id: str) -> Response:
+        session = _session_or_404(session_id, str(request.user.id))
+        if not session:
+            return Response({"error": "Sessão não encontrada"}, status=404)
+
+        emoji = request.data.get("emoji")
+        # Catálogo fechado: aceitar string livre deixaria a sala virar um canal
+        # de texto arbitrário renderizado na tela de todo mundo.
+        if emoji not in PokerReactionModel.EMOJIS:
+            return Response({"error": "Reação inválida"}, status=400)
+
+        to_user_id = request.data.get("to_user_id")
+        sender_id = str(request.user.id)
+        in_room = PokerParticipantModel.objects.filter(session_id=session_id)
+        if not in_room.filter(user_id=sender_id).exists():
+            return Response({"error": "Você não está nesta sala"}, status=403)
+        if not in_room.filter(user_id=to_user_id).exists():
+            return Response({"error": "Destinatário não está na sala"}, status=400)
+
+        reaction = PokerReactionModel.objects.create(
+            session_id=session_id,
+            from_user_id=sender_id,
+            to_user_id=to_user_id,
+            emoji=emoji,
+        )
+        PokerReactionModel.objects.filter(
+            session_id=session_id, created_at__lt=timezone.now() - REACTION_TTL
+        ).delete()
+        return Response(_reaction_dict(reaction), status=status.HTTP_201_CREATED)
+
+
 class PokerHeartbeatView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses={204: None})
     def post(self, request: Request, session_id: str) -> Response:
+        session = _session_or_404(session_id, str(request.user.id))
+        if not session:
+            return Response({"error": "Sessão não encontrada"}, status=404)
         _participant_repo.touch(session_id, str(request.user.id))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -224,11 +330,25 @@ class PokerVoteView(APIView):
 
     @extend_schema(request=dict, responses={200: dict})
     def post(self, request: Request, session_id: str) -> Response:
-        session = _session_repo.get(session_id)
+        session = _session_or_404(session_id, str(request.user.id))
         if not session or not session.current_card_id:
             return Response({"error": "Nenhum card em votação"}, status=400)
         if session.status not in (SessionStatus.VOTING,):
             return Response({"error": "Votação não está aberta"}, status=400)
+
+        # Senta quem ainda não estava sentado. O acesso ao workspace já foi
+        # checado acima, e sem isto um POST de voto antes de o `join` do
+        # cliente terminar estourava DoesNotExist no repositório → 500.
+        _participant_repo.join(
+            PokerParticipant(
+                id=None,
+                session_id=session_id,
+                user_id=str(request.user.id),
+                user_name=request.user.full_name,
+                avatar_initials=_initials(request.user.full_name),
+                is_host=session.created_by == str(request.user.id),
+            )
+        )
 
         value = request.data.get("value")
         vote = _vote_repo.upsert(
@@ -317,7 +437,7 @@ class PokerApplyPointsView(APIView):
 
     @extend_schema(request=dict, responses={200: dict})
     def post(self, request: Request, session_id: str) -> Response:
-        session = _session_repo.get(session_id)
+        session = _session_or_404(session_id, str(request.user.id))
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
         if str(request.user.id) != session.created_by:

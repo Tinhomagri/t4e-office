@@ -119,7 +119,7 @@ function ProjectCard({ row }: { row: ProjectHealth }) {
 
       <div className="mt-4">
         <div className="mb-1.5 flex items-center justify-between text-xs">
-          <span className="text-paper-500">Progresso (pontos)</span>
+          <span className="text-paper-500">Progresso (peso)</span>
           <span className="font-medium text-ink dark:text-paper tabular">{pct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">

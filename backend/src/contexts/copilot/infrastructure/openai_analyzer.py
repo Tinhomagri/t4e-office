@@ -47,7 +47,7 @@ class OpenAiAnalyzer(AiAnalyzer):
         raw = response.choices[0].message.content or "{}"
         return _prompt.parse_analysis(raw)
 
-    def chat(self, *, messages: list[dict]) -> str:
+    def chat(self, *, messages: list[dict], system: str | None = None) -> str:
         if not self.api_key:
             raise ValidationError(
                 "Copiloto IA não configurado: informe a chave da OpenAI "
@@ -60,7 +60,7 @@ class OpenAiAnalyzer(AiAnalyzer):
             model=self.model,
             max_tokens=_prompt.MAX_CHAT_TOKENS,
             messages=[
-                {"role": "system", "content": _prompt.CHAT_SYSTEM},
+                {"role": "system", "content": system or _prompt.CHAT_SYSTEM},
                 *[{"role": m["role"], "content": m["content"]} for m in messages],
             ],
         )

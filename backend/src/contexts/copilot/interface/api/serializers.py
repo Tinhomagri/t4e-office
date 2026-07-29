@@ -1,7 +1,7 @@
 """Serializers do contexto copilot."""
 from rest_framework import serializers
 
-from contexts.copilot.infrastructure import ai_prompt
+from contexts.copilot.infrastructure import ai_prompt, writing_skills
 
 
 class SuggestedTaskSerializer(serializers.Serializer):
@@ -75,3 +75,15 @@ class AiConfigWriteSerializer(serializers.Serializer):
     model = serializers.CharField(required=False, allow_blank=True, default="")
     api_key = serializers.CharField(required=False, allow_blank=True, default="")
     is_active = serializers.BooleanField(required=False, default=True)
+
+
+class WriteAssistSerializer(serializers.Serializer):
+    """Entrada da assistência de escrita no editor de descrição/comentário."""
+
+    workspace_id = serializers.CharField()
+    text = serializers.CharField(max_length=writing_skills.MAX_INPUT_CHARS)
+    action = serializers.ChoiceField(choices=sorted(writing_skills.ACTIONS))
+    # Pedido livre opcional ("deixe mais formal"), anexado à ação escolhida.
+    instruction = serializers.CharField(
+        max_length=300, required=False, allow_blank=True, default=""
+    )

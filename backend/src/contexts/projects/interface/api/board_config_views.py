@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from django.db import transaction
 from rest_framework import status
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -51,6 +50,25 @@ def get_or_create_board_config(project_id: str) -> BoardConfigModel:
     return config
 
 
+# Formatos aceitos no avatar e teto do data URI. O front reduz para 128×128
+# antes de enviar (poucos KB); o limite existe para barrar um POST manual que
+# tentasse enfiar um arquivo grande direto na coluna.
+AVATAR_PREFIXES = ("data:image/webp;base64,", "data:image/png;base64,", "data:image/jpeg;base64,")
+AVATAR_MAX_CHARS = 400_000  # ~300 KB depois de decodificar o base64
+
+
+def _clean_avatar(raw) -> str:
+    """Valida o data URI do avatar. String vazia remove a imagem."""
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if not value.startswith(AVATAR_PREFIXES):
+        raise ValidationError("Formato de imagem inválido. Use PNG, JPEG ou WebP.")
+    if len(value) > AVATAR_MAX_CHARS:
+        raise ValidationError("Imagem grande demais. Envie uma menor.")
+    return value
+
+
 # ── Serialização ──────────────────────────────────────────────────────────────
 
 def _ser_project(project: ProjectModel) -> dict:
@@ -64,7 +82,8 @@ def _ser_project(project: ProjectModel) -> dict:
         "category": project.category,
         "avatar_emoji": project.avatar_emoji,
         "avatar_color": project.avatar_color,
-        "avatar_url": project.avatar_image.url if project.avatar_image else None,
+        # Já é um data URI — vai direto no src da <img>, sem passar por storage.
+        "avatar_url": project.avatar_image or None,
         "lead_id": str(project.lead_id) if project.lead_id else None,
         "default_assignee_id": (
             str(project.default_assignee_id) if project.default_assignee_id else None
@@ -92,7 +111,6 @@ class ProjectDetailView(APIView):
     """Lê e edita os dados gerais do projeto, incluindo upload do avatar."""
 
     permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     # Campos de texto editáveis direto do payload.
     TEXT_FIELDS = ("name", "description", "category", "avatar_emoji", "avatar_color")
@@ -133,12 +151,10 @@ class ProjectDetailView(APIView):
             if field in request.data:
                 setattr(project, field, request.data[field] or None)
 
-        # Upload do avatar (multipart). Enviar avatar_image vazio remove a imagem
-        # e faz o front cair de volta no par emoji+cor.
-        if "avatar_image" in request.FILES:
-            project.avatar_image = request.FILES["avatar_image"]
-        elif "avatar_image" in request.data and not request.data["avatar_image"]:
-            project.avatar_image = None
+        # Avatar chega como data URI já reduzido pelo front. Enviar vazio remove
+        # a imagem e o projeto volta a exibir o par emoji+cor.
+        if "avatar_image" in request.data:
+            project.avatar_image = _clean_avatar(request.data["avatar_image"])
 
         project.save()
         return Response(_ser_project(project))

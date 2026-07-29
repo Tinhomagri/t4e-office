@@ -120,7 +120,7 @@ export function ProjectPortfolioPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={Layers} label="Total de cards" value={row.total} />
         <StatCard icon={CheckCircle2} label="Concluídos" value={row.done} tone="success" />
-        <StatCard icon={TrendingUp} label="Pontos (feito/total)" value={`${row.pointsDone}/${row.pointsTotal}`} />
+        <StatCard icon={TrendingUp} label="Peso (feito/total)" value={`${row.pointsDone}/${row.pointsTotal}`} />
         <StatCard
           icon={AlertTriangle}
           label="Em revisão"

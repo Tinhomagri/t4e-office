@@ -94,15 +94,15 @@ export function GeneralTab({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SettingsCard
         title="Avatar"
         description="Enviar uma imagem substitui o emoji. Remova a imagem para voltar ao emoji."
       >
-        <div className="flex flex-wrap items-start gap-6">
+        <div className="flex flex-wrap items-start gap-5">
           <div className="flex flex-col items-center gap-2">
             <div
-              className="grid size-20 place-items-center overflow-hidden rounded-2xl text-4xl"
+              className="grid size-16 place-items-center overflow-hidden rounded-xl text-3xl"
               style={{
                 backgroundColor: project.avatar_url ? undefined : form.avatar_color,
               }}
@@ -153,7 +153,7 @@ export function GeneralTab({
             />
           </div>
 
-          <div className="min-w-[240px] flex-1 space-y-4">
+          <div className="min-w-[240px] flex-1 space-y-3">
             <div>
               <p className="mb-1.5 text-[13px] font-medium text-ink dark:text-paper">Emoji</p>
               <div className="flex flex-wrap gap-1">
@@ -190,7 +190,7 @@ export function GeneralTab({
       </SettingsCard>
 
       <SettingsCard title="Detalhes" description="Nome, chave e responsáveis do projeto.">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nome">
             <Input
               value={form.name ?? ""}
@@ -255,7 +255,7 @@ export function GeneralTab({
         </div>
 
         {canEdit && (
-          <div className="mt-5 flex justify-end gap-2 border-t border-paper-200 pt-4 dark:border-ink-800">
+          <div className="mt-4 flex justify-end gap-2 border-t border-paper-200 pt-3 dark:border-ink-800">
             <Button variant="ghost" disabled={!dirty} onClick={() => setForm(project)}>
               Descartar
             </Button>

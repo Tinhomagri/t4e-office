@@ -94,6 +94,49 @@ def test_patch_rejeita_chave_vazia(scenario):
     assert resp.status_code == 400
 
 
+def test_salva_avatar_como_data_uri(scenario):
+    project = scenario["project"]
+    data_uri = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQ"
+
+    resp = scenario["client"].patch(
+        f"/api/projects/{project.id}/", {"avatar_image": data_uri}, format="json"
+    )
+    assert resp.status_code == 200
+    # O data URI volta pronto para ir no src da <img>, sem virar caminho de arquivo.
+    assert resp.data["avatar_url"] == data_uri
+
+
+def test_avatar_vazio_remove_a_imagem(scenario):
+    project = scenario["project"]
+    project.avatar_image = "data:image/png;base64,iVBORw0KGgo="
+    project.save()
+
+    resp = scenario["client"].patch(
+        f"/api/projects/{project.id}/", {"avatar_image": ""}, format="json"
+    )
+    assert resp.status_code == 200
+    assert resp.data["avatar_url"] is None
+
+
+def test_avatar_recusa_formato_que_nao_seja_imagem(scenario):
+    # Sem isso daria para guardar qualquer payload (inclusive svg com script)
+    # numa coluna que o front injeta direto no src.
+    resp = scenario["client"].patch(
+        f"/api/projects/{scenario['project'].id}/",
+        {"avatar_image": "javascript:alert(1)"},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
+def test_avatar_recusa_imagem_grande_demais(scenario):
+    huge = "data:image/png;base64," + ("A" * 400_001)
+    resp = scenario["client"].patch(
+        f"/api/projects/{scenario['project'].id}/", {"avatar_image": huge}, format="json"
+    )
+    assert resp.status_code == 400
+
+
 def test_lead_id_vazio_limpa_o_campo(scenario):
     project = scenario["project"]
     project.lead_id = scenario["owner"].id

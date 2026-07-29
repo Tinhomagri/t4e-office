@@ -19,7 +19,10 @@ from contexts.estimation.infrastructure.django.models import (
     PokerVoteModel,
 )
 
-ACTIVE_THRESHOLD = timedelta(seconds=30)
+# Folga bem maior que o heartbeat de 10s do cliente: o Chrome estrangula
+# timers de aba em segundo plano (~1 por minuto), e com uma janela curta a
+# pessoa desaparecia da mesa só por trocar de aba.
+ACTIVE_THRESHOLD = timedelta(minutes=2)
 
 
 def _initials(name: str) -> str:

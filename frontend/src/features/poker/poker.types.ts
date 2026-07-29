@@ -1,6 +1,11 @@
+import type { AvatarConfig } from "@/features/avatar/avatar.types"
+
 export type SessionStatus = "waiting" | "voting" | "revealed" | "done"
 
-export const FIBONACCI = ["1", "2", "3", "5", "8", "13", "21", "?"]
+// "?" = não sei estimar; "☕" = preciso de uma pausa. Ambos são votos válidos
+// e nenhum dos dois é número — as estatísticas os contam na distribuição mas
+// os deixam fora da média, e qualquer um deles derruba o consenso.
+export const FIBONACCI = ["1", "2", "3", "5", "8", "13", "21", "?", "☕"]
 
 export interface PokerSession {
   id: string
@@ -14,6 +19,8 @@ export interface PokerSession {
   created_at: string
   participants: PokerParticipant[]
   votes: PokerVote[]
+  // Só no detalhe da sala (GET /poker/<id>/); a listagem não carrega.
+  reactions?: PokerReaction[]
   // Presentes apenas na listagem (GET /workspaces/<id>/poker/) — contadores
   // agregados para o resumo/histórico, sem custo de N+1 no card individual.
   rounds_count?: number
@@ -60,6 +67,22 @@ export interface PokerParticipant {
   user_name: string
   avatar_initials: string
   is_host: boolean
+  // Sprite pixel-art da pessoa (o mesmo avatar do Escritório). `null` para
+  // quem nunca criou um — nesse caso a mesa mostra as iniciais.
+  avatar_config?: AvatarConfig | null
+}
+
+// Catálogo fechado, espelhando `PokerReactionModel.EMOJIS` no backend.
+export const REACTION_EMOJIS = ["👏", "🔥", "😂", "🤔", "🎯", "❤️"] as const
+
+// Reação efêmera de alguém para alguém. Vive só o tempo de atravessar a mesa:
+// o backend devolve as dos últimos segundos e o cliente já as viu uma vez.
+export interface PokerReaction {
+  id: string
+  from_user_id: string
+  to_user_id: string
+  emoji: string
+  created_at: string
 }
 
 export interface PokerVote {

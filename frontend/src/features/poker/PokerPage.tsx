@@ -1,7 +1,12 @@
 // Sala de Planning Poker — mesa oval com assentos ao redor, votação fibonacci,
 // fila de cards do host e estatísticas da rodada. Tema escuro próprio da sala.
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { AvatarCanvas } from "@/features/avatar/AvatarCanvas"
+import { randomAvatar } from "@/features/avatar/avatar.random"
+import type { Direction } from "@/features/avatar/avatar.types"
+import { saveAvatarConfig } from "@/features/office/office.api"
 import {
   BarChart3,
   Check,
@@ -29,26 +34,38 @@ import {
   useApplyPoints,
   useRounds,
   usePokerSummary,
+  useSendReaction,
 } from "./poker.hooks"
-import { FIBONACCI } from "./poker.types"
+import { FIBONACCI, REACTION_EMOJIS } from "./poker.types"
 import type { PokerParticipant, PokerCard, PokerSession } from "./poker.types"
 
-// Paleta da sala — tokens locais para consistência absoluta entre elementos.
+// Paleta da sala. Os valores vêm do tailwind.config do projeto (escalas `ink`,
+// `neutral`, `blue`, `green`) — a sala é escura porque carta virada precisa de
+// contraste, não porque é um produto à parte. Existe como objeto, e não como
+// classe Tailwind, só porque boa parte disso entra em `style` (gradiente da
+// mesa, sombras, rgba) onde classe não serve.
 const P = {
-  bg: "#0b0b1c",
-  panel: "#13132b",
-  panelSoft: "#101024",
-  border: "#26264a",
-  borderSoft: "#1c1c38",
-  text: "#f0f0f8",
-  textSoft: "#a0a0c0",
-  textDim: "#5d5d84",
-  accent: "#6c5cf0",
-  accentSoft: "#a99bfa",
+  bg: "#0A0B0D",
+  panel: "#212328",
+  panelSoft: "#17191E",
+  border: "#2E3036",
+  borderSoft: "#212328",
+  text: "#F7F8F9",
+  textSoft: "#B3B9C4",
+  textDim: "#8590A2",
+  accent: "#0C66E4",
+  accentSoft: "#579DFF",
 }
 
 // Valores numéricos do deck (sem o "?") — estatísticas e seletor de pontuação final.
-const DECK_NUMBERS = FIBONACCI.filter((v) => v !== "?").map(Number)
+const DECK_NUMBERS = FIBONACCI.map(Number).filter((n) => !isNaN(n))
+
+// Rótulo falado do voto — "?" e "☕" não se leem sozinhos.
+function voteLabel(value: string): string {
+  if (value === "?") return "não sei estimar"
+  if (value === "☕") return "preciso de uma pausa"
+  return `peso ${value}`
+}
 
 function cx(...cls: (string | false | undefined | null)[]) {
   return cls.filter(Boolean).join(" ")
@@ -64,9 +81,9 @@ function tableSize(count: number): { width: number; height: number } {
 
 // Assentos ficam FORA da borda da mesa (wrapper maior que a mesa) —
 // nada de carta sobrepondo avatar ou o centro. Margens dimensionadas para
-// conter o assento inteiro (carta 44 + avatar 40 + nome ≈ 115px de altura).
-const SEAT_MARGIN_X = 110
-const SEAT_MARGIN_Y = 105
+// conter o assento inteiro (carta 52 + corpo 72 + nome ≈ 150px de altura).
+const SEAT_MARGIN_X = 120
+const SEAT_MARGIN_Y = 120
 
 // Posições em px no wrapper: elipse com raio = metade da mesa + folga fixa.
 function seatPositions(
@@ -127,6 +144,55 @@ function computeStats(votes: PokerSession["votes"]): RoundStats | null {
 
 // ─── Assento: carta + avatar + nome, fora da borda da mesa ──────────────────
 
+// Assento: 80px de largura por ~114 de altura. As margens negativas centram o
+// bloco no ponto da órbita sem usar `translate(-50%,-50%)`, que brigaria com o
+// x/y do framer-motion (os dois escrevem no mesmo `transform`).
+const SEATS_MAX = 10
+const SEAT_W = 96
+// Escala 3 (48×96 antes do recorte). Sempre inteira: fracionária faz colunas
+// de pixel com larguras diferentes e o sprite "ondula".
+const SPRITE_SCALE = 3
+// O sprite é um corpo em pé (pernas em y24..31 do frame 16×32) e o chibi.ts não
+// tem pose sentada. Em vez de desenhar arte nova — que o Escritório também usa
+// —, o assento recorta o sprite na altura do tronco e uma borda de mesa cobre a
+// emenda: lê como alguém sentado apoiado na mesa, sem tocar no spritesheet.
+const BODY_VISIBLE_ROWS = 24          // mostra até o quadril (y0..23)
+const BODY_H = BODY_VISIBLE_ROWS * SPRITE_SCALE
+const TABLE_EDGE_H = 10               // faixa que cobre a linha do corte
+const SEAT_H = 150
+
+// Estado da rodada → animação do sprite. É o que faz a mesa ser legível de
+// relance: dá para ver quem ainda está pensando sem ler uma linha de texto.
+export function seatAnim(opts: {
+  voting: boolean
+  revealed: boolean
+  hasVoted: boolean
+  cheering: boolean
+  throwing: boolean
+  justRevealed: boolean
+}): string {
+  // Arremessar vence tudo: é a única ação que a pessoa está fazendo agora, e
+  // sem prioridade o gesto sumiria embaixo do estado da rodada.
+  if (opts.throwing) return "punch"
+  if (opts.cheering) return "wave"          // acabou de receber uma reação
+  // Comemorar é um instante, não um estado. `revealed` dura até o host aplicar
+  // o peso — amarrar `celebrate` nele deixava todo mundo pulando sem parar.
+  if (opts.justRevealed) return "celebrate"
+  if (opts.revealed) return "lean"
+  if (opts.voting) return opts.hasVoted ? "lean" : "type"  // votou / pensando
+  return "idle"
+}
+
+// Todo mundo olha para a mesa: quem senta em cima olha para baixo, quem senta
+// embaixo olha para cima, e as laterais viram para dentro.
+export function seatFacing(index: number, total: number): Direction {
+  const angle = (index / total) * 2 * Math.PI - Math.PI / 2
+  const sin = Math.sin(angle)
+  if (sin < -0.35) return "down"
+  if (sin > 0.35) return "up"
+  return Math.cos(angle) > 0 ? "left" : "right"
+}
+
 function Seat({
   participant,
   hasVoted,
@@ -136,6 +202,11 @@ function Seat({
   index,
   x,
   y,
+  canReact,
+  onReact,
+  cheering,
+  throwing,
+  facing,
 }: {
   participant: PokerParticipant
   hasVoted: boolean
@@ -145,18 +216,75 @@ function Seat({
   index: number
   x: number
   y: number
+  canReact: boolean
+  onReact: (emoji: string) => void
+  cheering: boolean
+  throwing: boolean
+  facing: Direction
 }) {
+  const reduce = useReducedMotion()
+  const [barOpen, setBarOpen] = useState(false)
+
+  // O poll de 2s devolve um `avatar_config` novo a cada resposta. Sem congelar
+  // a referência por valor, o AvatarCanvas remontava o spritesheet e reiniciava
+  // o ciclo no frame 0 duas vezes por segundo — o sprite "resetava" sozinho.
+  const avatarConfig = useMemo(
+    () => participant.avatar_config ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(participant.avatar_config ?? null)],
+  )
+
+  // Dispara na virada para "revelado" e se apaga sozinho; depois disso a
+  // pessoa fica apoiada na mesa esperando a próxima carta.
+  const [justRevealed, setJustRevealed] = useState(false)
+  useEffect(() => {
+    if (!revealed) return
+    setJustRevealed(true)
+    const timer = window.setTimeout(() => setJustRevealed(false), CELEBRATE_MS)
+    return () => clearTimeout(timer)
+  }, [revealed])
   return (
-    <div
-      className="absolute"
-      style={{ left: x, top: y, transform: "translate(-50%,-50%)" }}
+    <motion.div
+      className="absolute left-0 top-0 z-10"
+      style={{ width: SEAT_W, marginLeft: -SEAT_W / 2, marginTop: -SEAT_H / 2 }}
+      initial={{ x, y, scale: 0.6, opacity: 0 }}
+      animate={{ x, y, scale: 1, opacity: 1 }}
+      exit={{ scale: 0.85, opacity: 0 }}
+      transition={
+        reduce
+          ? { duration: 0 }
+          : {
+              // Mola para o reposicionamento (a órbita inteira gira quando
+              // alguém entra ou sai); tween curto para o fade de entrada/saída.
+              x: { type: "spring", stiffness: 260, damping: 26 },
+              y: { type: "spring", stiffness: 260, damping: 26 },
+              scale: { type: "spring", stiffness: 400, damping: 22, delay: index * 0.04 },
+              opacity: { duration: 0.2, ease: "easeOut" },
+            }
+      }
+      onHoverStart={() => canReact && setBarOpen(true)}
+      onHoverEnd={() => setBarOpen(false)}
+      // Sem isto a barra só existiria no hover e o teclado nunca alcançaria as
+      // reações — `focus-within` não serve porque os botões só são montados
+      // depois de abrir. O botão-gatilho abaixo é o que recebe o foco primeiro.
+      onFocusCapture={() => canReact && setBarOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setBarOpen(false)
+      }}
     >
-    <div
-      className="flex w-20 flex-col items-center gap-1.5 poker-pop"
-      style={{ animationDelay: `${index * 60}ms` }}
-    >
+    <div className="relative flex w-20 flex-col items-center gap-1.5">
+      {canReact && (
+        <ReactionBar
+          open={barOpen}
+          targetName={participant.user_name.split(" ")[0]}
+          onPick={(emoji) => {
+            onReact(emoji)
+            setBarOpen(false)
+          }}
+        />
+      )}
       {/* Carta com flip 3D; revelação em cascata */}
-      <div className="h-11 w-8" style={{ perspective: 400 }}>
+      <div className="h-[52px] w-9" style={{ perspective: 400 }}>
         <div
           className="relative h-full w-full transition-transform duration-500 [transform-style:preserve-3d]"
           style={{
@@ -166,61 +294,298 @@ function Seat({
         >
           <div
             className={cx(
-              "absolute inset-0 flex items-center justify-center rounded-md border text-xs font-bold [backface-visibility:hidden] transition-colors duration-300",
+              "absolute inset-0 flex items-center justify-center rounded-md border [backface-visibility:hidden] transition-colors duration-300",
               hasVoted
-                ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.25)]"
-                : "border-[#2c2c52] bg-[#14142c] text-[#5d5d84]",
+                ? "border-green-500/70 shadow-[0_0_10px_rgba(34,160,107,0.3)]"
+                : "border-[#2E3036]",
               voting && !hasVoted && "poker-float",
             )}
+            style={CARD_BACK_STYLE}
           >
-            {hasVoted ? "✓" : "?"}
+            {/* Selo no verso: quem já votou tem a carta na mesa, virada. */}
+            {hasVoted && (
+              <span className="grid size-4 place-items-center rounded-full bg-green-500 text-[9px] font-bold text-white">
+                ✓
+              </span>
+            )}
           </div>
           <div
-            className="absolute inset-0 flex items-center justify-center rounded-md border border-[#6c5cf0] bg-gradient-to-br from-[#7c6cff] to-[#5a4dd0] text-sm font-bold text-white shadow-[0_0_14px_rgba(108,92,240,0.5)] [backface-visibility:hidden]"
+            className="absolute inset-0 [backface-visibility:hidden]"
             style={{ transform: "rotateY(180deg)" }}
           >
-            {voteValue ?? "–"}
+            {voteValue ? (
+              <CardFace value={voteValue} size="seat" />
+            ) : (
+              <span className="grid size-full place-items-center rounded-md border border-[#2E3036] bg-[#17191E] text-sm text-[#8590A2]">
+                –
+              </span>
+            )}
           </div>
         </div>
       </div>
-      <div
-        className={cx(
+      {(() => {
+        const avatarClass = cx(
           "flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold transition-all duration-300",
           participant.is_host
-            ? "border-[#6c5cf0] bg-[#6c5cf0]/20 text-[#a99bfa]"
-            : "border-[#33335c] bg-[#191934] text-[#c8c8e0]",
+            ? "border-[#0C66E4] bg-[#0C66E4]/20 text-[#579DFF]"
+            : "border-[#2E3036] bg-[#212328] text-[#B3B9C4]",
           voting && !hasVoted && "poker-pulse",
-        )}
-      >
-        {participant.avatar_initials}
-      </div>
-      <span className="max-w-[80px] truncate text-center text-[10px] font-medium leading-tight text-[#8888ac]">
+        )
+        // Quem já criou avatar senta como sprite; quem não criou continua nas
+        // iniciais — cinco "Funcionário" idênticos na mesa seria pior que isso.
+        const body = avatarConfig ? (
+          <span
+            className="relative block overflow-hidden"
+            style={{ width: 16 * SPRITE_SCALE, height: BODY_H }}
+          >
+            <AvatarCanvas
+              config={avatarConfig}
+              anim={seatAnim({ voting, revealed, hasVoted, cheering, throwing, justRevealed })}
+              dir={facing}
+              scale={SPRITE_SCALE}
+            />
+            {/* Borda da mesa: cobre a linha do corte e ancora a pessoa na
+                madeira, senão o tronco pareceria cortado no ar. */}
+            <span
+              className="absolute inset-x-0 bottom-0 rounded-t-[2px]"
+              style={{
+                height: TABLE_EDGE_H,
+                background: "linear-gradient(180deg, #2E3036, #17191E)",
+                boxShadow: "0 -1px 0 rgba(255,255,255,0.06)",
+              }}
+              aria-hidden
+            />
+          </span>
+        ) : (
+          <span className={avatarClass}>{participant.avatar_initials}</span>
+        )
+        // O avatar de outra pessoa é o gatilho das reações; o próprio não é
+        // clicável (ninguém reage para si).
+        return canReact ? (
+          <button
+            type="button"
+            onClick={() => setBarOpen((v) => !v)}
+            aria-expanded={barOpen}
+            aria-label={`Reagir para ${participant.user_name}`}
+            className="rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4] focus-visible:outline-offset-2"
+          >
+            {body}
+          </button>
+        ) : (
+          body
+        )
+      })()}
+      <span className="max-w-[80px] truncate text-center text-[10px] font-medium leading-tight text-[#8590A2]">
         {participant.user_name.split(" ")[0]}
-        {participant.is_host && <span className="ml-1 text-[#a99bfa]" title="Host">★</span>}
+        {participant.is_host && <span className="ml-1 text-[#579DFF]" title="Host">★</span>}
       </span>
     </div>
-    </div>
+    </motion.div>
+  )
+}
+
+// Verso da carta: losangos diagonais em duas camadas, como baralho de
+// verdade. `background-image` em gradiente repetido — nada de asset externo.
+const CARD_BACK_STYLE: React.CSSProperties = {
+  backgroundColor: "#17191E",
+  backgroundImage:
+    "repeating-linear-gradient(45deg, rgba(12,102,228,0.32) 0 3px, transparent 3px 7px)," +
+    "repeating-linear-gradient(-45deg, rgba(12,102,228,0.32) 0 3px, transparent 3px 7px)",
+}
+
+// Frente da carta: índice nos dois cantos opostos e naipe no centro, que é o
+// que faz o olho ler "carta" em vez de "botão com número".
+function CardFace({
+  value,
+  size,
+}: {
+  value: string
+  size: "seat" | "deck"
+}) {
+  const deck = size === "deck"
+  return (
+    <span
+      className={cx(
+        "flex size-full items-center justify-center rounded-md border border-[#B3B9C4] bg-white font-bold leading-none text-neutral-900",
+        deck ? "text-2xl" : "text-base",
+      )}
+    >
+      {value}
+    </span>
+  )
+}
+
+// ─── Reações entre participantes ─────────────────────────────────────────────
+
+// Barra que abre no hover do assento alheio. Fica acima do assento e some ao
+// escolher — reagir é um gesto de um clique, não um menu para navegar.
+function ReactionBar({
+  open,
+  targetName,
+  onPick,
+}: {
+  open: boolean
+  targetName: string
+  onPick: (emoji: string) => void
+}) {
+  const reduce = useReducedMotion()
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="bar"
+          className="absolute -top-9 z-20 flex gap-0.5 rounded-full border px-1.5 py-1 shadow-lg"
+          style={{ borderColor: P.border, background: "rgba(33,35,40,0.97)" }}
+          initial={{ opacity: 0, scale: 0.85, y: 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.16, ease: [0.2, 0, 0, 1] }}
+          role="group"
+          aria-label={`Reagir para ${targetName}`}
+        >
+          {REACTION_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => onPick(emoji)}
+              aria-label={`Enviar ${emoji} para ${targetName}`}
+              className="grid size-6 place-items-center rounded-full text-sm transition-transform hover:scale-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+            >
+              {emoji}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// Reação em voo: sai do assento de quem mandou, faz um arco por cima da mesa e
+// pousa no assento de quem recebeu. É a única coisa na sala que liga duas
+// pessoas visualmente — daí o arco em vez de uma linha reta.
+// Tempo do gesto antes de a mão soltar o emoji. Bate com o frame do `punch`
+// em que o braço termina de estender — soltar antes faz o emoji sair sozinho,
+// depois faz o braço voltar de mão vazia.
+export const THROW_WINDUP = 0.18
+// Altura da mão dentro do assento: o tronco fica acima do centro por causa do
+// recorte, então o emoji sai daí e não do meio do bloco.
+const HAND_Y = 6
+const FLIGHT_S = 0.95
+// Duração do gesto: preparo + um ciclo de `punch` (4 frames a 10fps). Mais que
+// isso e o braço soca repetido durante o voo inteiro.
+export const THROW_GESTURE_MS = (THROW_WINDUP + 0.4) * 1000
+// Instante em que o emoji encosta no alvo — 82% do voo, o keyframe do impacto.
+export const IMPACT_MS = (THROW_WINDUP + FLIGHT_S * 0.82) * 1000
+export const CHEER_MS = 800
+// Duração da comemoração na revelação — um beat, não um estado.
+export const CELEBRATE_MS = 1600
+
+function FlyingReaction({
+  emoji,
+  from,
+  to,
+  onDone,
+}: {
+  emoji: string
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  onDone: () => void
+}) {
+  const reduce = useReducedMotion()
+  // Sai pelo lado do corpo virado para o alvo, na altura da mão.
+  const originX = from.x + (to.x >= from.x ? 9 : -9)
+  const originY = from.y + HAND_Y
+  const midX = (originX + to.x) / 2
+  const midY = (originY + to.y) / 2 - 70
+
+  if (reduce) {
+    // Sem movimento: pisca sobre o destinatário e sai. A informação (quem
+    // recebeu o quê) continua chegando, só não atravessa a tela.
+    return (
+      <motion.span
+        className="pointer-events-none absolute left-0 top-0 z-30 text-2xl"
+        style={{ marginLeft: -12, marginTop: -12 }}
+        initial={{ x: to.x, y: to.y, opacity: 0 }}
+        animate={{ opacity: [0, 1, 1, 0] }}
+        transition={{ duration: 1.2, times: [0, 0.15, 0.7, 1] }}
+        onAnimationComplete={onDone}
+        aria-hidden
+      >
+        {emoji}
+      </motion.span>
+    )
+  }
+
+  return (
+    <motion.span
+      className="pointer-events-none absolute left-0 top-0 z-30 text-2xl"
+      style={{ marginLeft: -12, marginTop: -12 }}
+      initial={{ x: originX, y: originY, scale: 0.4, opacity: 0 }}
+      animate={{
+        x: [originX, midX, to.x, to.x],
+        y: [originY, midY, to.y, to.y],
+        // O último passo é o impacto: estufa e some em cima da pessoa, em vez
+        // de simplesmente apagar no ar.
+        scale: [0.4, 1.4, 1.1, 1.7],
+        opacity: [0, 1, 1, 0],
+      }}
+      transition={{
+        duration: FLIGHT_S,
+        delay: THROW_WINDUP,
+        ease: "easeOut",
+        times: [0, 0.45, 0.82, 1],
+      }}
+      onAnimationComplete={onDone}
+      aria-hidden
+    >
+      {emoji}
+    </motion.span>
   )
 }
 
 // ─── Confete no consenso ─────────────────────────────────────────────────────
 
+// Fita de papel do consenso. Trajetória balística por peça (sobe, abre em
+// leque, cai) — o keyframe CSS antigo fazia todas descerem em paralelo, o que
+// lia como chuva, não como comemoração.
+const CONFETTI_COLORS = ["#0C66E4", "#579DFF", "#22A06B", "#E2B203", "#E56910"]
+const CONFETTI = Array.from({ length: 18 }, (_, i) => {
+  // Determinístico por índice: com Math.random() cada re-render sortearia
+  // trajetórias novas e as peças saltariam no meio do voo.
+  const spread = (i / 17 - 0.5) * 2 // -1 … 1
+  return {
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    dx: spread * 150,
+    rise: 60 + ((i * 37) % 50),
+    rotate: spread * 420,
+    delay: (i % 6) * 0.045,
+    duration: 1.1 + ((i * 13) % 40) / 100,
+  }
+})
+
 function ConfettiBurst() {
-  const pieces = ["🎉", "✨", "🎊", "⭐", "💜", "✨", "🎉", "⭐"]
+  const reduce = useReducedMotion()
+  if (reduce) return null
   return (
-    <div className="pointer-events-none absolute inset-x-0 -top-2 flex justify-center" aria-hidden>
-      {pieces.map((p, i) => (
-        <span
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center" aria-hidden>
+      {CONFETTI.map((c, i) => (
+        <motion.span
           key={i}
-          className="poker-confetti absolute text-lg"
-          style={{
-            left: `${18 + i * 9}%`,
-            animationDelay: `${i * 90}ms`,
-            animationDuration: `${800 + (i % 3) * 250}ms`,
+          className="absolute block h-2 w-1.5 rounded-[1px]"
+          style={{ background: c.color }}
+          initial={{ x: 0, y: 0, opacity: 0, rotate: 0 }}
+          animate={{
+            x: [0, c.dx * 0.6, c.dx],
+            y: [0, -c.rise, 120],
+            rotate: [0, c.rotate * 0.5, c.rotate],
+            opacity: [0, 1, 1, 0],
           }}
-        >
-          {p}
-        </span>
+          transition={{
+            duration: c.duration,
+            delay: c.delay,
+            ease: "easeOut",
+            opacity: { duration: c.duration, delay: c.delay, times: [0, 0.1, 0.6, 1] },
+          }}
+        />
       ))}
     </div>
   )
@@ -233,30 +598,30 @@ function RoundSummary({ stats }: { stats: RoundStats }) {
       className={cx(
         "relative w-full rounded-xl border p-3 poker-pop",
         stats.consensus
-          ? "border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-          : "border-[#26264a]",
+          ? "border-green-500/40 shadow-[0_0_20px_rgba(34,160,107,0.15)]"
+          : "border-[#2E3036]",
       )}
       style={{ background: P.panelSoft }}
     >
       {stats.consensus && <ConfettiBurst />}
-      <div className="flex items-center justify-center gap-1.5 text-[#a99bfa]">
+      <div className="flex items-center justify-center gap-1.5 text-[#579DFF]">
         <Sparkles className="size-4" aria-hidden />
         <span className="text-2xl font-bold tabular-nums">{stats.avg.toFixed(1)}</span>
-        <span className="text-[11px] text-[#5d5d84]">média</span>
+        <span className="text-[11px] text-[#8590A2]">média</span>
       </div>
 
-      <div className="mt-2 flex justify-center gap-3 text-[11px] text-[#8888ac]">
-        <span>mediana <b className="text-[#d0d0e8]">{stats.median}</b></span>
-        <span>min <b className="text-[#d0d0e8]">{stats.min}</b></span>
-        <span>max <b className="text-[#d0d0e8]">{stats.max}</b></span>
+      <div className="mt-2 flex justify-center gap-3 text-[11px] text-[#8590A2]">
+        <span>mediana <b className="text-[#DCDFE4]">{stats.median}</b></span>
+        <span>min <b className="text-[#DCDFE4]">{stats.min}</b></span>
+        <span>max <b className="text-[#DCDFE4]">{stats.max}</b></span>
       </div>
 
       {stats.consensus ? (
-        <div className="mt-2 flex items-center justify-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
+        <div className="mt-2 flex items-center justify-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-400">
           <CheckCircle2 className="size-3" aria-hidden /> Consenso!
         </div>
       ) : (
-        <div className="mt-2 flex items-center justify-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-400">
+        <div className="mt-2 flex items-center justify-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-500">
           <BarChart3 className="size-3" aria-hidden /> Votos divergentes
         </div>
       )}
@@ -265,11 +630,11 @@ function RoundSummary({ stats }: { stats: RoundStats }) {
         {stats.distribution.map((d) => (
           <div key={d.value} className="flex flex-col items-center gap-1">
             <div
-              className="w-5 rounded-t bg-[#6c5cf0]/70"
+              className="w-5 rounded-t bg-[#0C66E4]/70"
               style={{ height: `${Math.max((d.count / maxCount) * 28, 4)}px` }}
             />
-            <span className="text-[10px] font-semibold text-[#d0d0e8]">{d.value}</span>
-            <span className="text-[9px] text-[#5d5d84]">{d.count}</span>
+            <span className="text-[10px] font-semibold text-[#DCDFE4]">{d.value}</span>
+            <span className="text-[9px] text-[#8590A2]">{d.count}</span>
           </div>
         ))}
       </div>
@@ -298,19 +663,19 @@ function TableCenter({
           {[-14, 0, 14].map((deg, i) => (
             <div
               key={deg}
-              className="poker-float -mx-1.5 flex h-14 w-10 items-center justify-center rounded-lg border border-[#33335c] bg-gradient-to-b from-[#1e1e3c] to-[#14142c] text-lg text-[#a99bfa] shadow-lg"
+              className="poker-float -mx-1.5 flex h-14 w-10 items-center justify-center rounded-lg border border-[#2E3036] bg-gradient-to-b from-[#212328] to-[#17191E] text-lg text-[#579DFF] shadow-lg"
               style={{ transform: `rotate(${deg}deg)`, animationDelay: `${i * 350}ms` }}
             >
               {i === 1 ? "♠" : "?"}
             </div>
           ))}
         </div>
-        <p className="text-sm font-medium text-[#c8c8e0]">
+        <p className="text-sm font-medium text-[#B3B9C4]">
           {isHost ? "Escolha um card na fila para começar" : "Aguardando o host iniciar…"}
         </p>
         {isHost && (
-          <p className="text-xs text-[#5d5d84]">
-            Clique em <b className="text-[#a99bfa]">Votar</b> no painel ao lado →
+          <p className="text-xs text-[#8590A2]">
+            Clique em <b className="text-[#579DFF]">Votar</b> no painel ao lado →
           </p>
         )}
       </div>
@@ -320,15 +685,15 @@ function TableCenter({
   if (session.status === "done") {
     return (
       <div className="poker-pop flex flex-col items-center gap-1 text-center">
-        <CheckCircle2 className="size-8 text-emerald-400" aria-hidden />
-        <p className="text-sm font-semibold text-[#f0f0f8]">Sessão concluída!</p>
-        <p className="text-xs text-[#5d5d84]">Todos os cards foram estimados.</p>
+        <CheckCircle2 className="size-8 text-green-400" aria-hidden />
+        <p className="text-sm font-semibold text-[#F7F8F9]">Sessão concluída!</p>
+        <p className="text-xs text-[#8590A2]">Todos os cards foram estimados.</p>
       </div>
     )
   }
 
   if (!currentCard) {
-    return <p className="text-sm text-[#5d5d84]">Nenhum card selecionado</p>
+    return <p className="text-sm text-[#8590A2]">Nenhum card selecionado</p>
   }
 
   const votedCount = session.votes.filter((v) => v.has_voted).length
@@ -341,34 +706,34 @@ function TableCenter({
         className="w-full rounded-2xl border p-3.5 text-center poker-pop"
         style={{
           borderColor: P.border,
-          background: "linear-gradient(160deg, #191936, #101024)",
+          background: "linear-gradient(160deg, #17191E, #17191E)",
           boxShadow: "0 8px 24px -8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        <span className="inline-block rounded-full bg-[#6c5cf0]/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-[#a99bfa]">
+        <span className="inline-block rounded-full bg-[#0C66E4]/15 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-[#579DFF]">
           {currentCard.ref}
         </span>
-        <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-[#f0f0f8]">
+        <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-[#F7F8F9]">
           {currentCard.title}
         </p>
       </div>
 
       {session.status === "voting" && (
         <div className="flex w-full flex-col items-center gap-1.5">
-          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-[#1a1a36]">
+          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-[#17191E]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#6c5cf0] to-[#a99bfa] transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-[#0C66E4] to-[#579DFF] transition-all duration-500"
               style={{ width: `${totalVoters > 0 ? (votedCount / totalVoters) * 100 : 0}%` }}
             />
           </div>
-          <span className="text-xs text-[#8888ac] tabular-nums">
+          <span className="text-xs text-[#8590A2] tabular-nums">
             {votedCount}/{totalVoters} votaram
           </span>
         </div>
       )}
 
       {session.status === "revealed" && (
-        <span className="rounded-full bg-[#6c5cf0]/15 px-3 py-1 text-[11px] font-semibold text-[#a99bfa]">
+        <span className="rounded-full bg-[#0C66E4]/15 px-3 py-1 text-[11px] font-semibold text-[#579DFF]">
           ✨ Votos revelados — veja abaixo
         </span>
       )}
@@ -377,6 +742,30 @@ function TableCenter({
 }
 
 // ─── Painel da rodada (abaixo da mesa): stats + ações do host ────────────────
+
+// Progresso da votação — enquanto as cartas estão viradas para baixo, é a
+// única pista de quanto falta. Sem isso o host revela no escuro.
+function VoteProgress({ voted, total }: { voted: number; total: number }) {
+  const reduce = useReducedMotion()
+  const pct = total === 0 ? 0 : (voted / total) * 100
+  const complete = voted === total && total > 0
+  return (
+    <div className="flex w-52 flex-col items-center gap-1.5">
+      <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: P.borderSoft }}>
+        <motion.div
+          className="h-full origin-left rounded-full"
+          style={{ background: complete ? "#22A06B" : P.accent }}
+          initial={false}
+          animate={{ scaleX: pct / 100 }}
+          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 200, damping: 28 }}
+        />
+      </div>
+      <p className="text-[10px] font-medium text-[#8590A2]" aria-live="polite">
+        {complete ? "Todo mundo votou" : `${voted} de ${total} votaram`}
+      </p>
+    </div>
+  )
+}
 
 function RoundPanel({
   session,
@@ -408,7 +797,7 @@ function RoundPanel({
     return (
       <button
         onClick={onReveal}
-        className="flex items-center gap-1.5 rounded-lg bg-[#6c5cf0] px-5 py-2 text-xs font-semibold text-white shadow-[0_0_16px_rgba(108,92,240,0.35)] transition-all hover:bg-[#5a4dd0] hover:shadow-[0_0_22px_rgba(108,92,240,0.5)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6c5cf0] focus-visible:outline-offset-2"
+        className="flex items-center gap-1.5 rounded-lg bg-[#0C66E4] px-5 py-2 text-xs font-semibold text-white shadow-[0_0_16px_rgba(12,102,228,0.35)] transition-all hover:bg-[#0055CC] hover:shadow-[0_0_22px_rgba(12,102,228,0.5)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4] focus-visible:outline-offset-2"
       >
         <Eye className="size-3.5" aria-hidden /> Revelar votos
       </button>
@@ -422,7 +811,7 @@ function RoundPanel({
       {stats && <RoundSummary stats={stats} />}
       {isHost && (
         <div className="flex w-full flex-col items-center gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#5d5d84]">Aplicar pontuação final</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8590A2]">Aplicar peso final</p>
           <div className="flex flex-wrap justify-center gap-1.5">
             {DECK_NUMBERS.map((n) => (
               <button
@@ -430,10 +819,10 @@ function RoundPanel({
                 onClick={() => setApplyValue(n)}
                 aria-pressed={applyValue === n}
                 className={cx(
-                  "flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6c5cf0]",
+                  "flex h-8 w-8 items-center justify-center rounded-md border text-xs font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]",
                   applyValue === n
-                    ? "scale-110 border-[#6c5cf0] bg-[#6c5cf0] text-white shadow-[0_0_10px_rgba(108,92,240,0.5)]"
-                    : "border-[#33335c] bg-[#191934] text-[#c8c8e0] hover:border-[#6c5cf0]",
+                    ? "scale-110 border-[#0C66E4] bg-[#0C66E4] text-white shadow-[0_0_10px_rgba(12,102,228,0.5)]"
+                    : "border-[#2E3036] bg-[#212328] text-[#B3B9C4] hover:border-[#0C66E4]",
                 )}
               >
                 {n}
@@ -444,13 +833,13 @@ function RoundPanel({
             <button
               disabled={applying || applyValue === null}
               onClick={() => applyValue !== null && onApply(applyValue)}
-              className="flex items-center gap-1.5 rounded-md bg-[#6c5cf0] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#5a4dd0] disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-md bg-[#0C66E4] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#0055CC] disabled:opacity-40"
             >
-              <Check className="size-3.5" aria-hidden /> Aplicar {applyValue ?? "…"} pontos
+              <Check className="size-3.5" aria-hidden /> Aplicar peso {applyValue ?? "…"}
             </button>
             <button
               onClick={onNextCard}
-              className="flex items-center gap-1 text-[10px] text-[#5d5d84] transition-colors hover:text-[#c8c8e0]"
+              className="flex items-center gap-1 text-[10px] text-[#8590A2] transition-colors hover:text-[#B3B9C4]"
             >
               <SkipForward className="size-3" aria-hidden /> pular sem aplicar
             </button>
@@ -464,26 +853,40 @@ function RoundPanel({
 // ─── Baralho do jogador ──────────────────────────────────────────────────────
 
 function VotingRow({ myVote, onVote }: { myVote: string | null; onVote: (v: string) => void }) {
+  const reduce = useReducedMotion()
   return (
-    <div className="flex flex-wrap items-end justify-center gap-2" role="group" aria-label="Escolha seu voto">
+    <div
+      className="flex flex-wrap items-end justify-center gap-2"
+      role="group"
+      aria-label="Escolha seu voto"
+    >
       {FIBONACCI.map((val, i) => {
         const active = myVote === val
         return (
-          <button
+          <motion.button
             key={val}
             onClick={() => onVote(val)}
             aria-pressed={active}
-            aria-label={`Votar ${val}`}
+            aria-label={`Votar: ${voteLabel(val)}`}
+            // A carta escolhida sobe e fica; as outras só respondem ao ponteiro.
+            animate={{ y: active ? -14 : 0 }}
+            whileHover={reduce ? undefined : { y: active ? -18 : -8 }}
+            whileTap={{ scale: 0.96 }}
+            transition={
+              reduce
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 420, damping: 26, delay: i * 0.02 }
+            }
             className={cx(
-              "poker-deal h-20 w-14 rounded-xl border-2 text-xl font-bold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6c5cf0] focus-visible:outline-offset-2",
+              "poker-deal h-24 w-16 rounded-lg p-0 transition-shadow duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4] focus-visible:outline-offset-2",
               active
-                ? "-translate-y-3 border-[#6c5cf0] bg-gradient-to-b from-[#7c6cff] to-[#5a4dd0] text-white shadow-[0_10px_24px_rgba(108,92,240,0.45)]"
-                : "border-[#33335c] bg-gradient-to-b from-[#1e1e3c] to-[#14142c] text-[#c8c8e0] hover:-translate-y-2 hover:border-[#6c5cf0] hover:shadow-[0_8px_18px_rgba(108,92,240,0.25)]",
+                ? "shadow-[0_12px_26px_rgba(12,102,228,0.5)] ring-2 ring-[#0C66E4]"
+                : "shadow-[0_6px_14px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_20px_rgba(12,102,228,0.3)]",
             )}
             style={{ animationDelay: `${i * 45}ms` }}
           >
-            {val}
-          </button>
+            <CardFace value={val} size="deck" />
+          </motion.button>
         )
       })}
     </div>
@@ -519,30 +922,30 @@ function CardSelector({
         className={cx(
           "flex items-center gap-2 rounded-lg border p-2 transition-all",
           isCurrent
-            ? "border-[#6c5cf0] bg-[#6c5cf0]/10 shadow-[0_0_12px_rgba(108,92,240,0.15)]"
-            : "border-[#1c1c38] bg-[#101024] hover:border-[#2c2c52]",
+            ? "border-[#0C66E4] bg-[#0C66E4]/10 shadow-[0_0_12px_rgba(12,102,228,0.15)]"
+            : "border-[#212328] bg-[#17191E] hover:border-[#2E3036]",
           done && !isCurrent && "opacity-60",
         )}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-[#5d5d84]">{card.ref}</span>
+            <span className="font-mono text-[10px] text-[#8590A2]">{card.ref}</span>
             {done && (
-              <span className="rounded bg-emerald-500/15 px-1 text-[10px] font-semibold text-emerald-400">
-                {card.points} pts
+              <span className="rounded bg-green-500/15 px-1 text-[10px] font-semibold text-green-400">
+                peso {card.points}
               </span>
             )}
           </div>
-          <p className="truncate text-xs text-[#c8c8e0]">{card.title}</p>
+          <p className="truncate text-xs text-[#B3B9C4]">{card.title}</p>
         </div>
         <button
           onClick={() => onSelectCard(card.id)}
           disabled={isCurrent}
           className={cx(
-            "shrink-0 rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6c5cf0]",
+            "shrink-0 rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]",
             isCurrent
-              ? "cursor-default bg-[#6c5cf0] text-white"
-              : "bg-[#22224200] border border-[#33335c] text-[#a0a0c0] hover:border-[#6c5cf0] hover:bg-[#6c5cf0] hover:text-white",
+              ? "cursor-default bg-[#0C66E4] text-white"
+              : "bg-[#2E303600] border border-[#2E3036] text-[#B3B9C4] hover:border-[#0C66E4] hover:bg-[#0C66E4] hover:text-white",
           )}
         >
           {isCurrent ? "Votando" : "Votar"}
@@ -554,19 +957,19 @@ function CardSelector({
   return (
     <div className="flex h-full flex-col">
       <div className="mb-2 flex items-center gap-2">
-        <ListOrdered className="size-4 text-[#a99bfa]" aria-hidden />
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#a0a0c0]">Fila de votação</h3>
+        <ListOrdered className="size-4 text-[#579DFF]" aria-hidden />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#B3B9C4]">Fila de votação</h3>
       </div>
 
       {inQueue.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1 flex items-center justify-between text-[10px] text-[#5d5d84]">
+          <div className="mb-1 flex items-center justify-between text-[10px] text-[#8590A2]">
             <span>{estimated} de {inQueue.length} estimados</span>
             <span className="tabular-nums">{inQueue.length > 0 ? Math.round((estimated / inQueue.length) * 100) : 0}%</span>
           </div>
-          <div className="h-1 overflow-hidden rounded-full bg-[#1a1a36]">
+          <div className="h-1 overflow-hidden rounded-full bg-[#17191E]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
               style={{ width: `${inQueue.length > 0 ? (estimated / inQueue.length) * 100 : 0}%` }}
             />
           </div>
@@ -577,14 +980,14 @@ function CardSelector({
         {inQueue.map(renderItem)}
         {rest.length > 0 && (
           <>
-            <p className="pt-2 text-[10px] font-semibold uppercase tracking-wider text-[#44446a]">
+            <p className="pt-2 text-[10px] font-semibold uppercase tracking-wider text-[#494B52]">
               Outros cards do projeto
             </p>
             {rest.map(renderItem)}
           </>
         )}
         {cards.length === 0 && (
-          <p className="pt-4 text-center text-xs text-[#44446a]">Nenhum card no projeto</p>
+          <p className="pt-4 text-center text-xs text-[#494B52]">Nenhum card no projeto</p>
         )}
       </div>
     </div>
@@ -615,16 +1018,16 @@ function NewSessionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="poker-pop w-full max-w-md rounded-2xl border p-6 shadow-2xl" style={{ borderColor: P.border, background: P.panel }}>
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#f0f0f8]">
-          <Spade className="size-5 text-[#a99bfa]" aria-hidden /> Nova sessão de Planning Poker
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#F7F8F9]">
+          <Spade className="size-5 text-[#579DFF]" aria-hidden /> Nova sessão de Planning Poker
         </h2>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs text-[#8888ac]">Projeto</label>
+            <label className="mb-1 block text-xs text-[#8590A2]">Projeto</label>
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full rounded-lg border border-[#33335c] bg-[#191934] px-3 py-2 text-sm text-[#f0f0f8] outline-none focus:border-[#6c5cf0]"
+              className="w-full rounded-lg border border-[#2E3036] bg-[#212328] px-3 py-2 text-sm text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>[{p.key}] {p.name}</option>
@@ -632,22 +1035,22 @@ function NewSessionModal({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-[#8888ac]">Nome da sessão</label>
+            <label className="mb-1 block text-xs text-[#8590A2]">Nome da sessão</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-[#33335c] bg-[#191934] px-3 py-2 text-sm text-[#f0f0f8] outline-none focus:border-[#6c5cf0]"
+              className="w-full rounded-lg border border-[#2E3036] bg-[#212328] px-3 py-2 text-sm text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
             />
           </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-[#8888ac] transition-colors hover:text-[#f0f0f8]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#8590A2] transition-colors hover:text-[#F7F8F9]">
             Cancelar
           </button>
           <button
             disabled={!projectId || loading}
             onClick={handleCreate}
-            className="rounded-lg bg-[#6c5cf0] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#5a4dd0] disabled:opacity-40"
+            className="rounded-lg bg-[#0C66E4] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0055CC] disabled:opacity-40"
           >
             {loading ? "Criando…" : "Criar sala"}
           </button>
@@ -662,8 +1065,8 @@ const STATUS_LABEL: Record<string, string> = {
 }
 const STATUS_TONE: Record<string, string> = {
   waiting: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300",
-  voting: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
-  revealed: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400",
+  voting: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-500",
+  revealed: "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300",
   done: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400",
 }
 
@@ -682,8 +1085,8 @@ function RoundRow({ round }: { round: import("./poker.types").PokerRound }) {
           <span className="font-mono text-[10px] text-paper-400">{round.card_ref}</span>{" "}
           <span className="text-sm font-medium text-ink dark:text-paper">{round.card_title}</span>
         </div>
-        <span className="shrink-0 rounded-full bg-[#6c5cf0]/10 px-2.5 py-1 text-xs font-bold text-[#6c5cf0]">
-          {round.final_points} pts
+        <span className="shrink-0 rounded-full bg-[#0C66E4]/10 px-2.5 py-1 text-xs font-bold text-[#0C66E4]">
+          peso {round.final_points}
         </span>
       </div>
       {cast.length > 0 && (
@@ -718,7 +1121,13 @@ function SessionHistoryCard({
   const { data: rounds, isLoading } = useRounds(expanded ? session.id : null)
 
   return (
-    <div className="rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 transition-colors hover:border-brand-300">
+    <motion.div
+      variants={ITEM_IN}
+      layout="position"
+      whileHover={{ y: -2 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      className="rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 transition-colors hover:border-brand-300"
+    >
       <button
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full items-center justify-between gap-3 p-4 text-left"
@@ -734,43 +1143,54 @@ function SessionHistoryCard({
             <span>{projectLabel}</span>
             <span>{fmtDateTime(session.created_at)}</span>
             <span>{session.rounds_count ?? 0} card{session.rounds_count === 1 ? "" : "s"} votado{session.rounds_count === 1 ? "" : "s"}</span>
-            {session.avg_points != null && <span>média {session.avg_points} pts</span>}
+            {session.avg_points != null && <span>peso médio {session.avg_points}</span>}
             <span>{session.participants_count ?? 0} participante{session.participants_count === 1 ? "" : "s"}</span>
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={(e) => { e.stopPropagation(); onEnter() }}
-            className="rounded-lg bg-[#6c5cf0] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#5a4dd0]"
+            className="rounded-lg bg-[#0C66E4] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#0055CC]"
           >
             {session.status === "done" ? "Ver sala" : "Entrar"}
           </button>
           <ChevronDown className={cx("size-4 text-paper-400 transition-transform", expanded && "rotate-180")} />
         </div>
       </button>
-      {expanded && (
-        <div className="space-y-2 border-t border-paper-100 dark:border-ink-800 p-4 pt-3">
-          {isLoading && <p className="text-xs text-paper-400">Carregando…</p>}
-          {!isLoading && (rounds ?? []).length === 0 && (
-            <p className="text-xs text-paper-400">Nenhum card foi votado até agora nesta sala.</p>
-          )}
-          {(rounds ?? []).map((r) => <RoundRow key={r.id} round={r} />)}
-        </div>
-      )}
-    </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="rounds"
+            className="space-y-2 overflow-hidden border-t border-paper-100 dark:border-ink-800 p-4 pt-3"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {isLoading && <p className="text-xs text-paper-400">Carregando…</p>}
+            {!isLoading && (rounds ?? []).length === 0 && (
+              <p className="text-xs text-paper-400">Nenhum card foi votado até agora nesta sala.</p>
+            )}
+            {(rounds ?? []).map((r) => <RoundRow key={r.id} round={r} />)}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
 // Avatar com gradiente determinístico pelo nome — mesma técnica usada no
 // resto do app (board.shared.avatarGradient), reimplementada aqui para
 // manter a feature de poker autocontida.
+// Só escalas que existem no tailwind.config do projeto — violeta/teal/rosa do
+// Tailwind padrão eram justamente o que fazia a tela parecer de outro produto.
 const AVATAR_GRADIENTS = [
-  "from-violet-500 to-purple-700",
-  "from-blue-500 to-indigo-700",
-  "from-emerald-500 to-teal-700",
-  "from-rose-500 to-pink-700",
-  "from-amber-500 to-orange-700",
-  "from-cyan-500 to-sky-700",
+  "from-blue-400 to-blue-600",
+  "from-green-400 to-green-600",
+  "from-orange-400 to-orange-700",
+  "from-red-400 to-red-600",
+  "from-yellow-500 to-orange-700",
+  "from-blue-300 to-blue-500",
 ]
 function avatarGradient(name: string): string {
   let hash = 0
@@ -786,21 +1206,70 @@ function NameAvatar({ name }: { name: string }) {
   )
 }
 
+// ─── Movimento do lobby ──────────────────────────────────────────────────────
+
+// Entrada em cascata. Um container só orquestra: os filhos herdam as variantes
+// do pai, então não é preciso repetir delay item a item.
+const LIST_IN = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.05 } },
+}
+const ITEM_IN = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] } },
+}
+
+// Número que sobe de 0 até o valor. Só para os contadores do resumo: eles
+// aparecem uma vez por visita, que é onde uma animação de 700ms se paga.
+function useCountUp(target: number, enabled: boolean): number {
+  const [value, setValue] = useState(enabled ? 0 : target)
+  useEffect(() => {
+    if (!enabled) {
+      setValue(target)
+      return
+    }
+    let frame = 0
+    const start = performance.now()
+    const DURATION = 700
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / DURATION, 1)
+      // easeOutCubic: chega rápido e assenta, em vez de arrastar até o fim.
+      setValue(Math.round(target * (1 - Math.pow(1 - t, 3))))
+      if (t < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [target, enabled])
+  return value
+}
+
+function MetricValue({ value }: { value: React.ReactNode }) {
+  const reduce = useReducedMotion()
+  const numeric = typeof value === "number" ? value : null
+  const shown = useCountUp(numeric ?? 0, !reduce && numeric !== null)
+  return <>{numeric === null ? value : shown}</>
+}
+
 function MetricTile({ icon, iconTone, accent, value, label }: { icon: React.ReactNode; iconTone: string; accent: string; value: React.ReactNode; label: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-4 shadow-card">
+    <motion.div
+      variants={ITEM_IN}
+      className="relative overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-4 shadow-card"
+    >
       <span className={cx("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", accent)} />
       <div className="flex items-center gap-2.5">
         <span className={cx("grid size-8 place-items-center rounded-xl", iconTone)}>{icon}</span>
-        <span className="text-2xl font-bold tabular text-ink dark:text-paper">{value}</span>
+        <span className="text-2xl font-bold tabular text-ink dark:text-paper">
+          <MetricValue value={value} />
+        </span>
       </div>
       <p className="mt-2 text-xs font-medium text-paper-500">{label}</p>
-    </div>
+    </motion.div>
   )
 }
 
 // ─── Aba Resumo do Planning Poker — estilo Jira, agregando TODAS as sessões
-// do workspace: quanto foi votado, distribuição de pontos, quem mais votou
+// do workspace: quanto foi votado, distribuição de peso, quem mais votou
 // e a atividade recente entre salas. ───────────────────────────────────────
 function PokerResumoDashboard({ workspaceId }: { workspaceId: string }) {
   const { data: summary } = usePokerSummary(workspaceId)
@@ -811,57 +1280,65 @@ function PokerResumoDashboard({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <motion.div
+        variants={LIST_IN}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-5"
+      >
         <MetricTile
           icon={<Sparkles className="size-4" />}
-          iconTone="bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400"
-          accent="from-violet-500 to-fuchsia-400"
+          iconTone="bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+          accent="from-blue-500 to-blue-300"
           value={summary.sessions_total}
           label="sessões no total"
         />
         <MetricTile
           icon={<Radio className="size-4" />}
-          iconTone="bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
-          accent="from-amber-500 to-orange-400"
+          iconTone="bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-500"
+          accent="from-yellow-500 to-orange-400"
           value={summary.sessions_active}
           label="salas em andamento"
         />
         <MetricTile
           icon={<ListOrdered className="size-4" />}
           iconTone="bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400"
-          accent="from-blue-500 to-cyan-400"
+          accent="from-blue-600 to-blue-400"
           value={summary.rounds_total}
           label="cards estimados no total"
         />
         <MetricTile
           icon={<CheckCircle2 className="size-4" />}
           iconTone="bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400"
-          accent="from-green-500 to-emerald-400"
+          accent="from-green-500 to-green-400"
           value={summary.rounds_today}
           label="cards votados hoje"
         />
         <MetricTile
           icon={<BarChart3 className="size-4" />}
           iconTone="bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400"
-          accent="from-orange-500 to-amber-400"
+          accent="from-orange-500 to-yellow-500"
           value={summary.avg_points ?? "—"}
-          label="média de pontos"
+          label="peso médio"
         />
-      </div>
+      </motion.div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {/* Distribuição de pontos votados */}
+        {/* Distribuição de peso votado */}
         <section className="rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-5 shadow-card">
-          <p className="text-sm font-semibold text-ink dark:text-paper">Distribuição de pontos</p>
-          <p className="mt-0.5 text-xs text-paper-400">Quantas vezes cada valor do deck foi a pontuação final.</p>
+          <p className="text-sm font-semibold text-ink dark:text-paper">Distribuição de peso</p>
+          <p className="mt-0.5 text-xs text-paper-400">Quantas vezes cada valor do deck virou o peso final.</p>
           <div className="mt-6 flex h-36 items-end gap-3">
             {summary.points_distribution.map((d) => (
               <div key={d.points} className="flex flex-1 flex-col items-center gap-2">
                 <span className="text-xs font-semibold text-ink dark:text-paper">{d.count || ""}</span>
                 <div className="flex h-28 w-full items-end">
-                  <div
-                    className="w-full rounded-t-md bg-gradient-to-t from-[#6c5cf0] to-[#a99bfa] shadow-sm"
+                  <motion.div
+                    className="w-full origin-bottom rounded-t-md bg-gradient-to-t from-[#0C66E4] to-[#579DFF] shadow-sm"
                     style={{ height: `${(d.count / maxDist) * 100}%`, minHeight: d.count > 0 ? 6 : 0 }}
+                    initial={{ scaleY: 0 }}
+                    animate={{ scaleY: 1 }}
+                    transition={{ duration: 0.5, delay: d.points * 0.012, ease: [0.16, 1, 0.3, 1] }}
                   />
                 </div>
                 <span className="text-[11px] font-medium text-paper-400">{d.points}</span>
@@ -880,7 +1357,13 @@ function PokerResumoDashboard({ workspaceId }: { workspaceId: string }) {
                 <NameAvatar name={e.name} />
                 <span className="w-28 shrink-0 truncate text-xs text-paper-500">{e.name}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[#6c5cf0] to-[#a99bfa]" style={{ width: `${(e.votes / maxVotes) * 100}%` }} />
+                  <motion.div
+                    className="h-full origin-left rounded-full bg-gradient-to-r from-[#0C66E4] to-[#579DFF]"
+                    style={{ width: `${(e.votes / maxVotes) * 100}%` }}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  />
                 </div>
                 <span className="w-8 text-right text-xs font-semibold text-ink dark:text-paper">{e.votes}</span>
               </div>
@@ -904,7 +1387,7 @@ function PokerResumoDashboard({ workspaceId }: { workspaceId: string }) {
                   </p>
                   <p className="truncate text-[11px] text-paper-400">{r.session_name} · {fmtDateTime(r.decided_at)}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-[#6c5cf0]/10 px-2 py-0.5 text-[11px] font-bold text-[#6c5cf0]">{r.final_points} pts</span>
+                <span className="shrink-0 rounded-full bg-[#0C66E4]/10 px-2 py-0.5 text-[11px] font-bold text-[#0C66E4]">peso {r.final_points}</span>
               </div>
             ))}
             {summary.recent_rounds.length === 0 && (
@@ -955,7 +1438,7 @@ function SessionListView({
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="rounded-lg bg-[#6c5cf0] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#5a4dd0]"
+          className="rounded-lg bg-[#0C66E4] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0055CC]"
         >
           + Nova sessão
         </button>
@@ -971,7 +1454,7 @@ function SessionListView({
           <p className="mt-1 text-sm text-paper-400">Crie uma sala e convide seu time para estimar cards</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <motion.div variants={LIST_IN} initial="hidden" animate="show" className="space-y-2">
           {sessions.map((s) => (
             <SessionHistoryCard
               key={s.id}
@@ -980,7 +1463,7 @@ function SessionListView({
               onEnter={() => navigate(`/app/poker/${s.id}`)}
             />
           ))}
-        </div>
+        </motion.div>
       )}
       {showModal && (
         <NewSessionModal
@@ -997,53 +1480,191 @@ function SessionListView({
 
 function StatusPill({ status }: { status: PokerSession["status"] }) {
   const cfg = {
-    waiting: { label: "Aguardando", cls: "border-[#33335c] bg-[#191934] text-[#8888ac]" },
-    voting: { label: "Votação aberta", cls: "border-amber-500/30 bg-amber-500/10 text-amber-400" },
-    revealed: { label: "Votos revelados", cls: "border-[#6c5cf0]/40 bg-[#6c5cf0]/10 text-[#a99bfa]" },
-    done: { label: "Concluída", cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" },
+    waiting: { label: "Aguardando", cls: "border-[#2E3036] bg-[#212328] text-[#8590A2]" },
+    voting: { label: "Votação aberta", cls: "border-yellow-500/30 bg-yellow-500/10 text-yellow-500" },
+    revealed: { label: "Votos revelados", cls: "border-[#0C66E4]/40 bg-[#0C66E4]/10 text-[#579DFF]" },
+    done: { label: "Concluída", cls: "border-green-500/30 bg-green-500/10 text-green-400" },
   }[status]
   return (
     <span className={cx("flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium", cfg.cls)}>
-      {status === "voting" && <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />}
+      {status === "voting" && <span className="size-1.5 animate-pulse rounded-full bg-yellow-500" />}
       {status === "done" && <CheckCircle2 className="size-3" aria-hidden />}
       {cfg.label}
     </span>
   )
 }
 
+// Quem ainda não tem avatar senta como iniciais. Em vez de só constatar isso,
+// a sala oferece as duas saídas: sortear um na hora (um clique, sem sair da
+// rodada) ou abrir o editor completo.
+function AvatarPrompt({ onDone }: { onDone: () => void }) {
+  const navigate = useNavigate()
+  const [saving, setSaving] = useState(false)
+
+  const handleRandom = async () => {
+    setSaving(true)
+    try {
+      await saveAvatarConfig(randomAvatar())
+      onDone()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-[#2E3036] bg-[#212328] px-2 py-1">
+      <span className="pl-1 text-[11px] text-[#8590A2]">Sem avatar</span>
+      <button
+        onClick={handleRandom}
+        disabled={saving}
+        className="rounded-full bg-[#0C66E4] px-2.5 py-0.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#0055CC] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+      >
+        {saving ? "Sorteando…" : "Sortear"}
+      </button>
+      <button
+        onClick={() => navigate("/app/avatar")}
+        className="rounded-full px-2 py-0.5 text-[11px] text-[#B3B9C4] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+      >
+        Criar
+      </button>
+    </div>
+  )
+}
+
 function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) {
   const navigate = useNavigate()
-  const { data: session } = useSession(sessionId)
+  const { data: session, refetch: refetchSession } = useSession(sessionId)
   const { data: allCards = [] } = usePokerCards(sessionId)
   const { data: projects = [] } = useProjects(session?.workspace_id ?? null)
   const submitVote = useSubmitVote(sessionId)
   const updateSession = useUpdateSession(sessionId)
   const applyPoints = useApplyPoints(sessionId)
   const [copied, setCopied] = useState(false)
+  const sendReaction = useSendReaction(sessionId)
   useHeartbeat(sessionId)
   const project = projects.find((p) => p.id === session?.project_id) ?? null
 
+  // Reações em voo na tela. Não vivem no cache do react-query porque não são
+  // estado da sala e sim eventos: cada uma existe até a animação terminar.
+  const [flying, setFlying] = useState<
+    { key: string; emoji: string; from: string; to: string }[]
+  >([])
+  const seenReactions = useRef<Set<string>>(new Set())
+  // Quem está no gesto de arremesso e quem já levou o emoji. Derivar isso de
+  // `flying` direto faria o braço socar em loop durante todo o voo e o alvo
+  // acenar antes de o emoji chegar nele.
+  const [throwers, setThrowers] = useState<string[]>([])
+  const [cheerers, setCheerers] = useState<string[]>([])
+  const timers = useRef<number[]>([])
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+
+  const playThrow = (from: string, to: string) => {
+    const after = (ms: number, fn: () => void) => {
+      timers.current.push(window.setTimeout(fn, ms))
+    }
+    const drop = (setter: typeof setThrowers, id: string) =>
+      setter((prev) => {
+        const i = prev.indexOf(id)
+        return i === -1 ? prev : [...prev.slice(0, i), ...prev.slice(i + 1)]
+      })
+
+    setThrowers((prev) => [...prev, from])
+    after(THROW_GESTURE_MS, () => drop(setThrowers, from))
+    // O alvo só reage quando o emoji encosta.
+    after(IMPACT_MS, () => {
+      setCheerers((prev) => [...prev, to])
+      // Contado a partir do impacto, não do arremesso — este `after` já roda
+      // dentro do callback do impacto.
+      after(CHEER_MS, () => drop(setCheerers, to))
+    })
+  }
+
+  useEffect(() => {
+    const incoming = session?.reactions ?? []
+    const fresh = incoming.filter(
+      // As minhas já foram animadas no clique; o poll as devolve por alguns
+      // segundos e sem esse filtro elas voariam de novo.
+      (r) => !seenReactions.current.has(r.id) && r.from_user_id !== userId,
+    )
+    if (fresh.length === 0) return
+    fresh.forEach((r) => seenReactions.current.add(r.id))
+    setFlying((prev) => [
+      ...prev,
+      ...fresh.map((r) => ({
+        key: r.id,
+        emoji: r.emoji,
+        from: r.from_user_id,
+        to: r.to_user_id,
+      })),
+    ])
+    fresh.forEach((r) => playThrow(r.from_user_id, r.to_user_id))
+  }, [session?.reactions, userId])
+
+  const handleReact = (toUserId: string, emoji: string) => {
+    // Anima antes de a rede responder: reagir tem que dar retorno imediato,
+    // e um POST que falhe não custa nada além de a emoji não chegar do outro lado.
+    setFlying((prev) => [
+      ...prev,
+      { key: `local-${Date.now()}-${emoji}`, emoji, from: userId, to: toUserId },
+    ])
+    playThrow(userId, toUserId)
+    sendReaction.mutate({ toUserId, emoji })
+  }
+
   if (!session) {
     return (
-      <div className="flex h-full items-center justify-center text-[#5d5d84]" style={{ background: P.bg }}>
+      <div className="flex h-full items-center justify-center text-[#8590A2]" style={{ background: P.bg }}>
         Carregando sala…
       </div>
     )
   }
 
+  // O backend devolve todos os votos do card, inclusive de quem já saiu da
+  // sala (`list_by_card` não filtra por presença). Contar esses votos dava
+  // "3 de 2 votaram" e deixava ausente decidindo média e consenso.
+  const seated = new Set(session.participants.map((p) => p.user_id))
+  const liveVotes = useMemo(
+    () => session.votes.filter((v) => seated.has(v.participant_id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session.votes, session.participants],
+  )
+  const liveSession = useMemo(
+    () => ({ ...session, votes: liveVotes }),
+    [session, liveVotes],
+  )
+
+  const me = session.participants.find((p) => p.user_id === userId)
   const isHost = session.created_by === userId
-  const myVote = session.votes.find((v) => v.participant_id === userId)?.value ?? null
-  const participants = session.participants.slice(0, 10)
+  const myVote = liveVotes.find((v) => v.participant_id === userId)?.value ?? null
+  // A mesa comporta 10 assentos; acima disso a órbita fica ilegível. O
+  // cabeçalho continua mostrando o total real para ninguém achar que sumiu.
+  const participants = session.participants.slice(0, SEATS_MAX)
   const { width: tableWidth, height: tableHeight } = tableSize(participants.length)
   const seats = seatPositions(Math.max(participants.length, 1), tableWidth, tableHeight)
   const wrapperWidth = tableWidth + SEAT_MARGIN_X * 2
   const wrapperHeight = tableHeight + SEAT_MARGIN_Y * 2
+  // Onde cada pessoa está sentada — origem e destino das reações em voo.
+  const seatOf = (userId: string): { x: number; y: number } | null => {
+    const i = participants.findIndex((p) => p.user_id === userId)
+    return i === -1 ? null : seats[i] ?? null
+  }
   const currentCard = allCards.find((c) => c.id === session.current_card_id) ?? null
   const selectedIds = session.card_ids
 
   const handleSelectCard = (id: string) => {
     const nextIds = selectedIds.includes(id) ? selectedIds : [...selectedIds, id]
     updateSession.mutate({ status: "voting", current_card_id: id, card_ids: nextIds })
+  }
+
+  // Encerrar tira a sala da lista de "salas abertas" do board — sem isso as
+  // salas velhas se acumulavam ali e não havia como limpá-las.
+  const handleFinish = () => {
+    if (!window.confirm("Encerrar esta sala? Ela sai da lista de salas abertas.")) return
+    updateSession.mutate(
+      { status: "done" },
+      { onSuccess: () => navigate("/app/poker") },
+    )
   }
 
   const handleReveal = () => updateSession.mutate({ status: "revealed" })
@@ -1069,36 +1690,38 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     <div
       className="flex h-full flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
       style={{
-        background: `radial-gradient(ellipse 80% 60% at 50% -10%, rgba(108,92,240,0.14), transparent), ${P.bg}`,
+        background: `radial-gradient(ellipse 80% 60% at 50% -10%, rgba(12,102,228,0.14), transparent), ${P.bg}`,
       }}
     >
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header da sala */}
         <div
           className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 backdrop-blur"
-          style={{ borderColor: P.borderSoft, background: "rgba(16,16,36,0.6)" }}
+          style={{ borderColor: P.borderSoft, background: "rgba(23,25,30,0.72)" }}
         >
           <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl border border-[#33335c] bg-[#191934]">
-              <Spade className="size-4 text-[#a99bfa]" aria-hidden />
+            <div className="grid size-9 place-items-center rounded-xl border border-[#2E3036] bg-[#212328]">
+              <Spade className="size-4 text-[#579DFF]" aria-hidden />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-semibold leading-tight text-[#f0f0f8]">{session.name}</h1>
+                <h1 className="font-semibold leading-tight text-[#F7F8F9]">{session.name}</h1>
                 {project && (
                   <button
                     onClick={() => navigate("/app/boards")}
                     title="Abrir o board deste projeto"
-                    className="rounded-full border border-[#33335c] bg-[#191934] px-2 py-0.5 text-[10px] font-semibold text-[#a99bfa] transition-colors hover:border-[#6c5cf0]"
+                    className="rounded-full border border-[#2E3036] bg-[#212328] px-2 py-0.5 text-[10px] font-semibold text-[#579DFF] transition-colors hover:border-[#0C66E4]"
                   >
                     [{project.key}] {project.name}
                   </button>
                 )}
               </div>
-              <p className="flex items-center gap-1.5 text-xs text-[#5d5d84]">
-                <Radio className="size-3 text-emerald-400" aria-hidden />
-                {participants.length} participante{participants.length !== 1 ? "s" : ""} online
-                {participants.length >= 10 && " (máx. 10)"}
+              <p className="flex items-center gap-1.5 text-xs text-[#8590A2]">
+                <Radio className="size-3 text-green-400" aria-hidden />
+                {session.participants.length} participante
+                {session.participants.length !== 1 ? "s" : ""} online
+                {session.participants.length > SEATS_MAX &&
+                  ` (${SEATS_MAX} na mesa)`}
               </p>
             </div>
           </div>
@@ -1109,13 +1732,13 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                 <span
                   key={p.user_id}
                   title={p.user_name}
-                  className="grid size-7 place-items-center rounded-full border-2 border-[#0b0b1c] bg-[#2a2a4e] text-[9px] font-bold text-[#c8c8e0]"
+                  className="grid size-7 place-items-center rounded-full border-2 border-[#0A0B0D] bg-[#2E3036] text-[9px] font-bold text-[#B3B9C4]"
                 >
                   {p.avatar_initials}
                 </span>
               ))}
               {participants.length > 5 && (
-                <span className="grid size-7 place-items-center rounded-full border-2 border-[#0b0b1c] bg-[#191934] text-[9px] font-bold text-[#8888ac]">
+                <span className="grid size-7 place-items-center rounded-full border-2 border-[#0A0B0D] bg-[#212328] text-[9px] font-bold text-[#8590A2]">
                   +{participants.length - 5}
                 </span>
               )}
@@ -1123,11 +1746,23 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             <button
               onClick={copyInvite}
               aria-label="Copiar link de convite da sala"
-              className="flex items-center gap-1.5 rounded-full border border-[#33335c] px-3 py-1 text-xs text-[#a0a0c0] transition-colors hover:border-[#6c5cf0] hover:text-[#f0f0f8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6c5cf0]"
+              className="flex items-center gap-1.5 rounded-full border border-[#2E3036] px-3 py-1 text-xs text-[#B3B9C4] transition-colors hover:border-[#0C66E4] hover:text-[#F7F8F9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
             >
               <Link2 className="size-3.5" aria-hidden />
               {copied ? "Link copiado!" : "Convidar"}
             </button>
+            {isHost && session.status !== "done" && (
+              <button
+                onClick={handleFinish}
+                disabled={updateSession.isPending}
+                aria-label="Encerrar sala de Planning Poker"
+                className="flex items-center gap-1.5 rounded-full border border-[#2E3036] px-3 py-1 text-xs text-[#B3B9C4] transition-colors hover:border-red-500 hover:text-red-400 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+              >
+                <CheckCircle2 className="size-3.5" aria-hidden />
+                Encerrar sala
+              </button>
+            )}
+            {!me?.avatar_config && <AvatarPrompt onDone={() => refetchSession()} />}
             <StatusPill status={session.status} />
           </div>
         </div>
@@ -1143,18 +1778,18 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                 top: SEAT_MARGIN_Y,
                 width: tableWidth,
                 height: tableHeight,
-                background: "linear-gradient(145deg, #1d1d3a, #111126)",
-                borderColor: session.status === "revealed" ? "rgba(108,92,240,0.55)" : P.border,
+                background: "linear-gradient(145deg, #212328, #0A0B0D)",
+                borderColor: session.status === "revealed" ? "rgba(12,102,228,0.55)" : P.border,
                 boxShadow:
                   session.status === "revealed"
-                    ? "inset 0 2px 20px rgba(0,0,0,0.5), 0 0 60px rgba(108,92,240,0.25)"
-                    : "inset 0 2px 20px rgba(0,0,0,0.5), 0 0 40px rgba(108,92,240,0.08)",
+                    ? "inset 0 2px 20px rgba(0,0,0,0.5), 0 0 60px rgba(12,102,228,0.25)"
+                    : "inset 0 2px 20px rgba(0,0,0,0.5), 0 0 40px rgba(12,102,228,0.08)",
               }}
             >
               {session.status === "voting" && (
-                <div className="poker-glow pointer-events-none absolute -inset-1 rounded-[50%] border border-[#6c5cf0]/40" aria-hidden />
+                <div className="poker-glow pointer-events-none absolute -inset-1 rounded-[50%] border border-[#0C66E4]/40" aria-hidden />
               )}
-              <div className="absolute inset-5 rounded-[50%] border border-[#6c5cf0]/10" aria-hidden />
+              <div className="absolute inset-5 rounded-[50%] border border-[#0C66E4]/10" aria-hidden />
 
               {/* Conteúdo central da mesa */}
               <div className="absolute inset-0 flex items-center justify-center">
@@ -1163,27 +1798,59 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             </div>
 
             {/* Assentos na órbita externa */}
-            {participants.map((p, i) => {
-              const vote = session.votes.find((v) => v.participant_id === p.user_id)
+            <AnimatePresence>
+              {participants.map((p, i) => {
+                const vote = liveVotes.find((v) => v.participant_id === p.user_id)
+                return (
+                  <Seat
+                    key={p.user_id}
+                    participant={p}
+                    hasVoted={vote?.has_voted ?? false}
+                    voteValue={vote?.value ?? null}
+                    revealed={session.status === "revealed"}
+                    voting={session.status === "voting"}
+                    index={i}
+                    x={seats[i]?.x ?? 50}
+                    y={seats[i]?.y ?? 50}
+                    canReact={p.user_id !== userId}
+                    onReact={(emoji) => handleReact(p.user_id, emoji)}
+                    cheering={cheerers.includes(p.user_id)}
+                    throwing={throwers.includes(p.user_id)}
+                    facing={seatFacing(i, participants.length)}
+                  />
+                )
+              })}
+            </AnimatePresence>
+
+            {/* Reações atravessando a mesa */}
+            {flying.map((f) => {
+              const from = seatOf(f.from)
+              const to = seatOf(f.to)
+              if (!from || !to) return null
               return (
-                <Seat
-                  key={p.user_id}
-                  participant={p}
-                  hasVoted={vote?.has_voted ?? false}
-                  voteValue={vote?.value ?? null}
-                  revealed={session.status === "revealed"}
-                  voting={session.status === "voting"}
-                  index={i}
-                  x={seats[i]?.x ?? 50}
-                  y={seats[i]?.y ?? 50}
+                <FlyingReaction
+                  key={f.key}
+                  emoji={f.emoji}
+                  from={from}
+                  to={to}
+                  onDone={() =>
+                    setFlying((prev) => prev.filter((x) => x.key !== f.key))
+                  }
                 />
               )
             })}
           </div>
 
+          {session.status === "voting" && (
+            <VoteProgress
+              voted={liveVotes.filter((v) => v.has_voted).length}
+              total={participants.length}
+            />
+          )}
+
           {/* Stats da rodada + ações do host (abaixo da mesa) */}
           <RoundPanel
-            session={session}
+            session={liveSession}
             isHost={isHost}
             onReveal={handleReveal}
             onNextCard={handleNextCard}
@@ -1194,9 +1861,9 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
           {/* Baralho do jogador */}
           {session.status === "voting" && (
             <div className="flex flex-col items-center gap-2.5 pb-2">
-              <p className="text-xs text-[#8888ac]">
+              <p className="text-xs text-[#8590A2]">
                 {myVote ? (
-                  <>Seu voto: <b className="text-[#a99bfa]">{myVote}</b> — clique em outra carta para mudar</>
+                  <>Seu voto: <b className="text-[#579DFF]">{myVote}</b> — clique em outra carta para mudar</>
                 ) : (
                   "Escolha sua carta:"
                 )}
@@ -1211,7 +1878,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
       {isHost && (
         <div
           className="flex w-full flex-col border-t p-4 lg:w-80 lg:border-l lg:border-t-0"
-          style={{ borderColor: P.borderSoft, background: "rgba(13,13,30,0.9)" }}
+          style={{ borderColor: P.borderSoft, background: "rgba(10,11,13,0.92)" }}
         >
           <CardSelector
             cards={allCards}
@@ -1237,14 +1904,36 @@ export function PokerPage() {
     joinSession.mutate()
   }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (sessionId) {
-    return <RoomView sessionId={sessionId} userId={userId} />
-  }
-
+  // `mode="wait"` porque as duas telas ocupam a mesma área: sobrepor a mesa
+  // escura ao lobby claro por 200ms daria um flash. O lobby sai encolhendo de
+  // leve e a mesa cresce — a sala "vem de dentro" do card que foi clicado.
   return (
-    <SessionListView
-      workspaceId={activeWorkspaceId ?? ""}
-      projects={projects}
-    />
+    <AnimatePresence mode="wait">
+      {sessionId ? (
+        <motion.div
+          key="room"
+          className="h-full"
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <RoomView sessionId={sessionId} userId={userId} />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="lobby"
+          initial={{ opacity: 0, scale: 0.99 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.99 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <SessionListView
+            workspaceId={activeWorkspaceId ?? ""}
+            projects={projects}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

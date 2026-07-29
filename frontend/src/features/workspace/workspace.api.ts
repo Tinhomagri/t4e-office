@@ -419,12 +419,49 @@ export async function updateProjectAvatar(
   projectId: string,
   file: File | null,
 ): Promise<ProjectDetail> {
-  const form = new FormData()
-  form.append("avatar_image", file ?? "")
-  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  })
+  // `null` limpa o avatar; senão manda o data URI já reduzido.
+  const avatar_image = file ? await shrinkToDataUri(file) : ""
+  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, { avatar_image })
   return data
+}
+
+// Reduz a imagem a um quadrado de AVATAR_SIZE e devolve data URI.
+//
+// O avatar é guardado como data URI numa coluna do banco (o deploy é serverless
+// e não tem disco persistente), então a imagem precisa chegar pequena: a foto
+// crua de um celular passaria de 3 MB e não caberia. WebP com corte central
+// deixa o resultado na casa dos KB.
+const AVATAR_SIZE = 128
+
+async function shrinkToDataUri(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const canvas = document.createElement("canvas")
+    canvas.width = AVATAR_SIZE
+    canvas.height = AVATAR_SIZE
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Não foi possível processar a imagem.")
+
+    // Corte central: recorta o maior lado para o avatar não sair achatado.
+    const side = Math.min(bitmap.width, bitmap.height)
+    ctx.drawImage(
+      bitmap,
+      (bitmap.width - side) / 2,
+      (bitmap.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      AVATAR_SIZE,
+      AVATAR_SIZE,
+    )
+
+    const webp = canvas.toDataURL("image/webp", 0.85)
+    // Safari antigo ignora o tipo pedido e devolve PNG — o backend aceita ambos.
+    return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png")
+  } finally {
+    bitmap.close()
+  }
 }
 
 export async function getBoardConfig(projectId: string): Promise<BoardConfig> {
