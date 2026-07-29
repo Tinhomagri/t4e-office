@@ -23,13 +23,26 @@ import type {
 // Carrega os workspaces do usuário e garante que haja um ativo selecionado.
 export function useWorkspaces() {
   const query = useQuery({ queryKey: ["workspaces"], queryFn: wsApi.listWorkspaces })
-  const { activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore()
+  const { activeWorkspaceId: persistedId, setActiveWorkspace } = useWorkspaceStore()
+
+  // O id persistido não é confiável até ser conferido contra os workspaces DESTE
+  // usuário: o localStorage é do navegador, não da conta. Ao trocar de conta, o
+  // id da anterior continuava lá e, como o store resolve de forma síncrona, as
+  // queries saíam com ele no primeiro render — 403 antes de qualquer correção.
+  // Enquanto a lista não chega, o id efetivo é `null` e os consumidores esperam.
+  const activeWorkspaceId = query.data
+    ? query.data.some((w) => w.id === persistedId)
+      ? persistedId
+      : query.data[0]?.id ?? null
+    : null
 
   useEffect(() => {
-    if (!query.data) return
-    const exists = query.data.some((w) => w.id === activeWorkspaceId)
-    if (!exists) setActiveWorkspace(query.data[0]?.id ?? null)
-  }, [query.data, activeWorkspaceId, setActiveWorkspace])
+    // Alinha o valor persistido ao efetivo, para o resto do app (que lê o store
+    // direto) parar de ver o id antigo.
+    if (query.data && persistedId !== activeWorkspaceId) {
+      setActiveWorkspace(activeWorkspaceId)
+    }
+  }, [query.data, persistedId, activeWorkspaceId, setActiveWorkspace])
 
   return { ...query, activeWorkspaceId, setActiveWorkspace }
 }

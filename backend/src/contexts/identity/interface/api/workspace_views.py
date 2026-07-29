@@ -1,6 +1,6 @@
 """Views de membros e convites de workspace."""
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +13,11 @@ from contexts.identity.application.use_cases.revoke_invitation import RevokeInvi
 from contexts.identity.application.use_cases.send_invitation import SendInvitation
 from contexts.identity.application.use_cases.update_member_role import UpdateMemberRole
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
-from contexts.identity.infrastructure.django.models import RoleAuditLog
+from contexts.identity.infrastructure.django.models import (
+    InvitationModel,
+    RoleAuditLog,
+    UserModel,
+)
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoInvitationRepository,
     DjangoMembershipRepository,
@@ -203,6 +207,51 @@ class AcceptInvitationView(APIView):
             actor_email=request.user.email,
         )
         return Response({"workspace_id": result.workspace_id, "role": result.role})
+
+
+class InvitationPreviewView(APIView):
+    """Dados do convite antes do login: GET /api/auth/invitations/preview/?token=
+
+    Sem autenticação de propósito — é a tela que a pessoa vê ANTES de entrar. O
+    token (UUID) é a credencial: quem o tem recebeu o e-mail, então devolver o
+    endereço não conta como enumeração de contas. É isso que permite à tela
+    decidir entre login e cadastro em vez de largar dois botões e deixar o
+    usuário adivinhar.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        token = str(request.query_params.get("token", "")).strip()
+        if not token:
+            return Response({"error": "Token obrigatório."}, status=400)
+
+        invitation = InvitationModel.objects.filter(token=token).select_related(
+            "workspace"
+        ).first()
+        if invitation is None:
+            return Response({"error": "Convite não encontrado."}, status=404)
+
+        user = UserModel.objects.filter(email__iexact=invitation.email).first()
+        if user is None:
+            auth_method = "none"
+        elif user.has_usable_password():
+            auth_method = "password"
+        else:
+            # Conta criada via OAuth: login por senha falharia com "credenciais
+            # inválidas", sem dizer que o caminho é o botão do Google.
+            auth_method = "google"
+
+        return Response(
+            {
+                "workspace_name": invitation.workspace.name,
+                "email": invitation.email,
+                "role": invitation.role,
+                "status": invitation.status,
+                "account_exists": user is not None,
+                "auth_method": auth_method,
+            }
+        )
 
 
 class RevokeInvitationView(APIView):

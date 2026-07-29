@@ -91,6 +91,22 @@ export async function createInvitation(
   return data
 }
 
+/** Dados do convite antes do login — a tela usa para decidir login vs cadastro. */
+export interface InvitationPreview {
+  workspace_name: string
+  email: string
+  role: string
+  status: "pending" | "accepted" | "revoked"
+  account_exists: boolean
+  /** `google` = conta OAuth-only: login por senha falha sem explicar o motivo. */
+  auth_method: "password" | "google" | "none"
+}
+
+export async function getInvitationPreview(token: string): Promise<InvitationPreview> {
+  const { data } = await api.get("/auth/invitations/preview/", { params: { token } })
+  return data
+}
+
 export async function acceptInvitation(token: string): Promise<{ workspace_id: string }> {
   const { data } = await api.post("/auth/invitations/accept/", { token })
   return data
