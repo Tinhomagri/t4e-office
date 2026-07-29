@@ -16,15 +16,15 @@ export function SettingsCard({
   actions?: ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-paper-200 px-5 py-4 dark:border-ink-800">
+    <section className="rounded-xl border border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-paper-200 px-3 py-2 dark:border-ink-800">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink dark:text-paper">{title}</h2>
-          {description && <p className="mt-0.5 text-xs text-paper-500">{description}</p>}
+          <h2 className="text-[13px] font-semibold text-ink dark:text-paper">{title}</h2>
+          {description && <p className="text-[11px] text-paper-500">{description}</p>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </header>
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-3 py-2.5">{children}</div>
     </section>
   )
 }
@@ -77,10 +77,10 @@ export function SettingRow({
   children: ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
+    <div className="flex items-center justify-between gap-4 py-1.5">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-ink dark:text-paper">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-paper-500">{hint}</p>}
+        <p className="text-[13px] text-ink dark:text-paper">{label}</p>
+        {hint && <p className="text-[11px] text-paper-500">{hint}</p>}
       </div>
       {children}
     </div>

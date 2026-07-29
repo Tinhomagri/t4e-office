@@ -933,11 +933,18 @@ function ProjectsNavLink({
     isMarketing ? !!p.template && p.template !== "software" : !p.template || p.template === "software",
   )
 
-  const activeProjectId = location.pathname.startsWith("/app/boards")
-    ? searchParams.get("project")
-    : null
-  // Item ativo quando o projeto selecionado pertence a este grupo.
-  const groupActive = !!activeProjectId && projects.some((p) => p.id === activeProjectId)
+  const onBoardsRoute = location.pathname.startsWith("/app/boards")
+  const activeProjectId = onBoardsRoute ? searchParams.get("project") : null
+  // Um projeto deste grupo está aberto.
+  const childActive = !!activeProjectId && projects.some((p) => p.id === activeProjectId)
+  // O próprio item é o destino: rota de boards deste tipo, sem projeto escolhido.
+  const selfActive =
+    onBoardsRoute &&
+    !activeProjectId &&
+    (searchParams.get("type") === "marketing") === isMarketing
+  // Só o item realmente aberto ganha fundo. Pintar pai e filho ao mesmo tempo
+  // dava duas seleções concorrentes na mesma coluna.
+  const groupActive = selfActive || childActive
   const [open, setOpen] = useState(true)
 
   if (collapsed) {
@@ -962,15 +969,19 @@ function ProjectsNavLink({
       <div
         className={cx(
           "group relative flex items-center gap-1 rounded-lg pr-1.5 text-sm transition-colors",
-          groupActive
+          // Fundo só quando o próprio item é o destino. Com um projeto filho
+          // aberto o pai fica em texto de destaque, sem competir com ele.
+          selfActive
             ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-            : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
+            : childActive
+              ? "font-medium text-brand-700 hover:bg-paper-100 dark:text-brand-300 dark:hover:bg-ink-800"
+              : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
         )}
       >
         <span
           className={cx(
             "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
-            groupActive ? "opacity-100" : "opacity-0",
+            selfActive ? "opacity-100" : "opacity-0",
           )}
         />
         <NavLink
@@ -999,23 +1010,44 @@ function ProjectsNavLink({
 
       {open && projects.length > 0 && (
         <div className="ml-[27px] flex flex-col gap-0.5 border-l border-paper-100 pl-2 dark:border-ink-700">
-          {projects.map((p) => (
-            <NavLink
-              key={p.id}
-              to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
-              className={cx(
-                "flex items-center gap-2 truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors",
-                p.id === activeProjectId
-                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                  : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
-              )}
-            >
-              <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
-                {p.key.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="truncate">{p.name}</span>
-            </NavLink>
-          ))}
+          {projects.map((p) => {
+            const active = p.id === activeProjectId
+            return (
+              // Fundo de hover mora AQUI (na linha inteira), não no NavLink de
+              // dentro — antes o NavLink só cobria parte da largura (sobrava
+              // espaço pra engrenagem) e o hover "encolhia" em vez de preencher
+              // a linha toda.
+              <div
+                key={p.id}
+                className={cx(
+                  "group/proj flex w-full items-center gap-0.5 rounded-lg text-[13px] transition-colors",
+                  active
+                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                    : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
+                )}
+              >
+                <NavLink
+                  to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
+                  className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5"
+                >
+                  <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
+                    {p.key.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="truncate">{p.name}</span>
+                </NavLink>
+                {/* Só no hover da linha — a lista de projetos não pode ficar
+                    poluída de botões quando ninguém está mexendo nela. */}
+                <NavLink
+                  to={`/app/boards/${p.id}/settings`}
+                  title="Configurações do quadro"
+                  aria-label={`Configurações do quadro ${p.name}`}
+                  className="mr-1 grid size-6 shrink-0 place-items-center rounded-md opacity-0 transition-opacity hover:bg-paper-200 group-hover/proj:opacity-100 dark:hover:bg-ink-700"
+                >
+                  <Settings className="size-3.5" />
+                </NavLink>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

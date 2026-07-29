@@ -12,7 +12,7 @@ from contexts.copilot.application.use_cases.create_tasks_from_analysis import (
 )
 from contexts.copilot.application.use_cases.ingest_document import IngestDocument
 from contexts.copilot.domain.entities.document import Document
-from contexts.copilot.infrastructure import ai_config, metrics
+from contexts.copilot.infrastructure import ai_config, metrics, writing_skills
 from contexts.copilot.infrastructure.django.repositories_impl import (
     DjangoDocumentRepository,
     DjangoWorkspaceAccess,
@@ -27,6 +27,7 @@ from contexts.copilot.interface.api.serializers import (
     ChatSerializer,
     CreateTasksSerializer,
     DocumentSerializer,
+    WriteAssistSerializer,
 )
 from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
@@ -316,3 +317,29 @@ class AiConfigTestView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({"ok": True})
+
+
+class WriteAssistView(APIView):
+    """Reescreve texto de descrição/comentário com a IA: POST /api/copilot/write-assist/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = WriteAssistSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        v = serializer.validated_data
+        workspace_id = str(v["workspace_id"])
+        access = DjangoWorkspaceAccess()
+        if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+
+        result = writing_skills.rewrite(
+            workspace_id=workspace_id,
+            text=v["text"],
+            action=v["action"],
+            instruction=v.get("instruction", ""),
+        )
+        metrics.log_event(
+            workspace_id=workspace_id, actor_id=str(request.user.id), kind="write_assist"
+        )
+        return Response({"text": result})

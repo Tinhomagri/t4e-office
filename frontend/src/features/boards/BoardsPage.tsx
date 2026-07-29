@@ -14,6 +14,7 @@ import {
   SquareKanban,
   Spade,
   Target,
+  X,
   Zap,
 } from "lucide-react"
 import { AnimatePresence } from "framer-motion"
@@ -65,7 +66,12 @@ import type {
   Project,
   ProjectTemplate,
 } from "@/features/workspace/workspace.types"
-import { useCreateProjectSession, useProjectSessions } from "@/features/poker/poker.hooks"
+import {
+  useCloseProjectSession,
+  useCreateProjectSession,
+  useProjectSessions,
+} from "@/features/poker/poker.hooks"
+import { useAuthStore } from "@/features/auth/auth.store"
 
 type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "marketing" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
 
@@ -732,6 +738,8 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
   const { data: sessions, isLoading } = useProjectSessions(projectId)
   const { data: cards } = useCards(projectId)
   const createSession = useCreateProjectSession(projectId)
+  const closeSession = useCloseProjectSession(projectId)
+  const userId = useAuthStore((s) => s.user?.id)
   const [error, setError] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const [name, setName] = useState("Planning Poker")
@@ -869,7 +877,7 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
                         <span className="min-w-0 flex-1 truncate text-sm text-ink dark:text-paper">{c.title}</span>
                         {c.points != null && (
                           <span className="shrink-0 rounded-full bg-paper-100 dark:bg-ink-700 px-1.5 py-0.5 text-[10px] font-bold text-paper-500">
-                            {c.points} pts
+                            peso {c.points}
                           </span>
                         )}
                       </label>
@@ -896,14 +904,32 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-paper-400">Salas abertas</p>
             {openSessions.map((s) => (
-              <button
+              <div
                 key={s.id}
-                onClick={() => enterRoom(s.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+                className="group flex items-center gap-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2.5 transition-colors hover:border-brand-300 hover:bg-brand-50/40"
               >
-                <span className="text-sm font-medium text-ink dark:text-paper">{s.name}</span>
-                <span className="text-xs text-paper-400">{s.card_ids.length} cards</span>
-              </button>
+                <button
+                  onClick={() => enterRoom(s.id)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                >
+                  <span className="truncate text-sm font-medium text-ink dark:text-paper">{s.name}</span>
+                  <span className="shrink-0 text-xs text-paper-400">{s.card_ids.length} cards</span>
+                </button>
+                {/* Só o host encerra — é a mesma regra do backend. */}
+                {s.created_by === userId && (
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`Encerrar a sala "${s.name}"?`)) return
+                      closeSession.mutate(s.id)
+                    }}
+                    title="Encerrar sala"
+                    aria-label={`Encerrar a sala ${s.name}`}
+                    className="grid size-7 shrink-0 place-items-center rounded-md text-paper-400 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ) : null}

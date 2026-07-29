@@ -12,8 +12,13 @@ class AiAnalyzer(ABC):
         """Analisa o texto e retorna resumo, tarefas, decisões e riscos."""
 
     @abstractmethod
-    def chat(self, *, messages: list[dict]) -> str:
-        """Conversa livre com a IA. `messages` = [{role, content}]; retorna a resposta."""
+    def chat(self, *, messages: list[dict], system: str | None = None) -> str:
+        """Conversa livre com a IA.
+
+        `messages` = [{role, content}] com role user/assistant. O prompt de
+        sistema vai em `system` (não como mensagem), porque é assim que a
+        Anthropic espera — e ela recusa `role: "system"` na lista.
+        """
 
     @abstractmethod
     def chat_agent(

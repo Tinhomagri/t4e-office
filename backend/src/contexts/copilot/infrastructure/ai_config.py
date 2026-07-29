@@ -98,9 +98,18 @@ def build_analyzer_for_workspace(workspace_id: str) -> AiAnalyzer:
     return build_analyzer(cfg)
 
 
-def chat_for_workspace(workspace_id: str, messages: list[dict]) -> str:
-    """Conversa livre com a IA configurada do workspace."""
-    return build_analyzer_for_workspace(workspace_id).chat(messages=messages)
+def chat_for_workspace(
+    workspace_id: str, messages: list[dict], *, system: str | None = None
+) -> str:
+    """Conversa livre com a IA configurada do workspace.
+
+    `system` troca o prompt de sistema padrão (o do Copiloto conversacional) —
+    é o que permite reaproveitar a mesma IA para tarefas de formato fechado,
+    como reescrever a descrição de um card.
+    """
+    return build_analyzer_for_workspace(workspace_id).chat(
+        messages=messages, system=system
+    )
 
 
 def agent_chat_for_workspace(

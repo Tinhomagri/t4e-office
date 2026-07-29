@@ -5,6 +5,7 @@ from contexts.estimation.interface.api.views import (
     PokerCardsView,
     PokerHeartbeatView,
     PokerJoinView,
+    PokerReactionView,
     PokerRoundListView,
     PokerSessionDetailView,
     PokerSessionListCreateView,
@@ -43,6 +44,11 @@ urlpatterns = [
         "poker/<str:session_id>/join/",
         PokerJoinView.as_view(),
         name="poker-join",
+    ),
+    path(
+        "poker/<str:session_id>/reactions/",
+        PokerReactionView.as_view(),
+        name="poker-reactions",
     ),
     path(
         "poker/<str:session_id>/heartbeat/",

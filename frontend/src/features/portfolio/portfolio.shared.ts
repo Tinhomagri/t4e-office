@@ -11,7 +11,7 @@ export interface ProjectHealth {
   pointsTotal: number
   pointsDone: number
   reviewAging: number // cards parados em revisão
-  progress: number // 0..1 por pontos (cai p/ contagem se não houver pontos)
+  progress: number // 0..1 por peso (cai p/ contagem se não houver peso)
   health: Health
   statusCounts: Record<CardStatus, number>
 }

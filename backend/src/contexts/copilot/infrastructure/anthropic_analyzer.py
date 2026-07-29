@@ -41,7 +41,7 @@ class AnthropicAnalyzer(AiAnalyzer):
         raw = next((b.text for b in response.content if b.type == "text"), "{}")
         return _prompt.parse_analysis(raw)
 
-    def chat(self, *, messages: list[dict]) -> str:
+    def chat(self, *, messages: list[dict], system: str | None = None) -> str:
         if not self.api_key:
             raise ValidationError(
                 "Copiloto IA não configurado: informe a chave da Anthropic (Claude) "
@@ -53,7 +53,7 @@ class AnthropicAnalyzer(AiAnalyzer):
         response = client.messages.create(
             model=self.model,
             max_tokens=_prompt.MAX_CHAT_TOKENS,
-            system=_prompt.CHAT_SYSTEM,
+            system=system or _prompt.CHAT_SYSTEM,
             messages=[{"role": m["role"], "content": m["content"]} for m in messages],
         )
         return "".join(b.text for b in response.content if b.type == "text").strip()

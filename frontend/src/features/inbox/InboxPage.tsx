@@ -190,6 +190,7 @@ export function InboxPage({ workspaceId }: Props) {
         selectedLabels={selectedLabels}
         onLabelsChange={setSelectedLabels}
         onSearchChange={setSearch}
+        onOpenConnectionSettings={() => setShowSetup(true)}
       />
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">

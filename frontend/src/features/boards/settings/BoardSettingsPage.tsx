@@ -9,7 +9,7 @@ import {
   useProjectAccess,
   useProjectPermissions,
 } from "@/features/workspace/workspace.hooks"
-import { Badge, PageHeader, Spinner, cx } from "@/shared/ui/primitives"
+import { Badge, Spinner, cx } from "@/shared/ui/primitives"
 
 import { BoardTab } from "./BoardTab"
 import { ColumnsTab } from "./ColumnsTab"
@@ -67,25 +67,31 @@ export function BoardSettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 px-1 py-2">
-      <PageHeader
-        title="Configurações do quadro"
-        subtitle={`${project.key} · ${project.name}`}
-        eyebrow={
-          <Link
-            to="/app/boards"
-            className="inline-flex items-center gap-1 hover:text-ink dark:hover:text-paper"
-          >
-            <ArrowLeft className="size-3.5" />
-            Quadros
-          </Link>
-        }
-      >
+    // Largura cheia com um respiro só nas laterais. `max-w` centralizado deixava
+    // metade da tela vazia; sem limite nenhum os campos esticariam demais em
+    // monitor ultrawide.
+    <div className="w-full max-w-[1400px] space-y-3 px-2">
+      {/* Cabeçalho enxuto em vez do PageHeader (título de 26px): configuração é
+          tela de trabalho, o espaço tem que ir para os campos. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          to="/app/boards"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper"
+          aria-label="Voltar aos quadros"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
+        <h1 className="text-base font-semibold text-ink dark:text-paper">
+          Configurações do quadro
+        </h1>
+        <span className="text-xs text-paper-500">
+          {project.key} · {project.name}
+        </span>
         {!canAdminister && <Badge tone="outline">Somente leitura</Badge>}
-      </PageHeader>
+      </div>
 
-      <div className="flex flex-col gap-6 md:flex-row">
-        <nav aria-label="Seções da configuração" className="md:w-52 md:shrink-0">
+      <div className="flex flex-col gap-3 md:flex-row">
+        <nav aria-label="Seções da configuração" className="md:w-40 md:shrink-0">
           <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
             {TABS.map(({ id, label, icon: Icon }) => (
               <li key={id}>
@@ -94,13 +100,13 @@ export function BoardSettingsPage() {
                   aria-current={active === id ? "page" : undefined}
                   onClick={() => setParams({ tab: id }, { replace: true })}
                   className={cx(
-                    "flex w-full items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm transition-colors focus-ring",
+                    "flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors focus-ring",
                     active === id
                       ? "bg-brand-50 font-medium text-brand-700"
                       : "text-paper-600 hover:bg-paper-100 dark:hover:bg-ink-800",
                   )}
                 >
-                  <Icon className="size-4 shrink-0" />
+                  <Icon className="size-3.5 shrink-0" />
                   {label}
                 </button>
               </li>

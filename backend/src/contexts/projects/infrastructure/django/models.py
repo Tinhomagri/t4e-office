@@ -20,10 +20,14 @@ class ProjectModel(models.Model):
     # Categoria livre para agrupar projetos no portfólio (equivalente ao "Categoria" do Jira).
     category = models.CharField(max_length=40, blank=True, default="")
     # Avatar do projeto. Se `avatar_image` existir ela vence; senão cai no par
-    # emoji+cor (estilo Notion), que não exige storage de mídia.
+    # emoji+cor (estilo Notion).
     avatar_emoji = models.CharField(max_length=8, blank=True, default="")
     avatar_color = models.CharField(max_length=7, default="#6366f1")
-    avatar_image = models.FileField(upload_to="project-avatars/%Y/%m/", blank=True, null=True)
+    # Data URI (`data:image/webp;base64,…`), não caminho de arquivo: o deploy é
+    # serverless na Vercel, onde o disco é efêmero e um FileField sumiria no
+    # próximo deploy. O front reduz a imagem para 128×128 antes de enviar, então
+    # a string fica na casa dos KB.
+    avatar_image = models.TextField(blank=True, default="")
     # Lead do projeto e responsável padrão de cards novos (FK por id, como workspace).
     lead_id = models.UUIDField(null=True, blank=True)
     default_assignee_id = models.UUIDField(null=True, blank=True)

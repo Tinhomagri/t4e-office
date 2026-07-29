@@ -203,7 +203,7 @@ export function MyDayPage() {
             Você tem{" "}
             <span className="font-semibold text-ink dark:text-paper-300">{myActive.length} cards ativos</span>{" "}
             e{" "}
-            <span className="font-semibold text-ink dark:text-paper-300">{points} pontos</span>{" "}
+            <span className="font-semibold text-ink dark:text-paper-300">{points} de peso</span>{" "}
             em aberto nesta sprint.
           </p>
         ) : (
@@ -230,7 +230,7 @@ export function MyDayPage() {
               <Stat icon={CalendarClock} label="Vencem hoje" value={vencem.length} accent="text-danger" tint="bg-danger/10 text-danger" />
               <Stat icon={RefreshCw} label="Em andamento" value={inProgress.length} tint="bg-sky-500/10 text-sky-500" />
               <Stat icon={Eye} label="Em revisão" value={review.length} accent="text-amber-500" tint="bg-amber-500/10 text-amber-500" />
-              <Stat icon={Zap} label="Pontos ativos" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
+              <Stat icon={Zap} label="Peso ativo" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
             </div>
           </motion.div>
 
@@ -501,7 +501,7 @@ function FocusCard({ card }: { card: BoardCard }) {
       </span>
       {card.points != null && card.points > 0 && (
         <span className="shrink-0 rounded-md bg-paper-100 dark:bg-ink-700 px-1.5 py-0.5 text-[11px] font-medium text-paper-500 dark:text-paper-400 tabular">
-          {card.points}pts
+          peso {card.points}
         </span>
       )}
     </motion.div>
@@ -632,7 +632,7 @@ function PulseIntelligence({
     inProgressCount > 3
       ? `Você tem ${inProgressCount} cards em andamento. Considere focar em concluir antes de puxar novos.`
       : points > 20
-        ? `${points} pontos em aberto. Boa carga! Mantenha o ritmo.`
+        ? `${points} de peso em aberto. Boa carga! Mantenha o ritmo.`
         : "Sua sprint está tranquila. Bom momento para antecipar itens do backlog."
 
   return (

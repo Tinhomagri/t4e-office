@@ -9,7 +9,7 @@
 // lidas entra com spring — é o único overshoot da tela, porque é o que precisa
 // puxar o olho quando chega mensagem.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Hash, Search, Tag, X } from "lucide-react"
+import { Hash, Search, Settings2, Tag, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { cx } from "@/shared/ui/primitives"
@@ -76,6 +76,9 @@ interface Props {
   onSearchChange: (value: string) => void
   /** Foco programático vindo do atalho de busca (⌘F / Ctrl+F). */
   searchRef?: React.RefObject<HTMLInputElement>
+  /** Abre a tela de conexão (rever token, desconectar). Sempre visível — antes
+   *  só aparecia quando a conexão já estava quebrada. */
+  onOpenConnectionSettings: () => void
 }
 
 // Filtro de etiquetas em popover. Inline, a nuvem de chips ocupava metade da
@@ -214,6 +217,7 @@ export function ConversationList({
   onLabelsChange,
   onSearchChange,
   searchRef,
+  onOpenConnectionSettings,
 }: Props) {
   const reduced = useReducedMotion()
   // Não lidas primeiro, depois por atividade — a conversa nova não pode sumir
@@ -234,17 +238,30 @@ export function ConversationList({
           Tudo num bloco só — antes eram quatro faixas com borda empilhadas, e
           a lista de conversas começava abaixo da dobra. */}
       <div className="space-y-1.5 border-b border-cw-border p-2 dark:border-ink-800">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-cw-muted" />
-          <input
-            ref={searchRef}
-            type="search"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar nas conversas…"
-            aria-label="Buscar nas conversas"
-            className="h-8 w-full rounded-md border border-cw-border bg-white pl-8 pr-2 text-[13px] text-cw-ink outline-none transition-colors duration-100 placeholder:text-cw-muted focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
-          />
+        <div className="flex gap-1.5">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-cw-muted" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Buscar nas conversas…"
+              aria-label="Buscar nas conversas"
+              className="h-8 w-full rounded-md border border-cw-border bg-white pl-8 pr-2 text-[13px] text-cw-ink outline-none transition-colors duration-100 placeholder:text-cw-muted focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+            />
+          </div>
+          {/* Único acesso à conexão quando ela está saudável — antes só
+              aparecia na faixa de aviso de conexão quebrada. */}
+          <button
+            type="button"
+            onClick={onOpenConnectionSettings}
+            title="Configurações da conexão"
+            aria-label="Configurações da conexão com o Chatwoot"
+            className="grid size-8 shrink-0 place-items-center rounded-md border border-cw-border text-cw-muted transition-colors duration-100 hover:bg-cw-surface hover:text-cw-ink focus-ring dark:border-ink-700 dark:hover:bg-ink-800"
+          >
+            <Settings2 className="size-3.5" />
+          </button>
         </div>
 
         <div className="flex gap-1.5">

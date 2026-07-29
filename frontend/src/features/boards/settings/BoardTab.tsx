@@ -88,7 +88,7 @@ export function BoardTab({
     })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SwimlanesCard config={config} canEdit={canEdit} onSave={save} />
       <CardLayoutCard config={config} canEdit={canEdit} onSave={save} />
       <CardColorsCard config={config} canEdit={canEdit} onSave={save} />

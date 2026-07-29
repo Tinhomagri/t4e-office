@@ -52,6 +52,22 @@ export function useSubmitVote(sessionId: string | null) {
   })
 }
 
+// Não invalida a sessão de propósito: quem envia já vê a própria reação voar
+// na hora (estado local) e os outros recebem no poll de 2s. Invalidar aqui só
+// faria um request extra para buscar algo que o cliente já sabe.
+export function useSendReaction(sessionId: string | null) {
+  return useMutation({
+    mutationFn: ({ toUserId, emoji }: { toUserId: string; emoji: string }) =>
+      pokerApi.sendReaction(sessionId!, toUserId, emoji),
+  })
+}
+
+export function useSendEmote(sessionId: string | null) {
+  return useMutation({
+    mutationFn: (emote: string) => pokerApi.sendEmote(sessionId!, emote),
+  })
+}
+
 export function useUpdateSession(sessionId: string | null) {
   const qc = useQueryClient()
   return useMutation({
@@ -101,8 +117,8 @@ export function useApplyPoints(sessionId: string | null) {
     mutationFn: (points: number) => pokerApi.applyPoints(sessionId!, points),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["poker-session", sessionId] })
-      // Sem isso o card aplicado ficava com pontos/estado velhos na barra lateral
-      // até um F5 — a UI parecia travada ("Votando" grudado, pontos sumidos).
+      // Sem isso o card aplicado ficava com peso/estado velhos na barra lateral
+      // até um F5 — a UI parecia travada ("Votando" grudado, peso sumido).
       qc.invalidateQueries({ queryKey: ["poker-cards", sessionId] })
       qc.invalidateQueries({ queryKey: ["cards"] })
       qc.invalidateQueries({ queryKey: ["poker-rounds", sessionId] })
@@ -117,5 +133,17 @@ export function useActivePokerSession(workspaceId: string | null) {
     enabled: !!workspaceId,
     refetchInterval: 2000,
     select: pickActiveSession,
+  })
+}
+
+// Encerra uma sala a partir de uma lista (o id vem na chamada, não no hook) —
+// é o que tira a sala de "salas abertas" no board.
+export function useCloseProjectSession(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      pokerApi.updateSession(sessionId, { status: "done" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["poker-sessions", "project", projectId] }),
   })
 }

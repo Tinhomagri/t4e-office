@@ -25,6 +25,8 @@ export default defineConfig({
     // Proxy da API: front em: 8080 fala com Django em :8000 sem CORS no dev
     proxy: {
       "/api": "http://localhost:8000",
+      // Uploads (avatar de projeto, anexos) são servidos pelo Django em dev.
+      "/media": "http://localhost:8000",
     },
   },
 })

@@ -135,7 +135,6 @@ export function KanbanView({
   const createWorkflowStatus = useCreateWorkflowStatus(projectId)
   const deleteWorkflowStatus = useDeleteWorkflowStatus(projectId)
   const updateWorkflowStatus = useUpdateWorkflowStatus(projectId)
-  const [manageWorkflowOpen, setManageWorkflowOpen] = useState(false)
   const [jqlResults, setJqlResults] = useState<Card[] | null>(null)
   const [chipJql, setChipJql] = useState<string | null>(null)
   const [currentJql, setCurrentJql] = useState("")
@@ -302,23 +301,9 @@ export function KanbanView({
             <BarChart3 className="size-3.5" /> Insights
           </button>
 
-          {/* Workflow manager */}
-          <button
-            onClick={() => setManageWorkflowOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-dashed border-paper-300 px-3 py-1.5 text-xs font-medium text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
-          >
-            <Zap className="size-3.5" /> Workflow
-          </button>
-
-          {/* Configurações do quadro */}
-          <Link
-            to={`/app/boards/${projectId}/settings`}
-            title="Configurações do quadro"
-            aria-label="Configurações do quadro"
-            className="flex items-center gap-1.5 rounded-full border border-paper-300 px-3 py-1.5 text-xs font-medium text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
-          >
-            <SlidersHorizontal className="size-3.5" /> Configurar
-          </Link>
+          {/* Menu do board (…): workflow já é gerenciado nas colunas, então só
+              tem Configurações — não vale um botão próprio na toolbar. */}
+          <BoardMenu projectId={projectId} />
 
           {/* Global create */}
           <button
@@ -454,13 +439,6 @@ export function KanbanView({
 
       {/* Modals */}
       <NewSprintModal projectId={projectId} open={newSprintOpen} onClose={() => setNewSprintOpen(false)} />
-      <ManageWorkflowModal
-        open={manageWorkflowOpen}
-        statuses={columns}
-        onClose={() => setManageWorkflowOpen(false)}
-        onCreate={(input) => createWorkflowStatus.mutateAsync(input)}
-        onDelete={(id) => deleteWorkflowStatus.mutate(id)}
-      />
       {saveFilterOpen && (
         <SaveFilterModal
           projectId={projectId}
@@ -508,6 +486,38 @@ function SwimlaneDropdown({ mode, onChange }: { mode: SwimlaneMode; onChange: (m
                 {m === mode && <Check className="size-3.5" />}
               </button>
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── board menu (…) ───────────────────────────────────────────────────────────
+
+function BoardMenu({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Mais opções do quadro"
+        className="grid size-8 place-items-center rounded-full border border-paper-300 text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1 shadow-pop">
+            <Link
+              to={`/app/boards/${projectId}/settings`}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-1.5 text-left text-xs text-ink dark:text-paper hover:bg-paper-100 dark:hover:bg-ink-700"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Configurações do quadro
+            </Link>
           </div>
         </>
       )}
@@ -997,7 +1007,7 @@ function Column({
             {wipLimit != null ? `${cards.length}/${wipLimit}` : cards.length}
           </span>
           {totalPoints > 0 && (
-            <span className="shrink-0 text-[10px] font-medium text-paper-400 tabular">{totalPoints}pts</span>
+            <span className="shrink-0 text-[10px] font-medium text-paper-400 tabular">peso {totalPoints}</span>
           )}
         </div>
         <div className="relative flex items-center gap-0.5">
@@ -1262,8 +1272,8 @@ function InsightsPanel({
         </button>
       </div>
 
-      {/* Progresso em pontos */}
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-paper-400">Progresso (pontos)</p>
+      {/* Progresso em peso */}
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-paper-400">Progresso (peso)</p>
       {totalPts > 0 ? (
         <>
           <div className="flex h-2.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
@@ -1273,7 +1283,7 @@ function InsightsPanel({
           </div>
           <div className="mt-1.5 flex justify-between text-[10px] text-paper-500">
             <span>✓ {pts(done)} feito</span>
-            <span>{pts(doing)} andamento</span>
+            <span>{pts(doing)} em andamento</span>
             <span>{pts(todo)} a fazer</span>
           </div>
         </>
@@ -1590,7 +1600,7 @@ export function CardCell({
           </div>
         )}
 
-        {/* Rodapé: tipo + chave + prioridade + pontos + responsável */}
+        {/* Rodapé: tipo + chave + prioridade + peso + responsável */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <IssueTypeIcon type={card.type} />
@@ -1665,104 +1675,6 @@ function ScopeChip({
 }
 
 // ─── modals ───────────────────────────────────────────────────────────────────
-
-function ManageWorkflowModal({
-  open,
-  statuses,
-  onClose,
-  onCreate,
-  onDelete,
-}: {
-  open: boolean
-  statuses: WorkflowStatus[]
-  onClose: () => void
-  onCreate: (input: { name: string; category: WorkflowStatus["category"]; color: string }) => Promise<unknown>
-  onDelete: (id: string) => void
-}) {
-  const [name, setName] = useState("")
-  const [category, setCategory] = useState<WorkflowStatus["category"]>("todo")
-  const [color, setColor] = useState("#6b7280")
-  const [saving, setSaving] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  const save = async () => {
-    if (!name.trim()) return
-    setSaving(true)
-    setCreateError(null)
-    try {
-      await onCreate({ name: name.trim(), category, color })
-      setName("")
-    } catch (e) {
-      setCreateError(errMsg(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Gerenciar workflow"
-      description="Configure os status do board deste projeto."
-      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}
-    >
-      <div className="space-y-3">
-        {/* Existing statuses */}
-        <ul className="space-y-1.5">
-          {statuses.map((s) => (
-            <li key={s.id} className="flex items-center gap-2.5 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-900 px-3 py-2">
-              <span className="size-3 rounded-full border border-paper-200 dark:border-ink-700" style={{ backgroundColor: s.color }} />
-              <span className="flex-1 text-sm font-medium text-ink dark:text-paper">{s.name}</span>
-              <span className="text-[10px] text-paper-400 uppercase tracking-wide">{s.category}</span>
-              {!s.is_default && (
-                <button onClick={() => onDelete(s.id)} className="text-paper-300 hover:text-danger">
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        {/* Create new */}
-        <div className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-900 p-3 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-paper-400">Novo status</p>
-          <div className="flex gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="Nome do status"
-              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
-            />
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="size-9 cursor-pointer rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 p-0.5"
-              title="Cor"
-            />
-          </div>
-          <div className="flex gap-2 items-center">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as WorkflowStatus["category"])}
-              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
-            >
-              <option value="todo">A fazer</option>
-              <option value="in_progress">Em andamento</option>
-              <option value="done">Concluído</option>
-            </select>
-            <Button size="sm" onClick={save} loading={saving} disabled={!name.trim()}>
-              Criar
-            </Button>
-          </div>
-          {createError && <p className="text-xs text-danger">{createError}</p>}
-        </div>
-      </div>
-    </Modal>
-  )
-}
 
 function NewSprintModal({
   projectId,

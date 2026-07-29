@@ -187,8 +187,8 @@ function ReportBody({
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Kpi icon={Layers} tint="from-slate-500 to-slate-700" label="Cards totais" value={m.total} sub="no projeto" />
         <Kpi icon={CheckCircle2} tint="from-emerald-500 to-green-700" label="Concluídos" value={m.done} sub={`${m.donePct}% do total`} />
-        <Kpi icon={Zap} tint="from-violet-500 to-purple-700" label="Pontos entregues" value={m.donePoints} sub={`de ${m.totalPoints} pts`} />
-        <Kpi icon={Gauge} tint="from-indigo-500 to-blue-700" label="Velocidade média" value={m.avgVel} sub="pts / sprint" />
+        <Kpi icon={Zap} tint="from-violet-500 to-purple-700" label="Peso entregue" value={m.donePoints} sub={`de ${m.totalPoints} de peso`} />
+        <Kpi icon={Gauge} tint="from-indigo-500 to-blue-700" label="Velocidade média" value={m.avgVel} sub="peso / sprint" />
         <Kpi icon={TrendingUp} tint="from-amber-500 to-orange-700" label="Em progresso" value={m.wip} sub="doing + review" />
         <Kpi icon={AlertTriangle} tint="from-rose-500 to-red-700" label="Vencidos" value={m.overdue} sub="prazo estourado" />
       </div>
@@ -246,7 +246,7 @@ function computeMetrics(reports: ProjectReports, cards: Card[]) {
     count: cards.filter((c) => c.priority === p).length,
   }))
 
-  // Carga por responsável (top 8 por pontos)
+  // Carga por responsável (top 8 por peso)
   const assigneeMap = new Map<string, { id: string | null; count: number; points: number; done: number }>()
   for (const c of cards) {
     const k = c.assignee_id ?? "__none__"
@@ -379,7 +379,7 @@ function BurndownChart({ data }: { data: ProjectReports["burndown"] }) {
       icon={LineChartIcon}
       action={data.sprint && (
         <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-          {data.sprint.total_points} pts
+          peso {data.sprint.total_points}
         </span>
       )}
     >
@@ -422,7 +422,7 @@ function VelocityChart({ data }: { data: ProjectReports["velocity"] }) {
 
   return (
     <ChartCard title="Velocidade" icon={TrendingUp}
-      action={data.length > 0 && <span className="text-[11px] text-paper-400">média {avg} pts</span>}>
+      action={data.length > 0 && <span className="text-[11px] text-paper-400">peso médio {avg}</span>}>
       {data.length === 0 ? (
         <EmptyChart label="Nenhuma sprint encerrada." />
       ) : (
@@ -597,7 +597,7 @@ function WorkloadChart({ data, memberName }: {
                     <div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600" style={{ width: `${(d.points / maxPts) * 100}%` }} />
                   </div>
                 </div>
-                <span className="w-12 shrink-0 text-right text-[11px] font-semibold tabular text-brand-600 dark:text-brand-300">{d.points} pts</span>
+                <span className="w-12 shrink-0 text-right text-[11px] font-semibold tabular text-brand-600 dark:text-brand-300">peso {d.points}</span>
               </div>
             )
           })}
@@ -688,7 +688,7 @@ function Legend({ items }: { items: { color: string; label: string; dashed?: boo
 // ── Export CSV ───────────────────────────────────────────────────────────────
 function exportCsv(cards: Card[], projectKey: string, memberName: (id: string | null) => string) {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
-  const header = ["Ref", "Título", "Tipo", "Status", "Prioridade", "Pontos", "Responsável", "Prazo", "Criado em"]
+  const header = ["Ref", "Título", "Tipo", "Status", "Prioridade", "Peso", "Responsável", "Prazo", "Criado em"]
   const rows = cards.map((c) => [
     c.ref, c.title, TYPE_LABEL[c.type], STATUS_LABEL[c.status], PRIORITY_LABEL[c.priority],
     c.points ?? "", memberName(c.assignee_id), c.due_date ?? "", c.created_at?.slice(0, 10) ?? "",
