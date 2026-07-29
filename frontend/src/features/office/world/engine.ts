@@ -28,6 +28,9 @@ const WALK_SPEED = 46 // px/s — ~3 tiles por segundo, ritmo de Stardew
 const RUN_SPEED = 82
 /** Raio do corpo usado na colisão: o avatar ocupa menos que o tile inteiro. */
 const BODY_R = 4
+/** Quantos px da base do sprite (pernas/pés) somem quando o avatar senta —
+ * lê como "atrás do encosto da cadeira" em vez de "de pé do lado dela". */
+const SIT_CROP = 6
 
 export interface Actor {
   id: string
@@ -797,6 +800,12 @@ export class OfficeEngine {
       const key = `${actor.facing}_${actor.anim}`
       const frames = actor.frames[key] ?? actor.frames[`down_${actor.anim}`] ?? actor.frames["down_idle"]
       const fr = frames[actor.frame % frames.length]
+      // Sentado: corta a base do sprite (pernas/pés) e desenha mais embaixo —
+      // some atrás do encosto da cadeira, lendo como "sentado" de verdade em
+      // vez de "de pé do lado da cadeira". A cabeça/torso não mudam de lugar.
+      const sitCrop = actor.seatIndex >= 0 ? SIT_CROP : 0
+      const frameH = FH - sitCrop
+      const drawY = sy + sitCrop * s
       queue.push({
         base: actor.x + actor.y,
         draw: () => {
@@ -808,7 +817,7 @@ export class OfficeEngine {
             this.shadow.w * s,
             this.shadow.h * s,
           )
-          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, FH, sx, sy, FW * s, FH * s)
+          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, frameH, sx, drawY, FW * s, frameH * s)
         },
       })
     }
