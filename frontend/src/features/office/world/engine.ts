@@ -21,7 +21,6 @@ import { isoToWorld, worldToIso } from "./iso"
 import { buildIsoGround } from "./isoBake"
 import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
 import { TILE, buildTileAtlas } from "./tiles"
-import { makeCanvas } from "./pixels"
 import { pokerBadgeFor } from "./poker-badge"
 
 const STEP = 1 / 60
@@ -88,8 +87,6 @@ export class OfficeEngine {
   /** Deslocamento a somar em `worldToIso(x, y)` para cair dentro de `ground`. */
   private isoOriginX = 0
   private isoOriginY = 0
-  private lightBuf: HTMLCanvasElement
-  private lightCtx: CanvasRenderingContext2D
   private props: Record<string, PropSprite>
   private shadow: PropSprite
   private sky: SkyLayers
@@ -156,10 +153,6 @@ export class OfficeEngine {
 
     // Buffer de luz em 1/4 da resolução do mundo visível: o desfoque natural
     // do upscale vira o "falloff" suave das lâmpadas, de graça.
-    const lb = makeCanvas(320, 200)
-    this.lightBuf = lb.canvas
-    this.lightCtx = lb.ctx
-
     this.particles = Array.from({ length: POOL }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0, size: 1, color: "#fff", kind: 0,
     }))
@@ -668,8 +661,6 @@ export class OfficeEngine {
     const { viewW, viewH } = viewportFor(this.cssW, this.cssH, this.scale)
     this.viewW = viewW
     this.viewH = viewH
-    this.lightBuf.width = Math.max(1, Math.ceil(this.viewW / 2))
-    this.lightBuf.height = Math.max(1, Math.ceil(this.viewH / 2))
   }
 
   /**
@@ -841,7 +832,6 @@ export class OfficeEngine {
     }
     ctx.globalAlpha = 1
 
-    this.renderLighting(camX, camY, s)
     this.renderMyDeskArrow(camX, camY, s)
     this.renderDeskLabels(camX, camY, s)
     this.renderNameplates(camX, camY, s)
@@ -902,64 +892,6 @@ export class OfficeEngine {
       ctx.fillStyle = "#ffffff"
       ctx.fillText(label.name, sx, sy)
     }
-  }
-
-  /**
-   * Camada de luz: um véu de cor por cima da cena (mais forte à noite),
-   * furado pelas lâmpadas com gradiente radial em `destination-out`.
-   */
-  private renderLighting(camX: number, camY: number, s: number): void {
-    const lc = this.lightCtx
-    const lw = this.lightBuf.width
-    const lh = this.lightBuf.height
-    const half = 0.5 // buffer roda em metade da resolução da viewport
-
-    // Curva do dia: azul frio de madrugada → neutro ao meio-dia → âmbar à noite.
-    const phase = this.dayPhase
-    const night = Math.max(0, 1 - Math.sin(Math.PI * phase) * 1.35)
-    if (night <= 0.02) return
-
-    lc.clearRect(0, 0, lw, lh)
-    lc.globalCompositeOperation = "source-over"
-    lc.fillStyle = phase < 0.5 ? "#1b2440" : "#3a2418"
-    lc.globalAlpha = Math.min(0.62, night * 0.7)
-    lc.fillRect(0, 0, lw, lh)
-    lc.globalAlpha = 1
-
-    lc.globalCompositeOperation = "destination-out"
-    for (const light of this.map.lights) {
-      const isoL = this.toIso(light.x, light.y)
-      const lx = (isoL.x - camX) * half
-      const ly = (isoL.y - camY) * half
-      const r = light.radius * half
-      if (lx + r < 0 || ly + r < 0 || lx - r > lw || ly - r > lh) continue
-      const flick = light.flicker
-        ? 1 + Math.sin(this.time * 9 + light.x) * light.flicker
-        : 1
-      const g = lc.createRadialGradient(lx, ly, 0, lx, ly, r * flick)
-      g.addColorStop(0, "rgba(0,0,0,0.95)")
-      g.addColorStop(0.55, "rgba(0,0,0,0.55)")
-      g.addColorStop(1, "rgba(0,0,0,0)")
-      lc.fillStyle = g
-      lc.fillRect(lx - r, ly - r, r * 2, r * 2)
-    }
-    // O jogador carrega uma luz fraca — nunca fica no escuro absoluto.
-    if (this.me) {
-      const isoMe = this.toIso(this.me.x, this.me.y)
-      const lx = (isoMe.x - camX) * half
-      const ly = (isoMe.y - 12 - camY) * half
-      const r = 46 * half
-      const g = lc.createRadialGradient(lx, ly, 0, lx, ly, r)
-      g.addColorStop(0, "rgba(0,0,0,0.6)")
-      g.addColorStop(1, "rgba(0,0,0,0)")
-      lc.fillStyle = g
-      lc.fillRect(lx - r, ly - r, r * 2, r * 2)
-    }
-    lc.globalCompositeOperation = "source-over"
-
-    this.ctx.imageSmoothingEnabled = true // o borrão aqui É o falloff da luz
-    this.ctx.drawImage(this.lightBuf, 0, 0, this.viewW * s, this.viewH * s)
-    this.ctx.imageSmoothingEnabled = false
   }
 
   /** Nomes, status e balões — texto nítido, fora da grade de pixels. */
