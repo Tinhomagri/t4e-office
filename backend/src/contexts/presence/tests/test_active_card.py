@@ -59,6 +59,30 @@ def test_card_doing_mais_recente_vence(scenario):
     assert "doing_since" in result
 
 
+def test_ordem_de_transicao_vence_mesmo_com_ordem_de_criacao_invertida(scenario):
+    """Prova que o código lê CardHistoryModel transition timestamps,
+    não ordem de criação ou card id. Cria cards em uma ordem (a, b)
+    mas transiciona para doing em ordem reversa (b primeiro, a segundo).
+    Card a deve vencer porque sua transição para doing é mais recente."""
+    dev = scenario["dev"]
+    project = scenario["project"]
+    card_a = CardModel.objects.create(project=project, number=1, title="Card A", assignee=dev)
+    card_b = CardModel.objects.create(project=project, number=2, title="Card B", assignee=dev)
+    # Transicionar em ordem reversa: b primeiro, depois a
+    _move_to_doing(card_b, dev)
+    _move_to_doing(card_a, dev)
+
+    result = get_active_card(user_id=str(dev.id))
+
+    assert result is not None
+    assert result["active"] is True
+    assert result["card"]["title"] == "Card A"
+    assert result["card"]["number"] == 1
+    assert result["card"]["project"] == "MIA"
+    assert result["working_note"] == ""
+    assert "doing_since" in result
+
+
 def test_working_note_aparece_no_resultado(scenario):
     dev = scenario["dev"]
     card = CardModel.objects.create(
