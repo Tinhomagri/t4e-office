@@ -16,6 +16,7 @@ import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./p
 import {
   cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
 } from "./camera"
+import { nearestSeatedUser } from "./hover"
 import { keyAction } from "./input"
 import { isoToWorld, worldToIso } from "./iso"
 import { buildIsoGround } from "./isoBake"
@@ -344,6 +345,14 @@ export class OfficeEngine {
   /** O avatar do usuário está sentado? */
   isSeated(): boolean {
     return (this.me?.seatIndex ?? -1) >= 0
+  }
+
+  /** Usuário sentado numa baia perto do ponto de tela — null se não houver
+   * ninguém ali perto. Usado pro balão de card ativo (hover, não clique). */
+  hoverSeatAt(screenX: number, screenY: number): string | null {
+    const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
+    const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
+    return nearestSeatedUser([...this.actors.values()], this.map.seats, x, y)
   }
 
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
