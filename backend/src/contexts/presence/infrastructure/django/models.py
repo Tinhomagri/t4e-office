@@ -68,3 +68,38 @@ class UserAvatarModel(models.Model):
 
     class Meta:
         db_table = "presence_user_avatar"
+
+
+class DeskAssignmentModel(models.Model):
+    """Quem senta em qual mesa — atribuição manual do admin, não mais hash.
+
+    Uma mesa sem linha aqui está livre. `(workspace, user)` é único: atribuir
+    mesa nova pra alguém precisa apagar a linha antiga dela antes (ver
+    `contexts.presence.application.assign_desk`), senão o banco rejeita.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "identity.WorkspaceModel",
+        on_delete=models.CASCADE,
+        related_name="desk_assignments",
+    )
+    floor = models.PositiveSmallIntegerField()
+    seat_id = models.CharField(max_length=64)
+    user = models.ForeignKey(
+        "identity.UserModel",
+        on_delete=models.CASCADE,
+        related_name="desk_assignments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "presence_desk_assignment"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "floor", "seat_id"], name="uniq_desk_per_seat"
+            ),
+            models.UniqueConstraint(
+                fields=["workspace", "user"], name="uniq_desk_per_user"
+            ),
+        ]
