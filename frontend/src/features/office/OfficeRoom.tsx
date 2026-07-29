@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AvatarConfig, Direction } from "@/features/avatar/avatar.types"
 import { useAuthStore } from "@/features/auth/auth.store"
+import { useMembers } from "@/features/workspace/workspace.hooks"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
@@ -69,6 +70,14 @@ export function OfficeRoom({
     useSession(onPokerFloor ? (activeSession?.id ?? null) : null).data ?? null
 
   const deskAssignments = useDeskAssignments(workspaceId, floor)
+
+  // Owner/admin conseguem ligar QUALQUER PC mesmo sem mesa atribuída — sem
+  // isso, ninguém abre o "Mesas" pela primeira vez (a mesa de todo mundo,
+  // incluindo a do owner, começa livre, então isMyDesk nunca é true até
+  // alguém já ter atribuído algo — trava circular numa instalação nova).
+  const members = useMembers(workspaceId)
+  const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
+  const canManageDesks = myRole === "owner" || myRole === "admin"
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -139,7 +148,8 @@ export function OfficeRoom({
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
         // outro assento continua sendo só sentar. Assento da mesa de poker
         // abre a roda de votos em vez de ligar o PC.
-        if (seat && me?.id && isMyDesk(me.id, seat, deskAssignments.data ?? [])) bootPc(seat.id)
+        const mine = seat && me?.id && isMyDesk(me.id, seat, deskAssignments.data ?? [])
+        if (seat && seat.kind === "pc" && (mine || canManageDesks)) bootPc(seat.id)
         else if (seat && seat.kind === "poker") {
           usePokerRoomStore.getState().openVote(seat.id)
         } else if (!seat) {
