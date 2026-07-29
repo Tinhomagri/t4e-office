@@ -180,7 +180,7 @@ export function GeneralTab({
                 Cor de fundo
               </p>
               <ColorPicker
-                value={form.avatar_color ?? "#6366f1"}
+                value={form.avatar_color ?? "#8270DB"}
                 onChange={(c) => set("avatar_color", c)}
                 disabled={!canEdit}
               />

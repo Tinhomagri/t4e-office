@@ -89,10 +89,13 @@ export function SettingRow({
 
 // Paleta fixa para cor de coluna/avatar/card. Cores livres via input[type=color]
 // dariam combinações ilegíveis no board; um conjunto curado evita isso.
+// Os 12 tons vêm das escalas do tailwind.config (Atlassian). Antes eram os
+// valores padrão do Tailwind — o violet/cyan/pink de lá não existe no design
+// system e destoava do resto do app.
 export const PALETTE = [
-  "#6b7280", "#ef4444", "#f97316", "#f59e0b", "#84cc16",
-  "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
-  "#ec4899", "#0f172a",
+  "#626F86", "#E2483D", "#E56910", "#E2B203", "#6A9A23",
+  "#22A06B", "#2898BD", "#0C66E4", "#09326C", "#8270DB",
+  "#CD519D", "#172B4D",
 ]
 
 export function ColorPicker({

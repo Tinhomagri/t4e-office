@@ -413,7 +413,7 @@ function BurndownCard({
               <LineChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                 {todayIdx >= 0 && (
-                  <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#6366f1" fillOpacity={0.06} />
+                  <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#8270DB" fillOpacity={0.06} />
                 )}
                 <XAxis
                   dataKey="date"
@@ -432,7 +432,7 @@ function BurndownCard({
                 <Line
                   type="monotone"
                   dataKey="ideal"
-                  stroke="#94a3b8"
+                  stroke="#8590A2"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
                   dot={false}
@@ -442,7 +442,7 @@ function BurndownCard({
                 <Line
                   type="monotone"
                   dataKey="real"
-                  stroke="#6366f1"
+                  stroke="#8270DB"
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -456,7 +456,7 @@ function BurndownCard({
                     x={data[todayIdx].date}
                     y={data[todayIdx].real as number}
                     r={4}
-                    fill="#6366f1"
+                    fill="#8270DB"
                     stroke="white"
                     strokeWidth={2}
                   />

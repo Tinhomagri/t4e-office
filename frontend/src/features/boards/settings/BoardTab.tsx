@@ -208,7 +208,7 @@ function CardColorsCard({ config, canEdit, onSave }: TabProps) {
             <div key={key} className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-[13px] text-ink dark:text-paper">{label}</span>
               <ColorPicker
-                value={config.card_color_map[key] ?? "#6b7280"}
+                value={config.card_color_map[key] ?? "#626F86"}
                 disabled={!canEdit}
                 onChange={(color) =>
                   onSave({ card_color_map: { ...config.card_color_map, [key]: color } })

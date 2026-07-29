@@ -57,11 +57,11 @@ const FONT_FAMILIES = [
 ]
 
 const TEXT_COLORS = [
-  "#111827", "#dc2626", "#ea580c", "#ca8a04",
-  "#16a34a", "#0891b2", "#2563eb", "#7c3aed", "#db2777",
+  "#172B4D", "#C9372C", "#A54800", "#946F00",
+  "#1F845A", "#227D9B", "#0055CC", "#5E4DB2", "#AE4787",
 ]
 
-const HIGHLIGHT_COLORS = ["#fde68a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e9d5ff"]
+const HIGHLIGHT_COLORS = ["#FFF7D6", "#DCFFF1", "#CCE0FF", "#FFECF8", "#F3F0FF"]
 
 export function DocumentEditor({
   value,
@@ -118,7 +118,7 @@ export function DocumentEditor({
     <div className="flex flex-1 flex-col overflow-hidden bg-paper dark:bg-ink-900">
       <Toolbar editor={editor} />
       {/* Canvas cinza com a folha branca centralizada — visual de Word/Docs */}
-      <div className="flex-1 overflow-y-auto scrollbar-slim bg-[#e9eaee] dark:bg-[#1a1a1f]">
+      <div className="flex-1 overflow-y-auto scrollbar-slim bg-[#DCDFE4] dark:bg-[#181A1F]">
         <div className="mx-auto my-8 w-[210mm] max-w-[calc(100%-2rem)] rounded-sm bg-white shadow-[0_1px_3px_rgba(0,0,0,0.15),0_8px_24px_-8px_rgba(0,0,0,0.25)]">
           <EditorContent editor={editor} />
         </div>

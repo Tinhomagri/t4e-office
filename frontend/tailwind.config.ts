@@ -65,20 +65,50 @@ export default {
           700: "#A54800",
         },
         yellow: { 100: "#FFF7D6", 500: "#E2B203", 700: "#946F00" },
+        // Hues de rótulo/gráfico do Atlassian. Não existiam aqui, então quem
+        // precisou de variedade (charts, paleta de coluna) caía no violet/cyan
+        // do Tailwind padrão — e a tela saía com cara de outro produto.
+        // Declarar estes nomes sobrescreve as escalas homônimas do Tailwind, por
+        // isso vão com a régua completa (50..700): faltar um shade que já está
+        // em uso no código faz a classe virar cor nenhuma, sem erro de build.
+        purple: {
+          50: "#F3F0FF", 100: "#DFD8FD", 200: "#B8ACF6", 300: "#B8ACF6",
+          400: "#9F8FEF", 500: "#8270DB", 600: "#6E5DC6", 700: "#5E4DB2",
+          800: "#352C63", 900: "#231C3F",
+        },
+        magenta: {
+          50: "#FFECF8", 100: "#FDD0EC", 200: "#F797D2", 300: "#E774BB",
+          400: "#DA62AC", 500: "#CD519D", 600: "#AE4787", 700: "#943D73",
+          800: "#50253F", 900: "#3D2232",
+        },
+        teal: {
+          50: "#E7F9FF", 100: "#C6EDFB", 200: "#9DD9EE", 300: "#6CC3E0",
+          400: "#42B2D7", 500: "#2898BD", 600: "#227D9B", 700: "#206A83",
+          800: "#164555", 900: "#153337",
+        },
+        lime: {
+          50: "#EFFFD6", 100: "#D3F1A7", 200: "#B3DF72", 300: "#B3DF72",
+          400: "#82B536", 500: "#6A9A23", 600: "#5B7F24", 700: "#4C6B1F",
+          800: "#37471F", 900: "#28311B",
+        },
 
         // ── Tokens legados remapeados → Atlassian ───────────────────────────
         // ink: texto (light) / superfícies (dark). Neutro cinza-preto — não navy —
         // pra manter o azul reservado ao brand/acentos (pedido: "preto puxado pro
         // cinza escuro", sem tudo ficar com cara de azul).
+        // A régua segue a do Jira dark, onde cada passo é visivelmente mais claro
+        // que o anterior: página → painel → elevado. Os valores antigos começavam
+        // em #0A0B0D (quase preto) e a diferença entre página e painel era tão
+        // pequena que as colunas do board não liam como superfície.
         ink: {
           DEFAULT: "#181A1F",
-          950: "#0A0B0D",
-          900: "#17191E",
-          800: "#212328",
-          700: "#2E3036",
-          600: "#494B52",
-          500: "#63656C",
-          400: "#8A8C93",
+          950: "#16181D", // página
+          900: "#1D2125", // painel/coluna
+          800: "#22272B", // elevado/card
+          700: "#2E3338", // borda
+          600: "#4A525A",
+          500: "#646E77",
+          400: "#8A939D",
         },
         // paper: superfícies claras, bordas e texto suave.
         paper: {

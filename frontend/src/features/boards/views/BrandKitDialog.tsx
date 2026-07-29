@@ -18,7 +18,7 @@ export function BrandKitDialog({
   const [kit, setKit] = useState<BrandKit | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [newColor, setNewColor] = useState("#2563eb")
+  const [newColor, setNewColor] = useState("#0055CC")
 
   useEffect(() => {
     if (!open) return

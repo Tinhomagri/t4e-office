@@ -593,7 +593,7 @@ function DependencyLayer({
         const y1 = a.fromIdx * ROW_H + ROW_H / 2
         const x2 = dateToX(toStart, cols, scale, colW)
         const y2 = a.toIdx * ROW_H + ROW_H / 2
-        const color = a.conflict ? "#e11d48" : "#6c5cf0"
+        const color = a.conflict ? "#C9372C" : "#8270DB"
         return (
           <g key={idx}>
             <path d={`M${x1},${y1} C${x1+30},${y1} ${x2-30},${y2} ${x2},${y2}`}
