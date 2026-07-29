@@ -15,7 +15,9 @@ from contexts.presence.infrastructure.django.models import (
     PresenceModel,
     UserAvatarModel,
 )
+from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.infrastructure.meeting import refresh_busy_until
+from contexts.projects.interface.api.permissions import _assert_workspace
 from shared.domain.errors import PermissionDeniedError
 
 # Janela de frescor: presenças mais antigas que isto não estão "na sala".
@@ -188,3 +190,53 @@ def _effective(presence: PresenceModel, now: datetime) -> str:
         manual_status_at=presence.manual_status_at,
         busy_until=presence.busy_until,
     )
+
+
+def _serialize_desk_assignments(rows) -> list[dict]:
+    return [
+        {
+            "seat_id": r.seat_id,
+            "floor": r.floor,
+            "user_id": str(r.user_id),
+            "user_name": r.user.full_name,
+        }
+        for r in rows
+    ]
+
+
+class DeskAssignmentsView(APIView):
+    """GET /api/presence/desks/?workspace_id=&floor= — qualquer membro lê."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        if not workspace_id:
+            return Response({"error": "workspace_id obrigatório"}, status=400)
+        _assert_workspace(workspace_id, str(request.user.id), min_role="member")
+        floor = _clamp_floor(request.query_params.get("floor", 1))
+        rows = list_desk_assignments(workspace_id=workspace_id, floor=floor)
+        return Response(_serialize_desk_assignments(rows))
+
+
+class AssignDeskView(APIView):
+    """POST /api/presence/desks/assign/ — só owner/admin do workspace."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        workspace_id = str(request.data.get("workspace_id", ""))
+        seat_id = str(request.data.get("seat_id", ""))
+        if not workspace_id or not seat_id:
+            return Response({"error": "workspace_id e seat_id obrigatórios"}, status=400)
+        _assert_workspace(workspace_id, str(request.user.id), min_role="admin")
+
+        floor = _clamp_floor(request.data.get("floor", 1))
+        raw_user_id = request.data.get("user_id")
+        user_id = str(raw_user_id) if raw_user_id else None
+
+        assign_desk(
+            workspace_id=workspace_id, floor=floor, seat_id=seat_id, user_id=user_id
+        )
+        rows = list_desk_assignments(workspace_id=workspace_id, floor=floor)
+        return Response(_serialize_desk_assignments(rows))

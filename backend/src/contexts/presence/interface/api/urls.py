@@ -1,7 +1,9 @@
 from django.urls import path
 
 from contexts.presence.interface.api.views import (
+    AssignDeskView,
     AvatarView,
+    DeskAssignmentsView,
     HeartbeatView,
     RoomView,
     StatusView,
@@ -12,4 +14,6 @@ urlpatterns = [
     path("room/", RoomView.as_view(), name="presence-room"),
     path("status/", StatusView.as_view(), name="presence-status"),
     path("avatar/", AvatarView.as_view(), name="presence-avatar"),
+    path("desks/", DeskAssignmentsView.as_view(), name="presence-desks"),
+    path("desks/assign/", AssignDeskView.as_view(), name="presence-desks-assign"),
 ]
