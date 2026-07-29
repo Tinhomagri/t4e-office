@@ -253,3 +253,57 @@ class AssignDeskView(APIView):
         )
         rows = list_desk_assignments(workspace_id=workspace_id, floor=floor)
         return Response(_serialize_desk_assignments(rows))
+
+
+from contexts.presence.application.active_card import get_active_card, update_working_note
+
+
+def _validate_uuid(value: str, field_name: str) -> Response | None:
+    try:
+        uuid.UUID(value)
+    except (ValueError, AttributeError):
+        return Response({"error": f"{field_name} inválido."}, status=400)
+    return None
+
+
+class ActiveCardView(APIView):
+    """GET /api/presence/active-card/?workspace_id=&user_id= — card em
+    'Em andamento' de alguém, com há quanto tempo e a observação. Só
+    owner/admin do workspace veem o card de outra pessoa."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        user_id = str(request.query_params.get("user_id", ""))
+        if not workspace_id or not user_id:
+            return Response({"error": "workspace_id e user_id obrigatórios"}, status=400)
+        _assert_workspace(workspace_id, str(request.user.id), min_role="admin")
+
+        error = _validate_uuid(user_id, "user_id")
+        if error:
+            return error
+        if not MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id).exists():
+            return Response({"error": "Usuário não é membro deste workspace."}, status=400)
+
+        result = get_active_card(user_id=user_id)
+        return Response(result or {"active": False})
+
+
+class ActiveCardNoteView(APIView):
+    """PATCH /api/presence/active-card/note/ — só o responsável do card
+    edita a observação."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request) -> Response:
+        card_id = str(request.data.get("card_id", ""))
+        note = str(request.data.get("note", ""))
+        if not card_id:
+            return Response({"error": "card_id obrigatório"}, status=400)
+        error = _validate_uuid(card_id, "card_id")
+        if error:
+            return error
+
+        update_working_note(card_id=card_id, user_id=str(request.user.id), note=note)
+        return Response({"ok": True})
