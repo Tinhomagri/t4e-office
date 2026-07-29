@@ -135,6 +135,10 @@ export class OfficeEngine {
    * seta indicativa acima dela. Não afeta física nem interação. */
   private myDeskSeatId: string | null = null
 
+  /** Rótulos "de quem é a mesa" — vêm do backend (DeskAssignment), visíveis
+   * pra QUALQUER pessoa, não só a dona da mesa (diferente da seta acima). */
+  private deskLabels: { seatId: string; name: string }[] = []
+
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
 
@@ -304,7 +308,13 @@ export class OfficeEngine {
     this.myDeskSeatId = seatId
   }
 
-  // ── Entrada ───────────────────────────────────────────────────────────────
+  /** Rótulos com nome acima de cada mesa atribuída — vindos do backend,
+   * visíveis pra todo mundo (a seta de `setMyDesk` só o dono vê). */
+  setDeskLabels(labels: { seatId: string; name: string }[]): void {
+    this.deskLabels = labels
+  }
+
+  // ── Entrada───────────────────────────────────────────────────────────────
 
   /** Liga/desliga o teclado do mapa (o PC do escritório desliga ao abrir). */
   setInputEnabled(enabled: boolean): void {
@@ -833,6 +843,7 @@ export class OfficeEngine {
 
     this.renderLighting(camX, camY, s)
     this.renderMyDeskArrow(camX, camY, s)
+    this.renderDeskLabels(camX, camY, s)
     this.renderNameplates(camX, camY, s)
   }
 
@@ -867,6 +878,30 @@ export class OfficeEngine {
     ctx.fill()
     ctx.stroke()
     ctx.restore()
+  }
+
+  /** Nome de quem senta em cada mesa atribuída — pequeno, acima da mesa,
+   * visível pra qualquer pessoa (não só a dona). */
+  private renderDeskLabels(camX: number, camY: number, s: number): void {
+    if (this.deskLabels.length === 0) return
+    const ctx = this.ctx
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.font = "600 9px -apple-system, system-ui, sans-serif"
+    for (const label of this.deskLabels) {
+      const seat = this.map.seats.find((st) => st.id === label.seatId)
+      if (!seat) continue
+      const iso = this.toIso(seat.x, seat.y)
+      const sx = (iso.x - camX) * s
+      const sy = (iso.y - camY) * s - 26 * s
+      if (sx < -60 || sy < -20 || sx > this.viewW * s + 60 || sy > this.viewH * s + 20) continue
+      const tw = ctx.measureText(label.name).width
+      const bw = tw + 10
+      ctx.fillStyle = "rgba(23,27,33,0.7)"
+      ctx.fillRect(sx - bw / 2, sy - 7, bw, 14)
+      ctx.fillStyle = "#ffffff"
+      ctx.fillText(label.name, sx, sy)
+    }
   }
 
   /**

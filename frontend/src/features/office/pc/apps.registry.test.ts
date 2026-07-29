@@ -9,8 +9,8 @@ describe("registry de apps", () => {
     ])
   })
 
-  it("cobre as 14 rotas do produto", () => {
-    expect(APPS).toHaveLength(14)
+  it("cobre as 15 rotas do produto", () => {
+    expect(APPS).toHaveLength(15)
   })
 
   it("todo app tem id único", () => {
@@ -23,9 +23,9 @@ describe("registry de apps", () => {
     for (const app of APPS) expect(grupos.has(app.group)).toBe(true)
   })
 
-  it("nesta fatia só Boards e Comercial estão habilitados", () => {
+  it("nesta fatia só Boards, Comercial e Mesas estão habilitados", () => {
     const habilitados = APPS.filter(isEnabled).map((a) => a.id)
-    expect(habilitados.sort()).toEqual(["boards", "comercial"])
+    expect(habilitados.sort()).toEqual(["boards", "comercial", "desks"])
   })
 
   it("app desabilitado não tem componente", () => {

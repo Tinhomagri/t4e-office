@@ -16,7 +16,8 @@ import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
-import { isMyDesk, myDeskId } from "./pc/desk"
+import { isMyDesk } from "./pc/desk"
+import { useDeskAssignments } from "./pc/desks.hooks"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
 import { PokerConsolePanel } from "./poker/PokerConsolePanel"
@@ -66,6 +67,8 @@ export function OfficeRoom({
   // Só polla o detalhe onde ele é usado (as plaquinhas do andar 2).
   const sessionDetail =
     useSession(onPokerFloor ? (activeSession?.id ?? null) : null).data ?? null
+
+  const deskAssignments = useDeskAssignments(workspaceId, floor)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -136,7 +139,7 @@ export function OfficeRoom({
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
         // outro assento continua sendo só sentar. Assento da mesa de poker
         // abre a roda de votos em vez de ligar o PC.
-        if (seat && me?.id && isMyDesk(me.id, seat, map.seats)) bootPc(seat.id)
+        if (seat && me?.id && isMyDesk(me.id, seat, deskAssignments.data ?? [])) bootPc(seat.id)
         else if (seat && seat.kind === "poker") {
           usePokerRoomStore.getState().openVote(seat.id)
         } else if (!seat) {
@@ -148,7 +151,6 @@ export function OfficeRoom({
     engineRef.current = engine
 
     engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
-    engine.setMyDesk(me?.id ? myDeskId(me.id, map.seats) : null)
 
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
@@ -174,6 +176,17 @@ export function OfficeRoom({
   useEffect(() => {
     engineRef.current?.updateSelfConfig(myConfig)
   }, [myConfig])
+
+  // Atribuições de mesa (de quem é cada uma) — vêm do backend, não mais hash.
+  // A seta acima da própria mesa e os rótulos com nome de todo mundo dependem
+  // dos dois: precisa recalcular sempre que a lista OU o mapa mudar.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    const rows = deskAssignments.data ?? []
+    engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
+    engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
+  }, [deskAssignments.data, me?.id, map])
 
   // Presença dos outros → atores da cena.
   useEffect(() => {
