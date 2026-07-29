@@ -16,6 +16,7 @@ from contexts.presence.infrastructure.django.models import (
     PresenceModel,
     UserAvatarModel,
 )
+from contexts.presence.application.active_card import get_active_card, update_working_note
 from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.infrastructure.meeting import refresh_busy_until
 from contexts.projects.interface.api.permissions import _assert_workspace
@@ -255,9 +256,6 @@ class AssignDeskView(APIView):
         return Response(_serialize_desk_assignments(rows))
 
 
-from contexts.presence.application.active_card import get_active_card, update_working_note
-
-
 def _validate_uuid(value: str, field_name: str) -> Response | None:
     try:
         uuid.UUID(value)
@@ -286,7 +284,7 @@ class ActiveCardView(APIView):
         if not MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id).exists():
             return Response({"error": "Usuário não é membro deste workspace."}, status=400)
 
-        result = get_active_card(user_id=user_id)
+        result = get_active_card(workspace_id=workspace_id, user_id=user_id)
         return Response(result or {"active": False})
 
 

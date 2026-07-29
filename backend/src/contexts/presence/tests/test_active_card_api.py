@@ -122,3 +122,37 @@ def test_card_id_invalido_da_400(scenario):
         format="json",
     )
     assert r.status_code == 400
+
+
+def test_card_ativo_de_outro_workspace_nao_aparece_na_api(scenario):
+    """Dev é membro dos workspaces A (scenario['ws']) e B. Ele NÃO tem card
+    ativo em A (o card padrão do fixture é marcado como 'done'), mas tem um
+    card 'doing' em B. Owner de A consulta a API passando workspace_id=A e
+    user_id=dev — não deve ver o card de B, mesmo que dev tenha um card
+    ativo (só que em outro workspace)."""
+    owner_a = scenario["owner"]
+    dev = scenario["dev"]
+    ws_a = scenario["ws"]
+    scenario["card"].status = "done"
+    scenario["card"].save(update_fields=["status"])
+
+    owner_b = UserModel.objects.create_user(
+        email="owner-b@t4e.com", password="x", full_name="Carla Owner B", is_active=True
+    )
+    ws_b = WorkspaceModel.objects.create(name="WS B", slug="ws-b", owner=owner_b)
+    MembershipModel.objects.create(workspace=ws_b, user=owner_b, role="owner")
+    MembershipModel.objects.create(workspace=ws_b, user=dev, role="member")
+    project_b = ProjectModel.objects.create(workspace=ws_b, name="Nia", key="NIA")
+    card_b = CardModel.objects.create(
+        project=project_b, number=1, title="Card em B", assignee=dev, status="doing"
+    )
+    CardHistoryModel.objects.create(
+        card=card_b, author=dev, field="status", old_value="todo", new_value="doing"
+    )
+
+    c = _client(owner_a)
+    r = c.get(
+        f"/api/presence/active-card/?workspace_id={ws_a.id}&user_id={dev.id}"
+    )
+    assert r.status_code == 200
+    assert r.data == {"active": False}

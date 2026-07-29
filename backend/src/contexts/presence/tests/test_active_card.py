@@ -37,7 +37,7 @@ def _move_to_doing(card, author):
 
 
 def test_sem_card_doing_retorna_none(scenario):
-    assert get_active_card(user_id=str(scenario["dev"].id)) is None
+    assert get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)) is None
 
 
 def test_card_doing_mais_recente_vence(scenario):
@@ -48,7 +48,7 @@ def test_card_doing_mais_recente_vence(scenario):
     card_novo = CardModel.objects.create(project=project, number=2, title="Novo", assignee=dev)
     _move_to_doing(card_novo, dev)
 
-    result = get_active_card(user_id=str(dev.id))
+    result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
 
     assert result is not None
     assert result["active"] is True
@@ -72,7 +72,7 @@ def test_ordem_de_transicao_vence_mesmo_com_ordem_de_criacao_invertida(scenario)
     _move_to_doing(card_b, dev)
     _move_to_doing(card_a, dev)
 
-    result = get_active_card(user_id=str(dev.id))
+    result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
 
     assert result is not None
     assert result["active"] is True
@@ -91,7 +91,7 @@ def test_working_note_aparece_no_resultado(scenario):
     )
     _move_to_doing(card, dev)
 
-    result = get_active_card(user_id=str(dev.id))
+    result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
 
     assert result["working_note"] == "travado esperando review"
 
@@ -122,3 +122,23 @@ def test_update_working_note_card_inexistente_falha(scenario):
             user_id=str(scenario["dev"].id),
             note="x",
         )
+
+
+def test_card_ativo_de_outro_workspace_nao_vaza(scenario):
+    """Dev é membro dos workspaces A (scenario['ws']) e B. Ele tem um card
+    'doing' só no workspace B. Consultar get_active_card com o workspace A
+    não deve retornar o card de B — prova que a query é escopada por
+    workspace e não vaza dados entre workspaces do mesmo usuário."""
+    dev = scenario["dev"]
+    owner = scenario["owner"]
+    ws_a = scenario["ws"]
+    ws_b = WorkspaceModel.objects.create(name="WS B", slug="ws-b", owner=owner)
+    project_b = ProjectModel.objects.create(workspace=ws_b, name="Nia", key="NIA")
+    card_b = CardModel.objects.create(
+        project=project_b, number=1, title="Card em B", assignee=dev
+    )
+    _move_to_doing(card_b, dev)
+
+    result = get_active_card(workspace_id=str(ws_a.id), user_id=str(dev.id))
+
+    assert result is None

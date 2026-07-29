@@ -8,16 +8,22 @@ from contexts.projects.infrastructure.django.models import CardHistoryModel, Car
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 
-def get_active_card(*, user_id: str) -> dict | None:
+def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
     """Card em 'doing' mais recente (por transição de status) atribuído a
-    `user_id`. `None` se não houver nenhum — é resultado válido, não erro.
+    `user_id` DENTRO do workspace `workspace_id`. `None` se não houver
+    nenhum — é resultado válido, não erro.
+
+    A filtragem por workspace é obrigatória: um usuário pode ser membro de
+    vários workspaces e ter cards ativos em qualquer um deles — sem esse
+    filtro, um admin de um workspace poderia ver o card ativo (título,
+    projeto, observação) de um card que pertence a outro workspace.
 
     Um usuário raramente tem mais de um card em doing ao mesmo tempo; o loop
     abaixo prioriza clareza sobre uma query anotada única.
     """
-    candidates = CardModel.objects.filter(assignee_id=user_id, status="doing").select_related(
-        "project"
-    )
+    candidates = CardModel.objects.filter(
+        assignee_id=user_id, status="doing", project__workspace_id=workspace_id
+    ).select_related("project")
     best_card = None
     best_since = None
     for card in candidates:
