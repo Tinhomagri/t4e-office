@@ -95,11 +95,12 @@ export function buildFloor1(): OfficeMap {
     // pra encarar a própria mesa, não pra baixo (que olharia pro corredor).
     seats.push({ id: seatId("ws", s1x, s1y), x: s1x, y: s1y, facing: "up", label: "Baia", kind: "pc" })
     seats.push({ id: seatId("ws", s2x, s2y), x: s2x, y: s2y, facing: "up", label: "Baia", kind: "pc" })
-    // Cadeira visível bem embaixo do assento (não em tile arredondado — o
-    // desalinho de até meio tile é o que fazia ela cair longe do teclado).
+    // Cadeira encostada na mesa — o assento (onde o avatar para) fica 2
+    // tiles ao sul da mesa (aisle de passagem); a cadeira em si precisa ficar
+    // bem mais perto da mesa que isso, senão sobra vão vazio entre as duas.
     // O centro do estofado da cadeira fica a (6,6) da própria âncora.
-    props.push({ kind: "chair", x: s1x - 6, y: s1y - 6 })
-    props.push({ kind: "chair", x: s2x - 6, y: s2y - 6 })
+    props.push({ kind: "chair", x: s1x - 6, y: s1y - 6 - 24 })
+    props.push({ kind: "chair", x: s2x - 6, y: s2y - 6 - 24 })
   }
 
   // Props gravam colisão pelo retângulo que ocupam.
