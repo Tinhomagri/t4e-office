@@ -19,7 +19,7 @@ import {
 import { keyAction } from "./input"
 import { isoToWorld, worldToIso } from "./iso"
 import { buildIsoGround } from "./isoBake"
-import { SKY_PARALLAX, type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
+import { type SkyLayers, buildSky, cloudOffset, layerRect } from "./sky"
 import { TILE, buildTileAtlas } from "./tiles"
 import { pokerBadgeFor } from "./poker-badge"
 
@@ -727,9 +727,11 @@ export class OfficeEngine {
       }
     }
 
+    // Só céu + nuvens — a skyline (far/near) foi desenhada pra aparecer em
+    // fatias finas de vidro; com a parede de frente removida (ver
+    // isoBake.ts), sobra área aberta grande demais e a repetição da faixa
+    // de prédios ficava com costura visível ("bugando").
     blit(this.sky.sky, 0)
-    blit(this.sky.far, SKY_PARALLAX.far)
-    blit(this.sky.near, SKY_PARALLAX.near)
     ctx.drawImage(
       this.sky.clouds,
       cloudOffset(camX, this.time), 0, vw, vh,
