@@ -17,6 +17,7 @@ import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
+import { useActiveCard } from "./pc/activeCard.hooks"
 import { isMyDesk } from "./pc/desk"
 import type { DeskAssignment } from "./pc/desks.api"
 import { useDeskAssignments } from "./pc/desks.hooks"
@@ -33,6 +34,15 @@ import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
 
 const KEEPALIVE_MS = 3000
+
+function formatDoingSince(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const minutes = Math.max(0, Math.floor(ms / 60000))
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours === 0) return `${mins}min`
+  return `${hours}h${mins > 0 ? ` ${mins}min` : ""}`
+}
 
 /** Andar da sala de Planning Poker (ver world/floors/index.ts). */
 const POKER_FLOOR = 2
@@ -79,6 +89,10 @@ export function OfficeRoom({
   const members = useMembers(workspaceId)
   const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
   const canManageDesks = myRole === "owner" || myRole === "admin"
+
+  const [hoverUserId, setHoverUserId] = useState<string | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
+  const activeCard = useActiveCard(workspaceId, hoverUserId, canManageDesks)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -330,6 +344,22 @@ export function OfficeRoom({
     if (!engine.isSeated()) usePokerRoomStore.getState().closeVote()
   }, [])
 
+  const onCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const engine = engineRef.current
+    if (!engine) return
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+    const userId = engine.hoverSeatAt(localX, localY)
+    setHoverUserId(userId)
+    setHoverPos(userId ? { x: localX, y: localY } : null)
+  }, [])
+
+  const onCanvasMouseLeave = useCallback(() => {
+    setHoverUserId(null)
+    setHoverPos(null)
+  }, [])
+
   const sendChat = () => {
     const text = chatText.trim()
     if (text) engineRef.current?.say(text)
@@ -368,10 +398,37 @@ export function OfficeRoom({
       <canvas
         ref={canvasRef}
         onClick={onCanvasClick}
+        onMouseMove={onCanvasMouseMove}
+        onMouseLeave={onCanvasMouseLeave}
         className="absolute inset-0 size-full cursor-pointer"
         style={{ imageRendering: "pixelated" }}
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
+
+      {canManageDesks && hoverUserId && hoverPos && activeCard.data && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-[220px] rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
+          style={{ left: hoverPos.x, top: hoverPos.y - 70 }}
+        >
+          {activeCard.data.active ? (
+            <>
+              <div className="font-semibold">
+                #{activeCard.data.card!.number} {activeCard.data.card!.title}
+              </div>
+              <div className="text-gray-300">
+                há {formatDoingSince(activeCard.data.doing_since!)} em andamento
+              </div>
+              {activeCard.data.working_note && (
+                <div className="mt-1 border-t border-gray-700 pt-1 text-gray-200">
+                  {activeCard.data.working_note}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-gray-300">Sem card ativo</div>
+          )}
+        </div>
+      )}
 
       <Win98Desktop />
 
