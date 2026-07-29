@@ -5,6 +5,7 @@ import { CheckCircle2, Circle, ListChecks, PenLine, Plus, Sparkles } from "lucid
 import { cx } from "@/shared/ui/primitives"
 import { useActivity } from "@/features/workspace/workspace.hooks"
 import { ColoredAvatar } from "../board.shared"
+import { ResumoDashboard } from "./ResumoDashboard"
 import type { Card, CardPriority, CardStatus, CardType, Member, Sprint } from "@/features/workspace/workspace.types"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
@@ -12,13 +13,15 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
 }
 // Paleta vibrante estilo Jira — cada status tem uma cor própria e reconhecível.
+// Os tons saem das escalas do tailwind.config (Atlassian); antes eram os valores
+// padrão do Tailwind, que não existem no design system.
 const STATUS_COLOR: Record<CardStatus, string> = {
-  backlog: "#94a3b8", todo: "#6366f1", doing: "#f59e0b", review: "#a855f7", done: "#22c55e",
-  briefing: "#8b5cf6", criacao: "#3b82f6", aprovacao: "#f59e0b", agendado: "#06b6d4", publicado: "#22c55e",
+  backlog: "#8590A2", todo: "#8270DB", doing: "#E2B203", review: "#CD519D", done: "#22A06B",
+  briefing: "#6E5DC6", criacao: "#0C66E4", aprovacao: "#E2B203", agendado: "#2898BD", publicado: "#22A06B",
 }
 const STATUS_BAR: Record<CardStatus, string> = {
-  backlog: "bg-slate-400", todo: "bg-indigo-500", doing: "bg-amber-500", review: "bg-purple-500", done: "bg-green-500",
-  briefing: "bg-violet-500", criacao: "bg-blue-500", aprovacao: "bg-amber-500", agendado: "bg-cyan-500", publicado: "bg-green-500",
+  backlog: "bg-neutral-400", todo: "bg-purple-500", doing: "bg-yellow-500", review: "bg-magenta-500", done: "bg-green-500",
+  briefing: "bg-purple-600", criacao: "bg-blue-500", aprovacao: "bg-yellow-500", agendado: "bg-teal-500", publicado: "bg-green-500",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
@@ -147,6 +150,9 @@ export function ResumoView({
           value={dueNext7.length} label="a ser(em) entregue(s)" sub="nos próximos 7 dias"
         />
       </div>
+
+      {/* Dashboard: donuts por status/tipo/responsável, tendências e detalhes. */}
+      <ResumoDashboard cards={cards} members={members} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Visão geral do status */}
@@ -342,7 +348,7 @@ function Donut({ segments, total, centerLabel }: { segments: { value: number; co
     const end = (acc / total) * 360
     return `${s.color} ${start}deg ${end}deg`
   })
-  const gradient = stops.length > 0 ? `conic-gradient(${stops.join(", ")})` : "conic-gradient(#e5e7eb 0deg 360deg)"
+  const gradient = stops.length > 0 ? `conic-gradient(${stops.join(", ")})` : "conic-gradient(#DCDFE4 0deg 360deg)"
   return (
     <div className="relative size-36 shrink-0 rounded-full" style={{ background: gradient }}>
       <div className="absolute inset-3 grid place-items-center rounded-full bg-paper dark:bg-ink-900 text-center">

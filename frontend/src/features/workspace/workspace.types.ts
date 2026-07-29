@@ -88,9 +88,27 @@ export interface Card {
   attachments_count?: number
   subtasks_count?: number
   subtasks_done?: number
+  // Desfecho: "está na coluna Concluído" ≠ "foi entregue". Só `done` conta como
+  // entrega em velocity/lead time.
+  resolution?: CardResolution | null
+  // Instante real da resolução — base do lead time e da tendência de conclusão.
+  // `updated_at` não serve: muda a cada edição posterior.
+  resolved_at?: string | null
+  original_estimate_seconds?: number | null
+  remaining_estimate_seconds?: number | null
+  archived?: boolean
+  archived_at?: string | null
   created_at: string | null
   updated_at: string | null
 }
+
+/** Espelha `CardResolution` no domínio do backend. */
+export type CardResolution =
+  | "done"
+  | "wont_do"
+  | "duplicate"
+  | "cannot_reproduce"
+  | "incomplete"
 
 export interface Comment {
   id: string
