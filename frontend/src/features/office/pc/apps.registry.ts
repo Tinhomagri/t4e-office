@@ -6,6 +6,7 @@
 import type { ComponentType } from "react"
 
 import { BoardsPage } from "@/features/boards/BoardsPage"
+import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
 import { DashboardDeck } from "@/features/sales/deck/DashboardDeck"
 
 export type AppGroupId = "trabalho" | "comercial" | "marketing" | "sistema"
@@ -51,6 +52,7 @@ export const APPS: AppDef[] = [
   { id: "integrations", label: "Integrações", group: "sistema", size: MED, component: null },
   { id: "avatar", label: "Avatar", group: "sistema", size: BIG, component: null },
   { id: "members", label: "Membros", group: "sistema", size: MED, component: null },
+  { id: "desks", label: "Mesas", group: "sistema", size: MED, component: DesksManagerPage },
   { id: "copilot", label: "Copiloto", group: "sistema", size: MED, component: null },
   { id: "importar", label: "Importar", group: "sistema", size: MED, component: null },
 ]
