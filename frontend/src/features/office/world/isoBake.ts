@@ -11,8 +11,11 @@ import { T, TILE, tileVariant, type TileAtlas } from "./tiles"
 import { makeCanvas } from "./pixels"
 
 /** Altura do bloco de parede, em px de tela (1×). Múltiplo de TILE para o
- * fator de estiramento vertical (`d`) sair limpo. */
-export const WALL_HEIGHT = 24
+ * fator de estiramento vertical (`d`) sair limpo. Só sobra a parede de fundo
+ * (norte) e a da esquerda (oeste) — frente e direita não têm mais tile de
+ * parede (ver `room()` em cada `floors/*.ts`) — por isso pode ficar bem alta,
+ * tipo Habbo, sem tampar a visão de dentro do cômodo. */
+export const WALL_HEIGHT = 32
 
 /** Tiles que viram bloco extrudado (2 faces + tampa) em vez de losango raso. */
 const BLOCK_TILES = new Set<number>([T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.GLASS_DOOR])

@@ -39,14 +39,18 @@ function fill(grid: Uint8Array, x: number, y: number, w: number, h: number, valu
   }
 }
 
-/** Casca de cômodo: piso + contorno de parede, topo em WALL_TOP. */
+/**
+ * Casca de cômodo estilo Habbo: só as paredes de FUNDO (norte) e ESQUERDA
+ * (oeste) existem de verdade, mais altas. Frente (sul) e direita ficam sem
+ * parede nenhuma — o chão vai até a borda do mapa; o limite do mundo (não dá
+ * pra sair andando) vem do próprio fim da grade (`isSolid` bloqueia fora dos
+ * limites), não de um tile de parede.
+ */
 function room(grid: Uint8Array, x: number, y: number, w: number, h: number, floor: number): void {
   fill(grid, x, y, w, h, floor)
   fill(grid, x, y, w, 1, T.WALL_TOP)
   fill(grid, x, y + 1, w, 1, T.WALL)
-  fill(grid, x, y + h - 1, w, 1, T.WALL)
   fill(grid, x, y + 1, 1, h - 1, T.WALL_V)
-  fill(grid, x + w - 1, y + 1, 1, h - 1, T.WALL_V)
 }
 
 export function buildFloor1(): OfficeMap {
