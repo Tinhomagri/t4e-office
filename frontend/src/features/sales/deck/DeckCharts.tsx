@@ -3,7 +3,7 @@
 // Regra de cor: a série carrega a cor, mas nunca sozinha — todo elemento tem
 // rótulo textual ou tooltip. Isso mantém os painéis legíveis para daltônicos e
 // em impressão P&B (o PDF exportado sai colorido, mas nem sempre é impresso).
-import { motion, useInView, useReducedMotion } from "framer-motion"
+import { AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion"
 import { useRef, useState } from "react"
 import {
   Area,
@@ -127,13 +127,13 @@ function FunnelBand({
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        className="group flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+        className="group flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-[var(--deck-overlay-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
       >
         <span className="w-28 shrink-0 truncate text-[12px]" style={{ color: DECK.text }}>
           {step.name}
         </span>
 
-        <span className="relative h-8 flex-1 overflow-hidden rounded-md bg-white/[0.03]">
+        <span className="relative h-8 flex-1 overflow-hidden rounded-md bg-[var(--deck-overlay-1)]">
           <motion.span
             initial={reduce ? false : { scaleX: 0 }}
             animate={animate || reduce ? { scaleX: width } : undefined}
@@ -151,7 +151,7 @@ function FunnelBand({
           />
           <span
             className="absolute inset-y-0 left-2.5 flex items-center gap-2 text-[11px] font-medium tabular"
-            style={{ color: DECK.bg }}
+            style={{ color: DECK.onFill }}
           >
             {step.count}
             <span className="opacity-70">{compact(step.amount)}</span>
@@ -312,7 +312,7 @@ export function OwnerRanking({
             width={96}
           />
           <Tooltip
-            cursor={{ fill: "rgb(255 255 255 / 0.04)" }}
+            cursor={{ fill: DECK.overlay2 }}
             content={({ active, label, payload }) => (
               <DeckTooltip
                 active={active}
@@ -353,55 +353,135 @@ export function OwnerRanking({
 }
 
 // ─── Heatmap de atividade ────────────────────────────────────────────────────
+//
+// Estilo GitHub/Power BI: células de tamanho fixo (nunca esticam pra preencher
+// o card — é isso que fazia os quadrados ficarem gigantes com poucas semanas),
+// rótulos de mês acima da grade, e um tooltip flutuante que segue a célula em
+// vez de uma linha de texto estática embaixo.
 
 const WEEKDAYS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+const GAP = 4
+
+// Janela de um ano, como o gráfico de contribuições do GitHub. Com 12 semanas a
+// grade tinha 12 colunas para preencher um card de largura inteira: ou as
+// células ficavam minúsculas num mar de vazio, ou virariam blocos enormes se
+// esticadas. 52 colunas dão densidade real à mesma faixa horizontal.
+const WEEKS = 52
 
 export function ActivityHeatmap({ activities }: { activities: { created_at: string }[] }) {
-  const [hover, setHover] = useState<{ date: string; count: number } | null>(null)
-  const { cells, max, weeks } = activityHeatmap(activities)
+  const reduce = useReducedMotion()
+  const [hover, setHover] = useState<{ date: string; count: number; x: number; y: number } | null>(
+    null,
+  )
+  const { cells, max, weeks } = activityHeatmap(activities, WEEKS)
+
+  const monthLabels = cells
+    .filter((c) => c.weekday === 0)
+    .map((c) => ({ week: c.week, label: MONTHS[new Date(`${c.date}T12:00:00`).getMonth()] }))
+    .filter((m, i, arr) => i === 0 || arr[i - 1]!.label !== m.label)
 
   return (
-    <div>
+    <div className="relative">
+      {/* items-stretch (padrão do flex) faz a coluna de rótulos herdar a altura
+          da grade — é o que mantém "seg…dom" alinhado às linhas agora que a
+          altura das células é derivada da largura, não mais fixa em px. */}
       <div className="flex gap-2">
-        <div className="flex flex-col justify-around py-[1px]">
-          {WEEKDAYS.map((d, i) => (
+        <div
+          className="grid shrink-0 pt-[18px]"
+          style={{ gridTemplateRows: "repeat(7, minmax(0, 1fr))", gap: GAP }}
+        >
+          {WEEKDAYS.map((d) => (
             <span
               key={d}
-              className="h-[13px] text-[9px] leading-[13px]"
-              style={{ color: DECK.textFaint, visibility: i % 2 ? "hidden" : "visible" }}
+              className="flex items-center text-[9px] leading-none"
+              style={{ color: DECK.textFaint }}
             >
               {d}
             </span>
           ))}
         </div>
-        <div
-          className="grid flex-1 gap-[3px]"
-          style={{ gridTemplateColumns: `repeat(${weeks}, minmax(0, 1fr))`, gridAutoFlow: "column" }}
-          role="img"
-          aria-label={`Atividades registradas nas últimas ${weeks} semanas. Pico de ${max} num único dia.`}
-        >
-          {cells.map((cell) => (
-            <div
-              key={cell.date}
-              onMouseEnter={() => setHover({ date: cell.date, count: cell.count })}
-              onMouseLeave={() => setHover(null)}
-              style={{
-                background: HEAT[heatLevel(cell.count, max)],
-                gridRow: cell.weekday + 1,
-                gridColumn: cell.week + 1,
-              }}
-              className="aspect-square rounded-[2px] transition-transform duration-150 hover:scale-125"
-            />
-          ))}
+
+        <div className="min-w-0 flex-1 pb-1">
+          <div className="relative" style={{ height: 18 }}>
+            {monthLabels.map((m) => (
+              <span
+                key={m.week}
+                className="absolute top-0 text-[9px] leading-none"
+                // Posição em % acompanha a largura fluida das colunas.
+                style={{ left: `${(m.week / weeks) * 100}%`, color: DECK.textFaint }}
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+
+          <div
+            className="grid"
+            style={{
+              gap: GAP,
+              // 1fr por semana: a grade ocupa o card inteiro, e cada célula
+              // continua quadrada via aspect-square.
+              gridTemplateColumns: `repeat(${weeks}, minmax(0, 1fr))`,
+              gridAutoFlow: "column",
+            }}
+            role="img"
+            aria-label={`Atividades registradas nas últimas ${weeks} semanas. Pico de ${max} num único dia.`}
+          >
+            {cells.map((cell, i) => (
+              <motion.div
+                key={cell.date}
+                initial={reduce ? false : { opacity: 0, scale: 0.4 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.28, delay: reduce ? 0 : Math.min(i * 0.0022, 0.5), ease: "easeOut" }}
+                onMouseEnter={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setHover({ date: cell.date, count: cell.count, x: r.left + r.width / 2, y: r.top })
+                }}
+                onMouseLeave={() => setHover(null)}
+                style={{
+                  background: HEAT[heatLevel(cell.count, max)],
+                  gridRow: cell.weekday + 1,
+                  gridColumn: cell.week + 1,
+                  boxShadow: hover?.date === cell.date ? `0 0 0 1.5px ${DECK.borderHi}` : undefined,
+                }}
+                className="aspect-square rounded-[3px] hover:z-10"
+              />
+            ))}
+          </div>
         </div>
       </div>
 
+      <AnimatePresence>
+        {hover && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.14 }}
+            className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg border px-2.5 py-1.5 text-[11px] shadow-lg"
+            style={{
+              left: hover.x,
+              top: hover.y - 8,
+              background: DECK.surfaceHi,
+              borderColor: DECK.borderHi,
+              color: DECK.text,
+            }}
+          >
+            <strong className="tabular font-medium">{hover.count}</strong>{" "}
+            <span style={{ color: DECK.textDim }}>
+              atividade{hover.count === 1 ? "" : "s"} ·{" "}
+              {new Date(`${hover.date}T12:00:00`).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "short",
+              })}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="mt-2 flex items-center gap-2 text-[10px]" style={{ color: DECK.textFaint }}>
-        <span className="tabular">
-          {hover
-            ? `${new Date(`${hover.date}T12:00:00`).toLocaleDateString("pt-BR")} · ${hover.count} atividade${hover.count === 1 ? "" : "s"}`
-            : `${activities.length} atividades no período`}
-        </span>
+        <span className="tabular">{activities.length} atividades no período</span>
         <span className="ml-auto flex items-center gap-1">
           menos
           {HEAT.map((c, i) => (

@@ -1,30 +1,27 @@
 import { useState, useRef, useEffect } from "react"
-import { Search, X, ChevronDown } from "lucide-react"
+import { Search, X } from "lucide-react"
 import { useCardSearch } from "@/features/workspace/workspace.hooks"
 import type { Card } from "@/features/workspace/workspace.types"
 
-interface JqlSearchBarProps {
+interface BoardSearchBarProps {
   projectId: string | null
   onResults: (cards: Card[] | null) => void
-  // JQL vinda de fora (chips de quick filter). Null limpa a busca.
+  // Query vinda de fora (chips de quick filter). Null limpa a busca.
   externalJql?: string | null
-  // Notifica o JQL atualmente aplicado (para "salvar filtro").
+  // Notifica a busca atualmente aplicada (para "salvar filtro").
   onCommittedChange?: (jql: string) => void
 }
 
-const QUICK_FILTERS = [
-  { label: "Em andamento", jql: 'status = doing' },
-  { label: "Alta prioridade", jql: 'priority = high' },
-  { label: "Urgente", jql: 'priority = urgent' },
-  { label: "Atribuído a mim", jql: 'assignee = me' },
-  { label: "Sprint ativo", jql: 'sprint = active' },
-  { label: "Bugs", jql: 'type = bug' },
-]
+// Converte texto livre digitado pelo usuário para a sintaxe interna aceita
+// pelo backend (`text ~ "..."`) — o usuário nunca vê nem digita essa sintaxe.
+function toQuery(term: string): string {
+  const escaped = term.trim().replace(/"/g, '\\"')
+  return `text ~ "${escaped}"`
+}
 
-export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedChange }: JqlSearchBarProps) {
+export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedChange }: BoardSearchBarProps) {
   const [raw, setRaw] = useState("")
   const [committed, setCommitted] = useState("")
-  const [showQuick, setShowQuick] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data, error, isFetching } = useCardSearch(projectId, committed)
@@ -43,7 +40,7 @@ export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedCha
     onCommittedChange?.(committed)
   }, [committed, onCommittedChange])
 
-  // Chips de quick filter injetam JQL aqui; null/"" limpa.
+  // Chips de quick filter injetam a query aqui; null/"" limpa.
   useEffect(() => {
     if (externalJql === undefined) return
     if (externalJql === null || externalJql === "") {
@@ -51,17 +48,11 @@ export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedCha
       setCommitted("")
       onResults(null)
     } else {
-      setRaw(externalJql)
+      setRaw("")
       setCommitted(externalJql)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalJql])
-
-  function submit(jql: string) {
-    setRaw(jql)
-    setCommitted(jql)
-    setShowQuick(false)
-  }
 
   function handleChange(val: string) {
     setRaw(val)
@@ -71,7 +62,7 @@ export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedCha
       onResults(null)
       return
     }
-    debounceRef.current = setTimeout(() => setCommitted(val), 600)
+    debounceRef.current = setTimeout(() => setCommitted(toQuery(val)), 400)
   }
 
   function clear() {
@@ -86,11 +77,10 @@ export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedCha
         <Search className="absolute left-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
         <input
           type="text"
-          data-jql-search
+          data-board-search
           value={raw}
           onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit(raw)}
-          placeholder='Buscar JQL: status = todo AND priority = high'
+          placeholder="Buscar cards por título ou descrição"
           className="h-8 w-80 rounded-md border border-gray-200 bg-white dark:bg-ink-900 pl-8 pr-7 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         {raw && (
@@ -103,35 +93,11 @@ export function JqlSearchBar({ projectId, onResults, externalJql, onCommittedCha
         )}
       </div>
 
-      <button
-        onClick={() => setShowQuick((v) => !v)}
-        className="flex items-center gap-1 rounded-md border border-gray-200 bg-white dark:bg-ink-900 px-2.5 h-8 text-xs text-gray-600 hover:bg-gray-50"
-      >
-        Filtros <ChevronDown className="h-3 w-3" />
-      </button>
-
-      {showQuick && (
-        <div className="absolute top-10 left-0 z-50 w-56 rounded-lg border border-gray-200 bg-white dark:bg-ink-900 shadow-lg">
-          {QUICK_FILTERS.map((f) => (
-            <button
-              key={f.jql}
-              onClick={() => submit(f.jql)}
-              className="w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-            >
-              {f.label}
-              <span className="ml-2 font-mono text-[10px] text-gray-400">{f.jql}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {isFetching && committed && (
         <span className="text-xs text-gray-400">buscando…</span>
       )}
       {error && (
-        <span className="text-xs text-red-500 max-w-xs truncate">
-          {(error as { message?: string }).message ?? "Erro JQL"}
-        </span>
+        <span className="text-xs text-red-500 max-w-xs truncate">Erro na busca</span>
       )}
       {data && committed && !isFetching && (
         <span className="text-xs text-gray-500">{data.length} resultado(s)</span>

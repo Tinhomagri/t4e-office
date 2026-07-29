@@ -1,0 +1,429 @@
+// Painel esquerdo: pastas + busca + lista de conversas.
+//
+// Replica a coluna do Chatwoot: linha compacta com avatar, nome, prévia de uma
+// linha, hora relativa e badge de não lidas. O que acrescentamos é a pílula do
+// negócio vinculado — esse dado não existe no Chatwoot puro.
+//
+// Movimento (variante "Chatwoot+"): pill de pasta desliza com layoutId, a lista
+// escalona ao trocar de filtro (cortado em STAGGER_CAP itens) e o badge de não
+// lidas entra com spring — é o único overshoot da tela, porque é o que precisa
+// puxar o olho quando chega mensagem.
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { Hash, Search, UserCheck, UserX, Users } from "lucide-react"
+
+import { cx } from "@/shared/ui/primitives"
+
+import {
+  badgePop,
+  listContainer,
+  listItem,
+  respectMotion,
+  STAGGER_CAP,
+} from "./inbox.motion"
+import {
+  contactDisplayName,
+  conversationPreview,
+  initials,
+  relativeTime,
+  sortConversations,
+  STATUS_LABELS,
+} from "./inbox.shared"
+import type {
+  AssigneeFilter,
+  Conversation,
+  ConversationStatus,
+  Inbox,
+  InboxCounts,
+  Label,
+  Team,
+} from "./inbox.types"
+
+const FOLDERS: { id: AssigneeFilter; label: string; icon: typeof Users }[] = [
+  { id: "me", label: "Minhas", icon: UserCheck },
+  { id: "assigned", label: "Atribuídas", icon: Users },
+  { id: "unassigned", label: "Não atribuídas", icon: UserX },
+  { id: "all", label: "Todas", icon: Users },
+]
+
+const STATUS_TABS: ConversationStatus[] = ["open", "pending", "resolved", "snoozed"]
+
+interface Props {
+  conversations: Conversation[]
+  counts?: InboxCounts
+  inboxes: Inbox[]
+  teams: Team[]
+  labels: Label[]
+  activeId: number | null
+  assignee: AssigneeFilter
+  status: ConversationStatus
+  inboxId?: number
+  teamId?: number
+  selectedLabels: string[]
+  search: string
+  loading: boolean
+  onSelect: (id: number) => void
+  onAssigneeChange: (value: AssigneeFilter) => void
+  onStatusChange: (value: ConversationStatus) => void
+  onInboxChange: (value: number | undefined) => void
+  onTeamChange: (value: number | undefined) => void
+  onLabelsChange: (value: string[]) => void
+  onSearchChange: (value: string) => void
+  /** Foco programático vindo do atalho de busca (⌘F / Ctrl+F). */
+  searchRef?: React.RefObject<HTMLInputElement>
+}
+
+export function ConversationList({
+  conversations,
+  counts,
+  inboxes,
+  teams,
+  labels: availableLabels,
+  activeId,
+  assignee,
+  status,
+  inboxId,
+  teamId,
+  selectedLabels,
+  search,
+  loading,
+  onSelect,
+  onAssigneeChange,
+  onStatusChange,
+  onInboxChange,
+  onTeamChange,
+  onLabelsChange,
+  onSearchChange,
+  searchRef,
+}: Props) {
+  const reduced = useReducedMotion()
+  // Não lidas primeiro, depois por atividade — a conversa nova não pode sumir
+  // no meio da lista.
+  const ordered = sortConversations(conversations)
+
+  const folderCount = (id: AssigneeFilter): number | null => {
+    if (!counts) return null
+    if (id === "me") return counts.mine_count
+    if (id === "assigned") return counts.assigned_count
+    if (id === "unassigned") return counts.unassigned_count
+    return counts.all_count
+  }
+
+  return (
+    <aside className="flex w-full flex-col border-r border-cw-border bg-white md:w-[340px] md:shrink-0 dark:border-ink-800 dark:bg-ink-900">
+      {/* Pastas — o `assignee_type` do Chatwoot */}
+      <div className="flex gap-0.5 border-b border-cw-border p-1.5 dark:border-ink-800">
+        {FOLDERS.map((folder) => {
+          const count = folderCount(folder.id)
+          const active = assignee === folder.id
+          return (
+            <button
+              key={folder.id}
+              type="button"
+              onClick={() => onAssigneeChange(folder.id)}
+              aria-pressed={active}
+              className={cx(
+                "relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors duration-100 focus-ring",
+                active
+                  ? "text-cw-600 dark:text-cw-500"
+                  : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
+              )}
+            >
+              {/* A pílula é um nó só que desliza entre as pastas — troca de
+                  seleção lida como movimento, não como dois estados piscando. */}
+              {active && (
+                <motion.span
+                  layoutId="inbox-folder-pill"
+                  className="absolute inset-0 rounded-md bg-cw-500/10"
+                  transition={
+                    reduced
+                      ? { duration: 0 }
+                      : { type: "spring", stiffness: 480, damping: 38 }
+                  }
+                />
+              )}
+              <folder.icon className="relative size-3.5 shrink-0" />
+              <span className="relative truncate">{folder.label}</span>
+              {count !== null && count > 0 && (
+                <span className="relative rounded-full bg-cw-border/70 px-1.5 text-[10px] tabular-nums text-cw-ink dark:bg-ink-700 dark:text-paper-300">
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Busca + filtro por caixa */}
+      <div className="space-y-1.5 border-b border-cw-border p-2 dark:border-ink-800">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-cw-muted" />
+          <input
+            ref={searchRef}
+            type="search"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Buscar nas conversas…"
+            aria-label="Buscar nas conversas"
+            className="h-8 w-full rounded-md border border-cw-border bg-white pl-8 pr-2 text-[13px] text-cw-ink outline-none transition-colors duration-100 placeholder:text-cw-muted focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {inboxes.length > 1 && (
+            <select
+              value={inboxId ?? ""}
+              onChange={(e) => onInboxChange(e.target.value ? Number(e.target.value) : undefined)}
+              aria-label="Filtrar por caixa de entrada"
+              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+            >
+              <option value="">Todas as caixas</option>
+              {inboxes.map((box) => (
+                <option key={box.id} value={box.id}>
+                  {box.name} · {box.channel_label}
+                </option>
+              ))}
+            </select>
+          )}
+          {teams.length > 1 && (
+            <select
+              value={teamId ?? ""}
+              onChange={(e) => onTeamChange(e.target.value ? Number(e.target.value) : undefined)}
+              aria-label="Filtrar por time"
+              className="h-8 w-full rounded-md border border-cw-border bg-white px-2 text-[13px] text-cw-ink transition-colors duration-100 focus-ring focus:border-cw-500 dark:border-ink-700 dark:bg-ink-800 dark:text-paper"
+            >
+              <option value="">Todos os times</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* Abas de status */}
+      <div className="flex gap-0.5 border-b border-cw-border px-2 py-1.5 dark:border-ink-800">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => onStatusChange(tab)}
+            aria-pressed={status === tab}
+            className={cx(
+              "relative rounded px-2 py-1 text-[12px] font-medium transition-colors duration-100 focus-ring",
+              status === tab ? "text-white" : "text-cw-muted hover:bg-cw-surface dark:hover:bg-ink-800",
+            )}
+          >
+            {status === tab && (
+              <motion.span
+                layoutId="inbox-status-pill"
+                className="absolute inset-0 rounded bg-cw-500"
+                transition={
+                  reduced ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }
+                }
+              />
+            )}
+            <span className="relative">{STATUS_LABELS[tab]}</span>
+          </button>
+        ))}
+      </div>
+
+      {availableLabels.length > 0 && (
+        <div className="border-b border-cw-border px-2 py-2 dark:border-ink-800">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cw-muted">
+              Etiquetas
+            </span>
+            {selectedLabels.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onLabelsChange([])}
+                className="text-[11px] font-medium text-cw-muted transition-colors duration-100 hover:text-cw-600"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {availableLabels.slice(0, 18).map((label) => {
+              const active = selectedLabels.includes(label.title)
+              return (
+                <button
+                  key={label.id}
+                  type="button"
+                  onClick={() =>
+                    onLabelsChange(
+                      active
+                        ? selectedLabels.filter((current) => current !== label.title)
+                        : [...selectedLabels, label.title],
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors duration-100 focus-ring"
+                  style={
+                    active
+                      ? {
+                          borderColor: label.color,
+                          backgroundColor: `${label.color}1f`,
+                          color: label.color,
+                        }
+                      : undefined
+                  }
+                >
+                  <Hash className="size-2.5 shrink-0" />
+                  <span className="max-w-[140px] truncate">{label.title}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && ordered.length === 0 ? (
+          <ul className="space-y-px p-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <li key={i} className="h-[72px] animate-pulse rounded-md bg-cw-surface dark:bg-ink-800" />
+            ))}
+          </ul>
+        ) : ordered.length === 0 ? (
+          <p className="px-4 py-10 text-center text-[13px] text-cw-muted">
+            Nenhuma conversa nesta pasta.
+          </p>
+        ) : (
+          <motion.ul
+            // A chave remonta a lista quando o filtro muda — é o que dispara a
+            // cascata. Sem isso o stagger só rodaria na primeira renderização.
+            key={`${assignee}:${status}:${inboxId ?? "all"}:${teamId ?? "all"}:${selectedLabels.join(",") || "all"}`}
+            variants={reduced ? undefined : listContainer}
+            initial="hidden"
+            animate="show"
+          >
+            {ordered.map((conversation, index) => {
+              const name = contactDisplayName(conversation)
+              const active = conversation.id === activeId
+              const unread = conversation.unread_count > 0
+              return (
+                <motion.li
+                  key={conversation.id}
+                  // Só os primeiros itens escalonam: cascatear a lista inteira
+                  // faria a última conversa entrar meio segundo depois.
+                  variants={
+                    reduced || index >= STAGGER_CAP
+                      ? undefined
+                      : respectMotion(listItem, reduced)
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelect(conversation.id)}
+                    aria-current={active ? "true" : undefined}
+                    className={cx(
+                      "relative flex w-full gap-2.5 border-b border-cw-border/70 px-3 py-2.5 text-left transition-colors duration-100 focus-ring dark:border-ink-800",
+                      active
+                        ? "bg-cw-500/[0.08]"
+                        : "hover:bg-cw-surface dark:hover:bg-ink-800",
+                    )}
+                  >
+                    {/* Barra de seleção: desliza entre as linhas em vez de
+                        aparecer e sumir. */}
+                    {active && (
+                      <motion.span
+                        layoutId="inbox-active-bar"
+                        className="absolute inset-y-0 left-0 w-[3px] bg-cw-500"
+                        transition={
+                          reduced
+                            ? { duration: 0 }
+                            : { type: "spring", stiffness: 500, damping: 40 }
+                        }
+                      />
+                    )}
+
+                    {conversation.contact?.avatar_url ? (
+                      <img
+                        src={conversation.contact.avatar_url}
+                        alt=""
+                        className="size-9 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-cw-surface text-[12px] font-semibold text-cw-muted dark:bg-ink-700 dark:text-paper-300">
+                        {initials(name)}
+                      </span>
+                    )}
+
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span
+                          className={cx(
+                            "truncate text-[13px] text-cw-ink dark:text-paper",
+                            unread ? "font-semibold" : "font-medium",
+                          )}
+                        >
+                          {name}
+                        </span>
+                        <span className="shrink-0 text-[11px] tabular-nums text-cw-muted">
+                          {relativeTime(conversation.last_activity_at)}
+                        </span>
+                      </span>
+
+                      <span className="mt-0.5 flex items-center justify-between gap-2">
+                        <span
+                          className={cx(
+                            "truncate text-[12px]",
+                            unread ? "text-cw-ink dark:text-paper" : "text-cw-muted",
+                          )}
+                        >
+                          {conversation.last_message?.private && "🔒 "}
+                          {conversationPreview(conversation)}
+                        </span>
+                        <AnimatePresence>
+                          {unread && (
+                            <motion.span
+                              key="unread"
+                              initial={reduced ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={reduced ? { duration: 0.01 } : badgePop}
+                              className="grid size-[18px] shrink-0 place-items-center rounded-full bg-cw-500 text-[10px] font-semibold tabular-nums text-white"
+                            >
+                              {conversation.unread_count}
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </span>
+
+                      {(conversation.labels.length > 0 || conversation.link.deal_id) && (
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1">
+                          {/* O vínculo com o funil vem primeiro: é o dado que o
+                              Chatwoot não tem e que o comercial olha antes. */}
+                          {conversation.link.deal_id && (
+                            <span className="inline-flex max-w-full items-center truncate rounded bg-cw-bubble px-1.5 py-0.5 text-[10px] font-medium text-cw-700">
+                              {conversation.link.deal_title || "Negócio"}
+                            </span>
+                          )}
+                          {conversation.labels.slice(0, 2).map((label) => (
+                            <span
+                              key={label}
+                              className="inline-flex items-center rounded bg-cw-surface px-1.5 py-0.5 text-[10px] font-medium text-cw-muted dark:bg-ink-800"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                          {conversation.labels.length > 2 && (
+                            <span className="text-[10px] text-cw-muted">
+                              +{conversation.labels.length - 2}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </motion.li>
+              )
+            })}
+          </motion.ul>
+        )}
+      </div>
+    </aside>
+  )
+}

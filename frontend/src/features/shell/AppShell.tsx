@@ -5,9 +5,10 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronsUpDown,
+  History,
+  Keyboard,
+  LifeBuoy,
   LogOut,
   Moon,
   Megaphone,
@@ -15,9 +16,10 @@ import {
   Search,
   Settings,
   SquareKanban,
+  Star,
   Sun,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
@@ -29,7 +31,6 @@ import {
   Avatar,
   Button,
   Field,
-  IconButton,
   Input,
   Kbd,
   Modal,
@@ -42,10 +43,17 @@ import type { PresenceStatus } from "@/features/workspace/workspace.types"
 import { EASE, springSnappy } from "@/shared/lib/motion"
 import { useSpaceStore } from "./space.store"
 import {
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  useSidebarPrefs,
+} from "./sidebar.prefs.store"
+import {
   COMMON_GROUP,
   type NavGroup,
+  type NavItem,
   SPACES,
   type SpaceId,
+  findNavItem,
   getSpace,
   spaceFromPath,
 } from "./spaces"
@@ -106,6 +114,17 @@ export function AppShell() {
   // No mobile a sidebar vira drawer full-width → nunca "colapsada".
   const collapsed = isDesktop ? collapsedRaw : false
 
+  const width = useSidebarPrefs((s) => s.width)
+  const pushRecent = useSidebarPrefs((s) => s.pushRecent)
+
+  // Alimenta "Recentes" a cada navegação. Só rotas que correspondem a um item
+  // do menu entram: uma tela de detalhe (drawer, modal) não é destino de menu,
+  // e listá-la faria o bloco virar histórico do navegador.
+  useEffect(() => {
+    const item = findNavItem(location.pathname)
+    if (item) pushRecent({ to: item.to, label: item.label })
+  }, [location.pathname, pushRecent])
+
   // Fecha o drawer ao navegar (mudança de rota) e ao voltar pro desktop.
   useEffect(() => setMobileNav(false), [location.pathname])
   useEffect(() => {
@@ -123,186 +142,188 @@ export function AppShell() {
   const cycleStatus = () =>
     setStatus(PRESENCE_ORDER[(PRESENCE_ORDER.indexOf(status) + 1) % PRESENCE_ORDER.length])
 
+  const isPoker = location.pathname.startsWith("/app/poker")
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-canvas dark:bg-ink-950 text-ink dark:text-paper">
-      {/* Backdrop do drawer mobile */}
-      <AnimatePresence>
-        {mobileNav && (
-          <motion.div
-            key="nav-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setMobileNav(false)}
-            className="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm md:hidden"
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ---------------- Sidebar (Jira: clara, colapsável; no mobile vira drawer) ---------------- */}
-      <motion.aside
-        animate={{ width: collapsed ? 68 : 264 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className={cx(
-          "relative z-50 flex shrink-0 flex-col border-r border-paper-200 bg-paper dark:border-ink-800 dark:bg-ink-900",
-          // Mobile: fixo, desliza da esquerda. Desktop: estático no fluxo.
-          "fixed inset-y-0 left-0 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] [padding-bottom:env(safe-area-inset-bottom)] md:static md:z-auto md:translate-x-0 md:!transition-none",
-          mobileNav ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0",
-        )}
-      >
-        <WorkspaceSwitcher collapsed={collapsed} />
-        <SpaceSwitcher collapsed={collapsed} spaceId={spaceId} />
-
-        {/* Botão "Criar" — âncora visual do Jira, sempre acessível */}
-        <div className={cx("px-3 pt-3", collapsed && "px-2")}>
-          <button
-            onClick={() => navigate(space.home)}
-            title="Criar"
-            className={cx(
-              "flex items-center gap-2 rounded-full bg-brand-600 font-semibold text-white shadow-sm transition-colors hover:bg-brand-700",
-              collapsed ? "size-9 justify-center p-0" : "w-full px-4 py-2 text-sm",
-            )}
-          >
-            <Plus className="size-4 shrink-0" strokeWidth={2.4} />
-            {!collapsed && "Criar"}
-          </button>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4 scrollbar-slim">
-          <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
-
-          {/* Troca de space "vira a página": o bloco antigo sai para a esquerda
-              e o novo entra da direita. mode="wait" evita sobreposição. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={spaceId}
-              initial={reduce ? false : { opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, x: -12 }}
-              transition={{ duration: 0.22, ease: EASE }}
-              className="flex flex-col gap-5"
-            >
-              {space.groups.map((group) => (
-                <NavGroupBlock key={group.heading} group={group} collapsed={collapsed} />
-              ))}
-            </motion.div>
-          </AnimatePresence>
-        </nav>
-
-        {/* Footer de usuário */}
-        <div className="border-t border-paper-100 dark:border-ink-800 p-3">
-          <div className={cx("flex items-center gap-3 rounded-xl px-2 py-2", collapsed && "justify-center px-0")}>
-            <Avatar initials={initials(user?.full_name)} status={status} />
-            {!collapsed && (
-              <>
-                <div className="min-w-0 flex-1 leading-tight">
-                  <p className="truncate text-sm font-medium text-ink dark:text-paper">
-                    {user?.full_name ?? "Usuário"}
-                  </p>
-                  <p className="truncate text-xs text-paper-500">{user?.email}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  title="Sair"
-                  className="grid size-8 shrink-0 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
-                >
-                  <LogOut className="size-[17px]" strokeWidth={1.9} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Toggle de colapso — pinado na borda, como o do Jira */}
+    // Estrutura do Jira: a top bar atravessa a tela inteira e a sidebar começa
+    // ABAIXO dela. Antes a sidebar subia até o topo e o header só cobria o
+    // conteúdo — é o que fazia os dois blocos parecerem apps diferentes.
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas text-ink dark:bg-ink-950 dark:text-paper">
+      {/* ---------------- Top bar global ---------------- */}
+      <header className="relative z-50 flex h-14 shrink-0 items-center gap-1 border-b border-paper-200 bg-paper px-2 dark:border-ink-800 dark:bg-ink-900 sm:gap-2 sm:px-3 [padding-top:env(safe-area-inset-top)]">
+        {/* Hambúrguer (mobile) / recolher sidebar (desktop) — no Jira o controle
+            do menu mora no topo, não pendurado na borda da sidebar. */}
         <button
-          onClick={() => setCollapsed((v) => !v)}
-          title={collapsed ? "Expandir menu" : "Recolher menu"}
-          className="absolute -right-3 top-16 hidden size-6 place-items-center rounded-full border border-paper-200 bg-paper text-paper-400 shadow-sm transition-colors hover:text-ink dark:border-ink-700 dark:bg-ink-800 dark:hover:text-paper md:grid"
+          onClick={() => (isDesktop ? setCollapsed((v) => !v) : setMobileNav(true))}
+          aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+          className="grid size-9 shrink-0 place-items-center rounded text-paper-500 transition-colors duration-150 hover:bg-paper-100 hover:text-ink focus-ring dark:hover:bg-ink-800 dark:hover:text-paper"
         >
-          {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+          <Menu className="size-[18px]" strokeWidth={1.9} />
         </button>
-      </motion.aside>
 
-      {/* ---------------- Coluna principal ---------------- */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Topbar */}
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-paper-200 dark:border-ink-800 bg-paper/80 dark:bg-ink-900/80 px-3 backdrop-blur-xl sm:gap-4 sm:px-6 [padding-top:env(safe-area-inset-top)]">
-          {/* Hambúrguer — só mobile */}
-          <button
-            onClick={() => setMobileNav(true)}
-            aria-label="Abrir menu"
-            className="grid size-11 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper md:hidden"
-          >
-            <Menu className="size-5" strokeWidth={1.9} />
-          </button>
+        <button
+          onClick={() => navigate("/app")}
+          className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-colors duration-150 hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
+        >
+          <span className="grid size-6 place-items-center rounded bg-brand-500 text-[11px] font-bold text-white">
+            T4
+          </span>
+          <span className="hidden text-[15px] font-semibold tracking-[-0.01em] text-ink dark:text-paper sm:inline">
+            Office
+          </span>
+        </button>
 
-          {/* Busca completa (>= sm) */}
-          <button className="group hidden h-10 max-w-md flex-1 items-center gap-2.5 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 px-3.5 text-left text-sm text-paper-400 transition-colors hover:border-paper-300 dark:hover:border-ink-600 hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring sm:flex">
+        {/* Busca central, como no Jira: não encostada na esquerda nem na direita. */}
+        <div className="mx-1 flex min-w-0 flex-1 justify-center sm:mx-3">
+          <button className="hidden h-8 w-full max-w-[560px] items-center gap-2 rounded border border-paper-200 bg-paper px-2.5 text-left text-[13px] text-paper-500 transition-colors duration-150 hover:bg-paper-50 focus-ring dark:border-ink-700 dark:bg-ink-800 dark:hover:bg-ink-700 sm:flex">
             <Search className="size-4 shrink-0" strokeWidth={1.9} />
-            <span className="flex-1 truncate">Buscar cards, projetos, pessoas…</span>
+            <span className="flex-1 truncate">Buscar</span>
             <Kbd>⌘K</Kbd>
           </button>
-          {/* Busca compacta (mobile) */}
           <button
             aria-label="Buscar"
-            className="grid size-11 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper sm:hidden"
+            className="grid size-9 shrink-0 place-items-center rounded text-paper-500 transition-colors duration-150 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper sm:hidden"
           >
             <Search className="size-5" strokeWidth={1.9} />
           </button>
+        </div>
 
-          <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
-            <button
-              onClick={cycleStatus}
-              title="Clique para mudar seu status"
-              className="flex items-center gap-2 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5 text-xs font-medium text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-700 focus-ring sm:px-3"
-            >
-              <StatusDot status={status} />
-              <span className="hidden sm:inline">{PRESENCE_LABEL[status]}</span>
-            </button>
+        {/* Criar mora na top bar (Jira 2024+), não na sidebar: é ação global,
+            não navegação. */}
+        <button
+          onClick={() => navigate(space.home)}
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-brand-500 px-3 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-brand-600 active:bg-brand-600 focus-ring"
+        >
+          <Plus className="size-4" strokeWidth={2.4} />
+          <span className="hidden sm:inline">Criar</span>
+        </button>
 
-            <button
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Modo claro" : "Modo escuro"}
-              className="grid size-9 place-items-center rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 text-paper-500 dark:text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-700"
-            >
-              {theme === "dark" ? <Sun className="size-[17px]" strokeWidth={1.9} /> : <Moon className="size-[17px]" strokeWidth={1.9} />}
-            </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={cycleStatus}
+            title="Clique para mudar seu status"
+            className="ml-1 hidden h-8 items-center gap-1.5 rounded px-2 text-[12px] font-medium text-paper-600 transition-colors duration-150 hover:bg-paper-100 focus-ring dark:text-paper-400 dark:hover:bg-ink-800 lg:flex"
+          >
+            <StatusDot status={status} />
+            {PRESENCE_LABEL[status]}
+          </button>
 
-            <IconButton className="relative" title="Notificações">
-              <Bell className="size-[18px]" strokeWidth={1.9} />
-              <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-brand-500 ring-2 ring-paper dark:ring-ink-900" />
-            </IconButton>
-            <IconButton
-              title="Agenda"
-              onClick={() => setAgendaOpen((v) => !v)}
-              className={agendaOpen ? "border-brand-500 text-brand-600 dark:text-brand-400" : undefined}
-            >
-              <CalendarClock className="size-[18px]" strokeWidth={1.9} />
-            </IconButton>
-            <IconButton title="Configurações">
-              <Settings className="size-[18px]" strokeWidth={1.9} />
-            </IconButton>
-          </div>
-        </header>
+          <TopIcon
+            label={theme === "dark" ? "Modo claro" : "Modo escuro"}
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? (
+              <Sun className="size-[18px]" strokeWidth={1.9} />
+            ) : (
+              <Moon className="size-[18px]" strokeWidth={1.9} />
+            )}
+          </TopIcon>
+          <TopIcon label="Notificações">
+            <Bell className="size-[18px]" strokeWidth={1.9} />
+            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-danger ring-2 ring-paper dark:ring-ink-900" />
+          </TopIcon>
+          <TopIcon
+            label="Agenda"
+            active={agendaOpen}
+            onClick={() => setAgendaOpen((v) => !v)}
+          >
+            <CalendarClock className="size-[18px]" strokeWidth={1.9} />
+          </TopIcon>
+          <TopIcon label="Configurações">
+            <Settings className="size-[18px]" strokeWidth={1.9} />
+          </TopIcon>
 
-        {/* Conteúdo rolável */}
-        <motion.main
-          key={location.pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          <UserMenu
+            name={user?.full_name}
+            email={user?.email}
+            status={status}
+            onLogout={handleLogout}
+          />
+        </div>
+      </header>
+
+      {/* ---------------- Sidebar + conteúdo ---------------- */}
+      <div className="relative flex min-h-0 flex-1">
+        {/* Backdrop do drawer mobile */}
+        <AnimatePresence>
+          {mobileNav && (
+            <motion.div
+              key="nav-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileNav(false)}
+              className="fixed inset-0 top-14 z-40 bg-ink-950/50 md:hidden"
+            />
+          )}
+        </AnimatePresence>
+
+        <motion.aside
+          animate={{ width: collapsed ? 60 : width }}
+          transition={reduce ? { duration: 0 } : { duration: 0.2, ease: EASE }}
           className={cx(
-            "flex-1 overflow-y-auto scrollbar-slim dark:bg-ink-950",
-            location.pathname.startsWith("/app/poker") ? "p-0" : "px-4 py-5 sm:px-6 sm:py-7",
+            // Sidebar levemente tingida contra conteúdo branco — é o contraste
+            // que dá a leitura de "navegação x trabalho" no Jira.
+            "z-40 flex shrink-0 flex-col border-r border-paper-200 bg-canvas dark:border-ink-800 dark:bg-ink-900",
+            // md:relative (não static) porque a alça de resize se posiciona
+            // absoluta contra a sidebar. Os insets do drawer mobile PRECISAM
+            // ser zerados no md: em `relative` eles viram deslocamento, e o
+            // `top-14` empurrava a sidebar inteira 56px para baixo.
+            "fixed inset-y-0 top-14 left-0 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] [padding-bottom:env(safe-area-inset-bottom)] md:relative md:inset-y-auto md:top-auto md:translate-x-0 md:!transition-none",
+            mobileNav ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0",
           )}
         >
-          <div
-            className={cx(
-              "w-full",
-              location.pathname.startsWith("/app/poker") && "h-full",
-            )}
-          >
+          <WorkspaceSwitcher collapsed={collapsed} />
+          <SpaceSwitcher collapsed={collapsed} spaceId={spaceId} />
+
+          <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 scrollbar-slim">
+            {/* Favoritos primeiro: o que o usuário fixou vale mais que a ordem
+                que nós escolhemos para ele. */}
+            <FavoritesBlock collapsed={collapsed} />
+
+            {/* Os grupos do space (Funil/Carteira/Resultado no Comercial) vêm
+                antes de "Para você" — é o que a pessoa veio fazer ao entrar no
+                space; "Para você" é contexto comum, não específico deste. */}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={spaceId}
+                initial={reduce ? false : { opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: -10 }}
+                transition={{ duration: 0.2, ease: EASE }}
+                className="flex flex-col gap-4"
+              >
+                {space.groups.map((group) => (
+                  <NavGroupBlock key={group.heading} group={group} collapsed={collapsed} />
+                ))}
+              </motion.div>
+            </AnimatePresence>
+
+            <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
+
+            <RecentsBlock collapsed={collapsed} />
+          </nav>
+
+          <SidebarFooter collapsed={collapsed} />
+
+          {/* Alça de arraste na borda — largura é preferência de quem usa, não
+              constante de design. Só no desktop expandido. */}
+          {isDesktop && !collapsed && <ResizeHandle />}
+        </motion.aside>
+
+        {/* Conteúdo rolável — branco, para a sidebar tingida se destacar. */}
+        <motion.main
+          key={location.pathname}
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.24, ease: EASE }}
+          className={cx(
+            "min-w-0 flex-1 overflow-y-auto bg-paper scrollbar-slim dark:bg-ink-950",
+            isPoker ? "p-0" : "px-4 py-5 sm:px-6 sm:py-6",
+          )}
+        >
+          <div className={cx("w-full", isPoker && "h-full")}>
             <Outlet />
           </div>
         </motion.main>
@@ -314,59 +335,426 @@ export function AppShell() {
   )
 }
 
-// Um grupo da sidebar: rótulo + itens (+ submenu de projetos, quando o grupo
-// declara `projects`).
+// Ícone da top bar. Quadrado de 32px, sem moldura — a borda só apareceria para
+// separar itens que já estão separados por espaço.
+function TopIcon({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string
+  active?: boolean
+  onClick?: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cx(
+        "relative grid size-8 place-items-center rounded transition-colors duration-150 focus-ring",
+        active
+          ? "bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-300"
+          : "text-paper-500 hover:bg-paper-100 hover:text-ink dark:text-paper-400 dark:hover:bg-ink-800 dark:hover:text-paper",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+// Avatar + menu de conta no canto superior direito — onde o Jira coloca o
+// perfil. Sai do rodapé da sidebar, que era espaço de navegação gasto com conta.
+function UserMenu({
+  name,
+  email,
+  status,
+  onLogout,
+}: {
+  name?: string
+  email?: string
+  status: PresenceStatus
+  onLogout: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const reduce = useReducedMotion()
+
+  return (
+    <div className="relative ml-1">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Conta"
+        className="grid place-items-center rounded-full focus-ring"
+      >
+        <Avatar initials={initials(name)} status={status} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              role="menu"
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+              transition={{ duration: 0.16, ease: EASE }}
+              className="absolute right-0 top-11 z-20 w-64 origin-top-right rounded-lg border border-paper-200 bg-paper p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800"
+            >
+              <div className="px-2.5 py-2">
+                <p className="truncate text-[13px] font-semibold text-ink dark:text-paper">
+                  {name ?? "Usuário"}
+                </p>
+                <p className="truncate text-[12px] text-paper-500">{email}</p>
+              </div>
+              <div className="my-1 h-px bg-paper-100 dark:bg-white/5" />
+              <button
+                role="menuitem"
+                onClick={onLogout}
+                className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-ink transition-colors duration-150 hover:bg-paper-100 dark:text-paper-200 dark:hover:bg-white/5"
+              >
+                <LogOut className="size-4 text-paper-500" strokeWidth={1.9} />
+                Sair
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// Uma linha de navegação. A estrela mora FORA do NavLink (um <button> dentro de
+// um <a> é HTML inválido e o clique da estrela navegaria junto).
+function NavRow({
+  item,
+  collapsed,
+  /** Favoritar só faz sentido no menu de origem — no bloco Favoritos ela vira "desafixar". */
+  starrable = true,
+}: {
+  item: NavItem
+  collapsed: boolean
+  starrable?: boolean
+}) {
+  const favorites = useSidebarPrefs((s) => s.favorites)
+  const toggleFavorite = useSidebarPrefs((s) => s.toggleFavorite)
+  const isFav = favorites.includes(item.to)
+
+  return (
+    <div className="group/row relative flex items-center">
+      <NavLink
+        to={item.to}
+        end={item.end}
+        title={collapsed ? item.label : undefined}
+        className={({ isActive }) =>
+          cx(
+            // Linha de 32px, raio pequeno, texto 14px: a métrica do Jira.
+            "flex min-w-0 flex-1 items-center gap-3 rounded px-2.5 py-1.5 text-sm transition-colors duration-150 max-md:min-h-11",
+            collapsed && "justify-center px-0",
+            // Ativo = pílula azul-clara preenchida com texto brand. É a
+            // assinatura do menu do Jira — sem trilho lateral.
+            isActive
+              ? "bg-brand-50 font-semibold text-brand-500 dark:bg-brand-500/15 dark:text-brand-300"
+              : "font-normal text-paper-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800 dark:hover:text-paper-200",
+          )
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <item.icon
+              className={cx(
+                "size-4 shrink-0 transition-colors duration-150",
+                isActive
+                  ? "text-brand-500 dark:text-brand-300"
+                  : "text-paper-500 group-hover/row:text-ink dark:text-paper-400 dark:group-hover/row:text-paper",
+              )}
+              strokeWidth={2}
+            />
+            {!collapsed && (
+              <span className={cx("flex-1 truncate text-left", starrable && "pr-5")}>
+                {item.label}
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+
+      {/* Fixada fica sempre visível; as demais aparecem no hover/foco, para a
+          coluna não virar um campo de estrelas cinzas. */}
+      {starrable && !collapsed && (
+        <button
+          onClick={() => toggleFavorite(item.to)}
+          title={isFav ? "Remover dos favoritos" : "Fixar nos favoritos"}
+          aria-label={isFav ? `Remover ${item.label} dos favoritos` : `Fixar ${item.label} nos favoritos`}
+          aria-pressed={isFav}
+          className={cx(
+            "absolute right-1.5 grid size-6 place-items-center rounded transition-all duration-150 focus-ring",
+            "hover:bg-paper-200 dark:hover:bg-ink-700",
+            isFav
+              ? "text-amber-500 opacity-100"
+              : "text-paper-400 opacity-0 hover:text-ink focus-visible:opacity-100 group-hover/row:opacity-100 dark:hover:text-paper",
+          )}
+        >
+          <Star className="size-3.5" strokeWidth={2} fill={isFav ? "currentColor" : "none"} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// Cabeçalho de grupo recolhível. Um clique some com o grupo inteiro — é como se
+// tira da frente uma seção que não se usa hoje sem perder o resto do menu.
+function GroupHeading({
+  heading,
+  collapsed: groupCollapsed,
+  onToggle,
+  count,
+}: {
+  heading: string
+  collapsed: boolean
+  onToggle: () => void
+  count?: number
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-expanded={!groupCollapsed}
+      className="group/head flex w-full items-center gap-1 rounded px-2.5 py-1 text-left transition-colors duration-150 hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
+    >
+      <ChevronDown
+        className={cx(
+          "size-3 shrink-0 text-paper-400 transition-transform duration-200",
+          groupCollapsed && "-rotate-90",
+        )}
+        strokeWidth={2.4}
+      />
+      <SectionLabel>{heading}</SectionLabel>
+      {count != null && count > 0 && (
+        <span className="ml-auto text-[10px] font-semibold tabular text-paper-400">{count}</span>
+      )}
+    </button>
+  )
+}
+
+// Um grupo da sidebar: rótulo recolhível + itens (+ submenu de projetos, quando
+// o grupo declara `projects`).
 function NavGroupBlock({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
+  const collapsedGroups = useSidebarPrefs((s) => s.collapsedGroups)
+  const toggleGroup = useSidebarPrefs((s) => s.toggleGroup)
+  // Colapsada, a sidebar é uma trilha de ícones: recolher grupo ali esconderia
+  // ícones sem deixar pista de como trazê-los de volta.
+  const groupCollapsed = !collapsed && !!collapsedGroups[group.heading]
+
   return (
     <div>
       {!collapsed && (
-        <div className="px-3 pb-1.5">
-          <SectionLabel>{group.heading}</SectionLabel>
-        </div>
+        <GroupHeading
+          heading={group.heading}
+          collapsed={groupCollapsed}
+          onToggle={() => toggleGroup(group.heading)}
+          count={groupCollapsed ? group.items.length : undefined}
+        />
       )}
-      <div className="flex flex-col gap-0.5">
-        {group.projects && <ProjectsNavLink collapsed={collapsed} kind={group.projects} />}
-        {group.items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              cx(
-                "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors max-md:min-h-11",
-                collapsed && "justify-center px-0 py-2.5",
-                isActive
-                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                  : "text-ink-600 hover:bg-paper-100 dark:text-paper-400 dark:hover:bg-ink-800",
-              )
-            }
+      <AnimatePresence initial={false}>
+        {!groupCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="flex flex-col overflow-hidden"
           >
-            {({ isActive }) => (
-              <>
-                {/* indicador de acento na borda esquerda */}
-                <span
-                  className={cx(
-                    "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-opacity",
-                    isActive ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                <item.icon
-                  className={cx(
-                    "size-[18px] shrink-0 transition-colors",
-                    isActive
-                      ? "text-brand-600 dark:text-brand-300"
-                      : "text-paper-400 group-hover:text-ink dark:group-hover:text-paper",
-                  )}
-                  strokeWidth={1.9}
-                />
-                {!collapsed && <span className="flex-1 truncate text-left">{item.label}</span>}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </div>
+            {group.projects && <ProjectsNavLink collapsed={collapsed} kind={group.projects} />}
+            {group.items.map((item) => (
+              <NavRow key={item.to} item={item} collapsed={collapsed} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+// Bloco de favoritos: o menu que o usuário monta para si. Some quando vazio —
+// um "Favoritos (0)" permanente só ocuparia a dobra mais valiosa da coluna.
+function FavoritesBlock({ collapsed }: { collapsed: boolean }) {
+  const favorites = useSidebarPrefs((s) => s.favorites)
+  const collapsedGroups = useSidebarPrefs((s) => s.collapsedGroups)
+  const toggleGroup = useSidebarPrefs((s) => s.toggleGroup)
+
+  // Rota fixada que não existe mais (item removido do menu) some sozinha.
+  const items = favorites.map(findNavItem).filter((i): i is NavItem => Boolean(i))
+  if (items.length === 0) return null
+
+  const groupCollapsed = !collapsed && !!collapsedGroups.__favorites
+
+  return (
+    <div>
+      {!collapsed && (
+        <GroupHeading
+          heading="Favoritos"
+          collapsed={groupCollapsed}
+          onToggle={() => toggleGroup("__favorites")}
+          count={groupCollapsed ? items.length : undefined}
+        />
+      )}
+      <AnimatePresence initial={false}>
+        {!groupCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="flex flex-col overflow-hidden"
+          >
+            {items.map((item) => (
+              <NavRow key={item.to} item={item} collapsed={collapsed} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// Últimas telas visitadas. Fica no fim da coluna: é rede de segurança para
+// voltar a algo, não o caminho principal.
+function RecentsBlock({ collapsed }: { collapsed: boolean }) {
+  const recents = useSidebarPrefs((s) => s.recents)
+  const collapsedGroups = useSidebarPrefs((s) => s.collapsedGroups)
+  const toggleGroup = useSidebarPrefs((s) => s.toggleGroup)
+
+  // Na trilha de ícones não cabe — e repetiria ícones já visíveis acima.
+  if (collapsed || recents.length === 0) return null
+
+  const groupCollapsed = !!collapsedGroups.__recents
+
+  return (
+    // Sem `mt-auto`: empurrar o bloco para o fim da coluna abria um vão morto
+    // entre ele e o menu. Recentes fecha a lista, coladinho no que veio antes.
+    <div className="border-t border-paper-100 pt-2 dark:border-ink-800">
+      <GroupHeading
+        heading="Recentes"
+        collapsed={groupCollapsed}
+        onToggle={() => toggleGroup("__recents")}
+        count={groupCollapsed ? recents.length : undefined}
+      />
+      <AnimatePresence initial={false}>
+        {!groupCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="flex flex-col overflow-hidden"
+          >
+            {recents.map((r) => (
+              <NavLink
+                key={r.to}
+                to={r.to}
+                className={({ isActive }) =>
+                  cx(
+                    "flex items-center gap-3 rounded px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                    isActive
+                      ? "font-medium text-brand-500 dark:text-brand-300"
+                      : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 dark:hover:text-paper-200",
+                  )
+                }
+              >
+                <History className="size-3.5 shrink-0 text-paper-400" strokeWidth={2} />
+                <span className="truncate">{r.label}</span>
+              </NavLink>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// Rodapé fixo da sidebar: ajuda e atalhos. Fora da área rolável, para não sumir
+// quando o menu do space é longo.
+function SidebarFooter({ collapsed }: { collapsed: boolean }) {
+  const items = [
+    { label: "Atalhos de teclado", icon: Keyboard },
+    { label: "Ajuda & suporte", icon: LifeBuoy },
+  ]
+
+  return (
+    <div
+      className={cx(
+        "shrink-0 border-t border-paper-200 px-2 py-2 dark:border-ink-800",
+        collapsed && "px-1",
+      )}
+    >
+      {items.map(({ label, icon: Icon }) => (
+        <button
+          key={label}
+          title={label}
+          aria-label={label}
+          className={cx(
+            "flex w-full items-center gap-3 rounded px-2.5 py-1.5 text-[13px] text-paper-500 transition-colors duration-150 hover:bg-paper-100 hover:text-ink focus-ring dark:hover:bg-ink-800 dark:hover:text-paper",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          <Icon className="size-4 shrink-0" strokeWidth={1.9} />
+          {!collapsed && <span className="truncate">{label}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Borda arrastável. Usa Pointer Events (cobre mouse e trackpad) e captura o
+// ponteiro para o arrasto não morrer se o cursor sair da alça.
+function ResizeHandle() {
+  const setWidth = useSidebarPrefs((s) => s.setWidth)
+  const [dragging, setDragging] = useState(false)
+  const asideLeft = useRef(0)
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // A sidebar começa na borda esquerda da viewport, mas medimos em vez de
+    // assumir: evita quebrar se um dia houver algo à esquerda dela.
+    const aside = e.currentTarget.parentElement
+    asideLeft.current = aside?.getBoundingClientRect().left ?? 0
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true)
+  }, [])
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging) return
+      setWidth(e.clientX - asideLeft.current)
+    },
+    [dragging, setWidth],
+  )
+
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    setDragging(false)
+  }, [])
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Redimensionar menu"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      // Duplo clique devolve a largura padrão — saída para quem arrastou longe demais.
+      onDoubleClick={() => setWidth(SIDEBAR_MIN_WIDTH + (SIDEBAR_MAX_WIDTH - SIDEBAR_MIN_WIDTH) / 2)}
+      className={cx(
+        "absolute inset-y-0 right-0 z-50 w-1 cursor-col-resize transition-colors duration-150",
+        dragging ? "bg-brand-400" : "hover:bg-brand-300/60",
+      )}
+    />
   )
 }
 
@@ -420,21 +808,21 @@ function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: Sp
   }
 
   return (
-    <div className="relative border-b border-paper-100 px-3 py-2 dark:border-ink-800">
+    <div className="relative border-b border-paper-200 px-3 pb-2.5 dark:border-ink-800">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
+        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
       >
-        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-brand-500/10 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-brand-500/10 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
           <active.icon className="size-[15px]" strokeWidth={2} />
         </span>
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-400">
+          <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-paper-400">
             Space
           </span>
-          <span className="block truncate text-sm font-medium text-ink dark:text-paper">
+          <span className="block truncate text-[13px] font-semibold text-ink dark:text-paper">
             {active.label}
           </span>
         </span>
@@ -630,6 +1018,10 @@ function ProjectsNavLink({
 
 // Seletor de workspace no topo da sidebar — mostra o ativo e permite trocar.
 // Estilo "site picker" do Jira: fundo claro, avatar quadrado, chevron duplo.
+//
+// Sem borda inferior de propósito: workspace e space são o MESMO bloco de
+// contexto ("onde eu estou"). Dois filetes seguidos faziam parecer dois
+// seletores concorrentes; a separação vem só depois do space.
 function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const { data: workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspaces()
   const [open, setOpen] = useState(false)
@@ -639,28 +1031,28 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const tile = (active?.name ?? "Pulse").trim().charAt(0).toUpperCase()
 
   return (
-    <div className="relative border-b border-paper-100 dark:border-ink-800 p-3">
+    <div className="relative px-3 pb-1 pt-3">
       <button
         onClick={() => setOpen((v) => !v)}
         className={cx(
-          "flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 focus-ring",
+          "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-paper-100 focus-ring dark:hover:bg-ink-800",
           collapsed && "justify-center px-0",
         )}
       >
-        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-bold text-white shadow-brand-glow">
+        <div className="grid size-8 shrink-0 place-items-center rounded-md bg-brand-600 text-[13px] font-bold text-white">
           {tile}
         </div>
         {!collapsed && (
           <>
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-semibold text-ink dark:text-paper">
+              <p className="truncate text-[13px] font-semibold text-ink dark:text-paper">
                 {active?.name ?? "Pulse"}
               </p>
-              <p className="truncate text-[11px] tracking-[0.16em] text-paper-400">
+              <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-paper-400">
                 T4E GROUP
               </p>
             </div>
-            <ChevronsUpDown className="size-4 shrink-0 text-paper-400" strokeWidth={1.9} />
+            <ChevronsUpDown className="size-3.5 shrink-0 text-paper-400" strokeWidth={1.9} />
           </>
         )}
       </button>
@@ -668,7 +1060,16 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-3 right-3 top-[64px] z-20 animate-scale-in rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 p-1.5 shadow-pop">
+          {/* Colapsado, o pai relativo tem só ~60px (a trilha de ícones) — um
+              painel `left-3 right-3` nascia espremido nessa largura, com o
+              texto quebrando letra a letra. Vira um flyout à direita da
+              trilha, com largura própria, em vez de preencher o pai. */}
+          <div
+            className={cx(
+              "absolute top-[64px] z-20 w-64 animate-scale-in rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 p-1.5 shadow-pop",
+              collapsed ? "left-full ml-2" : "left-3 right-3 w-auto",
+            )}
+          >
             <p className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-400">
               Seus workspaces
             </p>

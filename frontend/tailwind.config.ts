@@ -111,6 +111,33 @@ export default {
         success: "#22A06B",
         warning: "#E56910",
         danger: "#E2483D",
+
+        // ── Chatwoot (escopo: feature `inbox`) ──────────────────────────────
+        // O atendimento replica a interface do Chatwoot para quem já opera nela
+        // não precisar reaprender. Como o resto do app é Atlassian, a paleta
+        // deles fica numa escala própria (`cw-*`) em vez de sobrescrever brand:
+        // assim as duas convivem sem uma contaminar a outra.
+        cw: {
+          // Azul-assinatura — é a cor default de label na API deles.
+          500: "#1F93FF",
+          600: "#1B7FDB",
+          700: "#135FA5",
+          // Fundo da bolha do agente: azul MUITO claro com texto escuro. No
+          // Chatwoot o azul saturado só aparece em botão/badge, nunca na bolha.
+          bubble: "#E5F2FF",
+          "bubble-border": "#CFE5FB",
+          // Bolha do contato: branca com borda fria.
+          "bubble-in": "#FFFFFF",
+          // Nota interna: âmbar, sinalizando "o cliente não vê isto".
+          note: "#FFF8E5",
+          "note-border": "#FFE1A6",
+          "note-ink": "#8A6100",
+          // Neutros frios da interface deles.
+          ink: "#3C4858",
+          muted: "#6E7B8F",
+          border: "#E0E6ED",
+          surface: "#F9FAFB",
+        },
       },
       fontFamily: {
         sans: [

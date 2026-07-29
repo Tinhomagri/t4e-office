@@ -6,4 +6,6 @@ from contexts.sales.infrastructure.django.models import (  # noqa: F401
     DealHistoryModel,
     DealModel,
     PipelineStageModel,
+    ProposalLineItemModel,
+    ProposalModel,
 )

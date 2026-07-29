@@ -7,6 +7,7 @@ from shared.domain.errors import (
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
+    UpstreamError,
     ValidationError,
 )
 
@@ -16,6 +17,7 @@ _STATUS_MAP = {
     PermissionDeniedError: status.HTTP_403_FORBIDDEN,
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ConflictError: status.HTTP_409_CONFLICT,
+    UpstreamError: status.HTTP_502_BAD_GATEWAY,
 }
 
 

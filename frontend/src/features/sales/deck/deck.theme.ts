@@ -1,9 +1,10 @@
 // Paleta do Command Deck.
 //
-// O deck é uma quebra deliberada do design system: superfície escura mesmo no
-// tema claro, porque é uma tela de leitura densa (cockpit), não de edição. Para
-// a quebra não virar bagunça, ela é *fechada aqui* — nenhum hex solto nos
-// componentes, e nada disto vaza para o resto do app.
+// O deck tem uma "pele" própria (cockpit, leitura densa) — mas segue o tema
+// claro/escuro do resto do app, como qualquer outra tela. Os tons vêm de
+// variáveis CSS (`--deck-*` em src/index.css, com override em `.dark`), então
+// nenhum componente aqui precisa saber qual tema está ativo: troca sozinho
+// quando a classe `.dark` liga/desliga no `<html>`.
 //
 // Série de cores: uma sequência categórica de 6 tons distinguíveis também em
 // deuteranopia (azul → ciano → âmbar → violeta → verde → rosa). Nunca use cor
@@ -11,15 +12,25 @@
 
 export const DECK = {
   /** Fundo do deck e das camadas empilhadas sobre ele. */
-  bg: "#0A0B0D",
-  surface: "#141619",
-  surfaceHi: "#1B1E23",
-  border: "rgb(255 255 255 / 0.08)",
-  borderHi: "rgb(255 255 255 / 0.14)",
-  grid: "rgb(255 255 255 / 0.06)",
-  text: "#F1F2F4",
-  textDim: "#8A8C93",
-  textFaint: "#63656C",
+  bg: "var(--deck-bg)",
+  surface: "var(--deck-surface)",
+  surfaceHi: "var(--deck-surface-hi)",
+  border: "var(--deck-border)",
+  borderHi: "var(--deck-border-hi)",
+  grid: "var(--deck-grid)",
+  text: "var(--deck-text)",
+  textDim: "var(--deck-text-dim)",
+  textFaint: "var(--deck-text-faint)",
+  /**
+   * Texto sobre preenchimentos coloridos (barra do funil, séries) — as cores
+   * de série são sempre médio/saturadas, então um tom quase-preto fixo lê bem
+   * em cima delas nos dois temas. Não é "o fundo do deck", é contraste local.
+   */
+  onFill: "#0A0B0D",
+  /** Sobreposições sutis (hover, faixa ativa) — claras no tema dark, escuras no light. */
+  overlay1: "var(--deck-overlay-1)",
+  overlay2: "var(--deck-overlay-2)",
+  overlay3: "var(--deck-overlay-3)",
 } as const
 
 /** Série categórica do deck. Índice estável: mesma entidade, mesma cor. */
@@ -45,11 +56,11 @@ export function seriesColor(i: number): string {
 
 /** Rampa do heatmap: 5 degraus de intensidade sobre o fundo do deck. */
 export const HEAT = [
-  "rgb(255 255 255 / 0.05)",
-  "rgb(87 157 255 / 0.28)",
-  "rgb(87 157 255 / 0.50)",
-  "rgb(87 157 255 / 0.74)",
-  "rgb(87 157 255 / 1)",
+  "var(--deck-heat-0)",
+  "var(--deck-heat-1)",
+  "var(--deck-heat-2)",
+  "var(--deck-heat-3)",
+  "var(--deck-heat-4)",
 ] as const
 
 /** Formatação monetária compacta usada nos eixos e KPIs do deck. */
