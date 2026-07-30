@@ -254,7 +254,9 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
               key={v.id}
               onClick={() => setActiveView(v.id)}
               className={cx(
-                "relative flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium transition-colors rounded-t-lg",
+                // Aba do Jira: 32px de altura, 14/20 medium, e o estado ativo é só a
+                // cor do texto — não há sublinhado. Ver docs/jira-ui-spec.md.
+                "relative flex h-8 items-center gap-1.5 px-2.5 text-sm font-medium leading-5 transition-colors rounded-t-lg",
                 activeView === v.id
                   ? "text-brand-600"
                   : "text-paper-400 hover:text-ink dark:hover:text-paper hover:bg-paper-50 dark:hover:bg-ink-900",
@@ -262,9 +264,6 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
             >
               {v.icon}
               {v.label}
-              {activeView === v.id && (
-                <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-brand-500" />
-              )}
             </button>
           ))}
         </div>

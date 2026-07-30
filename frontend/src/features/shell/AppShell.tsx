@@ -151,7 +151,8 @@ export function AppShell() {
     // conteúdo — é o que fazia os dois blocos parecerem apps diferentes.
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas text-ink dark:bg-ink-950 dark:text-paper">
       {/* ---------------- Top bar global ---------------- */}
-      <header className="relative z-50 flex h-14 shrink-0 items-center gap-1 border-b border-paper-200 bg-paper px-2 dark:border-ink-800 dark:bg-ink-900 sm:gap-2 sm:px-3 [padding-top:env(safe-area-inset-top)]">
+      {/* h-12 = 48px, a altura real do top-nav do Jira (medida em docs/jira-ui-spec.md). */}
+      <header className="relative z-50 flex h-12 shrink-0 items-center gap-1 border-b border-paper-200 bg-paper px-2 dark:border-ink-800 dark:bg-ink-900 sm:gap-2 sm:px-3 [padding-top:env(safe-area-inset-top)]">
         {/* Hambúrguer (mobile) / recolher sidebar (desktop) — no Jira o controle
             do menu mora no topo, não pendurado na borda da sidebar. */}
         <button

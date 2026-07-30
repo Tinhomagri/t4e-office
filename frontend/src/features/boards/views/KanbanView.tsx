@@ -376,7 +376,7 @@ export function KanbanView({
                   onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
                 />
               ) : (
-                <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 288}px` }}>
+                <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
                   {columns.map((ws, i) => (
                     <Column
                       key={ws.slug}
@@ -829,7 +829,7 @@ function SwimlaneBoard({
   }, [mode, epics, members, nonEpic])
 
   return (
-    <div className="flex flex-col gap-6" style={{ minWidth: `${columns.length * 288}px` }}>
+    <div className="flex flex-col gap-6" style={{ minWidth: `${columns.length * 296}px` }}>
       {groups.map((group) => {
         if (group.cards.length === 0) return null
         return (
@@ -966,7 +966,9 @@ function Column({
     <div
       ref={setNodeRef}
       className={cx(
-        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
+        // 284 = card de 272 + 4px de padding lateral da lista + 2px de borda em cada
+        // lado. É o que faz o card bater exatamente com os 272px do Jira.
+        "flex w-[284px] shrink-0 flex-col rounded-xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
         compact ? "max-h-[300px]" : "max-h-[calc(100vh-22rem)]",
         isOver
           ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow"
@@ -1003,13 +1005,14 @@ function Column({
           ) : (
             // Sem uppercase + bold + tracking: o Jira usa o rótulo em caixa
             // normal, e o peso todo no header competia com o título dos cards.
-            <span className="truncate text-[13px] font-medium text-paper-600 dark:text-paper-300">
+            <span className="truncate text-sm font-medium leading-5 text-paper-600 dark:text-paper-300">
               {displayLabel}
             </span>
           )}
           <span
             className={cx(
-              "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-semibold",
+              // 12/16 medium: a contagem do header de coluna do Jira.
+              "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-xs font-medium leading-4",
               // Fora do estouro de WIP a contagem é texto solto, sem pílula: no
               // Jira ela é informação de apoio, não um badge disputando atenção.
               overWip
@@ -1100,7 +1103,8 @@ function Column({
       </div>
 
       {/* Card list */}
-      <div className="flex min-h-[60px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
+      {/* gap 4px e padding 1px/4px — o scroll-container do Jira. */}
+      <div className="flex min-h-[60px] flex-1 flex-col gap-1 overflow-y-auto px-1 py-px scrollbar-slim">
         <AnimatePresence initial={false}>
           {cards.map((card) => (
             <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
@@ -1165,14 +1169,14 @@ function AddColumn({
       <button
         onClick={() => setOpen(true)}
         title="Criar coluna"
-        className="flex h-11 w-[272px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-paper-300 text-sm font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-700 dark:hover:border-brand-500/50"
+        className="flex h-11 w-[284px] shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-paper-300 text-sm font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-700 dark:hover:border-brand-500/50"
       >
         <Plus className="size-4" /> Criar coluna
       </button>
     )
 
   return (
-    <div className="flex w-[272px] shrink-0 flex-col gap-2 rounded-2xl border-2 border-brand-300 bg-paper p-2 dark:bg-ink-900">
+    <div className="flex w-[284px] shrink-0 flex-col gap-2 rounded-xl border-2 border-brand-300 bg-paper p-2 dark:bg-ink-900">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -1460,7 +1464,7 @@ const DraggableCard = forwardRef<HTMLDivElement, {
         className={cx(
           // Transição nas cores: sem isto a moldura tracejada piscava de uma vez
           // no primeiro frame do arrasto.
-          "rounded-md border border-dashed transition-colors duration-150",
+          "rounded-lg border border-dashed transition-colors duration-150",
           isDragging
             ? "border-paper-300 dark:border-ink-600 bg-paper-100/50 dark:bg-ink-900/40"
             : "border-transparent",
@@ -1499,7 +1503,7 @@ export function CardCell({
   return (
     <div
       className={cx(
-        "group relative overflow-hidden rounded-md border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
+        "group relative overflow-hidden rounded-lg border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
         "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
         // Levantar 4px a cada hover fazia a coluna inteira "respirar" ao passar o
         // mouse; 2px já dá o retorno sem agitar o board.
@@ -1547,7 +1551,9 @@ export function CardCell({
             </motion.button>
           )}
           <p className={cx(
-            "text-[13px] font-medium leading-snug text-ink dark:text-paper line-clamp-2",
+            // 14/20 regular: a tipografia do título de card do Jira. O clamp em 2
+            // linhas é nosso — o Jira deixa o card crescer.
+            "text-sm font-normal leading-5 text-ink dark:text-paper line-clamp-2",
             isDone && "line-through text-paper-400",
           )}>
             {card.title}
