@@ -16,8 +16,14 @@ class CardRepository(ABC):
         """Persiste um novo card."""
 
     @abstractmethod
-    def list_by_project(self, *, project_id: str) -> list[Card]:
-        """Lista cards de um projeto."""
+    def list_by_project(
+        self, *, project_id: str, include_archived: bool = False
+    ) -> list[Card]:
+        """Lista cards de um projeto.
+
+        Arquivados ficam fora por padrão: eles existem para preservar histórico,
+        não para aparecer no board nem contar em relatório.
+        """
 
     @abstractmethod
     def get(self, *, card_id: str) -> Card | None:

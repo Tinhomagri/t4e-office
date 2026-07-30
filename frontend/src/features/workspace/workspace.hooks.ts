@@ -23,13 +23,26 @@ import type {
 // Carrega os workspaces do usuário e garante que haja um ativo selecionado.
 export function useWorkspaces() {
   const query = useQuery({ queryKey: ["workspaces"], queryFn: wsApi.listWorkspaces })
-  const { activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore()
+  const { activeWorkspaceId: persistedId, setActiveWorkspace } = useWorkspaceStore()
+
+  // O id persistido não é confiável até ser conferido contra os workspaces DESTE
+  // usuário: o localStorage é do navegador, não da conta. Ao trocar de conta, o
+  // id da anterior continuava lá e, como o store resolve de forma síncrona, as
+  // queries saíam com ele no primeiro render — 403 antes de qualquer correção.
+  // Enquanto a lista não chega, o id efetivo é `null` e os consumidores esperam.
+  const activeWorkspaceId = query.data
+    ? query.data.some((w) => w.id === persistedId)
+      ? persistedId
+      : query.data[0]?.id ?? null
+    : null
 
   useEffect(() => {
-    if (!query.data) return
-    const exists = query.data.some((w) => w.id === activeWorkspaceId)
-    if (!exists) setActiveWorkspace(query.data[0]?.id ?? null)
-  }, [query.data, activeWorkspaceId, setActiveWorkspace])
+    // Alinha o valor persistido ao efetivo, para o resto do app (que lê o store
+    // direto) parar de ver o id antigo.
+    if (query.data && persistedId !== activeWorkspaceId) {
+      setActiveWorkspace(activeWorkspaceId)
+    }
+  }, [query.data, persistedId, activeWorkspaceId, setActiveWorkspace])
 
   return { ...query, activeWorkspaceId, setActiveWorkspace }
 }
@@ -520,6 +533,69 @@ export function useDeleteWorkflowStatus(projectId: string | null) {
   return useMutation({
     mutationFn: (statusId: string) => wsApi.deleteWorkflowStatus(statusId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workflow-statuses", projectId] }),
+  })
+}
+
+export function useReorderWorkflowStatuses(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (statusIds: string[]) =>
+      wsApi.reorderWorkflowStatuses(projectId!, statusIds),
+    // O servidor devolve a lista já ordenada: grava direto no cache para o board
+    // não piscar na ordem antiga entre a resposta e o refetch.
+    onSuccess: (statuses) =>
+      qc.setQueryData(["workflow-statuses", projectId], statuses),
+  })
+}
+
+// ---- Projeto (aba Geral) e configuração do quadro ----
+
+export function useProject(projectId: string | null) {
+  return useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => wsApi.getProject(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useUpdateProject(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").UpdateProjectInput) =>
+      wsApi.updateProject(projectId!, input),
+    onSuccess: (project) => {
+      qc.setQueryData(["project", projectId], project)
+      // Nome/chave/avatar aparecem na sidebar e no seletor de projeto.
+      qc.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
+}
+
+export function useUpdateProjectAvatar(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File | null) => wsApi.updateProjectAvatar(projectId!, file),
+    onSuccess: (project) => {
+      qc.setQueryData(["project", projectId], project)
+      qc.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
+}
+
+export function useBoardConfig(projectId: string | null) {
+  return useQuery({
+    queryKey: ["board-config", projectId],
+    queryFn: () => wsApi.getBoardConfig(projectId!),
+    enabled: !!projectId,
+  })
+}
+
+export function useUpdateBoardConfig(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./workspace.types").UpdateBoardConfigInput) =>
+      wsApi.updateBoardConfig(projectId!, input),
+    onSuccess: (config) => qc.setQueryData(["board-config", projectId], config),
   })
 }
 

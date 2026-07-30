@@ -7,3 +7,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+
+# Uploads em runtime (anexos, avatares de projeto). Disco é efêmero no deploy;
+# estes arquivos são dado de usuário, não código.
+media/
+attachments/
+project-avatars/

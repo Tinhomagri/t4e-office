@@ -102,7 +102,9 @@ export function ConversationThread({ messages, loading, typingName }: Props) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-cw-surface px-4 py-3 dark:bg-ink-950">
+    // pb maior que pt: a última mensagem precisa de folga acima do compositor,
+    // senão encosta na caixa de digitação (mesmo respiro do WhatsApp).
+    <div className="flex-1 overflow-y-auto bg-cw-surface px-4 pb-6 pt-3 dark:bg-ink-950">
       {groups.map((group) => (
         <section key={group.day} aria-label={group.label}>
           <div className="sticky top-0 z-10 flex justify-center py-2">

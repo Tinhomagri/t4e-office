@@ -83,8 +83,49 @@ export const popCheck: Variants = {
   },
 }
 
-/** Drop zone da coluna "respirando" quando um card paira sobre ela. */
+/** Drop zone da coluna "respirando" quando um card paira sobre ela.
+ *
+ * Usado pelo board de vendas. O Kanban deixou de usar: escalar o painel arrastava
+ * junto o header e todos os cards de dentro, e só a troca de cor/borda já diz
+ * "solta aqui" sem mover nada de lugar. */
 export const dropZone: Variants = {
   idle: { scale: 1 },
   over: { scale: 1.008, transition: springSnappy },
+}
+
+// ─── Arrasto de card no Kanban ───────────────────────────────────────────────
+// Tween em todo o gesto, nunca spring: mola sempre passa do ponto e volta, e num
+// card de board isso lê como o objeto "quicando" no lugar. Também sem `rotate` —
+// card inclinado parece carta de baralho, não tarefa.
+
+/** Levantar o card no overlay: só um leve ganho de escala, em ease-out. */
+export const dragLift: Transition = { duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }
+
+/** Card entrando/saindo da coluna. Só opacidade: qualquer escala aqui competiria
+ * com o voo do clone, que chega no mesmo instante. */
+export const cardFade: Transition = { duration: 0.18, ease: "easeOut" }
+
+/** Voo do clone até o slot de destino, no soltar.
+ *
+ * `keyframes` explícito porque o resolver default do dnd-kit monta o transform
+ * do zero e descarta o que o framer tinha aplicado. Curva desacelerada e sem
+ * overshoot: o card chega e para. */
+export const dropFlight = {
+  duration: 240,
+  easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+  keyframes: ({
+    transform,
+  }: {
+    transform: {
+      initial: { x: number; y: number; scaleX: number; scaleY: number }
+      final: { x: number; y: number; scaleX: number; scaleY: number }
+    }
+  }) => [
+    {
+      transform: `translate3d(${transform.initial.x}px, ${transform.initial.y}px, 0) scale(${transform.initial.scaleX}, ${transform.initial.scaleY})`,
+    },
+    {
+      transform: `translate3d(${transform.final.x}px, ${transform.final.y}px, 0) scale(${transform.final.scaleX}, ${transform.final.scaleY})`,
+    },
+  ],
 }

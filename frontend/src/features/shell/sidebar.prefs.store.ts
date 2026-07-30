@@ -11,7 +11,8 @@ const MAX_RECENTS = 5
 /** Limites do arrasto da borda: abaixo de 200px o rótulo some, acima de 400 rouba a tela. */
 export const SIDEBAR_MIN_WIDTH = 200
 export const SIDEBAR_MAX_WIDTH = 400
-export const SIDEBAR_DEFAULT_WIDTH = 256
+/** 320px é a largura fixa da side nav do Jira — ver docs/jira-ui-spec.md. */
+export const SIDEBAR_DEFAULT_WIDTH = 320
 
 export interface RecentEntry {
   /** Rota completa, com query — é o que reabre a tela exatamente onde estava. */

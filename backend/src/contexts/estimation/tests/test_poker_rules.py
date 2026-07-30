@@ -19,14 +19,15 @@ def test_initials_vazio():
     assert _initials("") == "??"
 
 
-def test_deck_points_nao_inclui_interrogacao():
-    # "?" é voto de incerteza — não é pontuação final aplicável.
-    assert "?" in FIBONACCI
-    assert "?" not in {str(p) for p in DECK_POINTS}
+def test_deck_points_nao_inclui_votos_nao_numericos():
+    # "?" é incerteza e "☕" é pedido de pausa — nenhum vira pontuação final.
+    for token in ("?", "☕"):
+        assert token in FIBONACCI
+        assert token not in {str(p) for p in DECK_POINTS}
 
 
 def test_deck_points_bate_com_fibonacci_numerico():
-    numeric = {int(v) for v in FIBONACCI if v != "?"}
+    numeric = {int(v) for v in FIBONACCI if v.isdigit()}
     assert DECK_POINTS == numeric
 
 

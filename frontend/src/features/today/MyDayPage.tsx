@@ -203,7 +203,7 @@ export function MyDayPage() {
             Você tem{" "}
             <span className="font-semibold text-ink dark:text-paper-300">{myActive.length} cards ativos</span>{" "}
             e{" "}
-            <span className="font-semibold text-ink dark:text-paper-300">{points} pontos</span>{" "}
+            <span className="font-semibold text-ink dark:text-paper-300">{points} de peso</span>{" "}
             em aberto nesta sprint.
           </p>
         ) : (
@@ -230,7 +230,7 @@ export function MyDayPage() {
               <Stat icon={CalendarClock} label="Vencem hoje" value={vencem.length} accent="text-danger" tint="bg-danger/10 text-danger" />
               <Stat icon={RefreshCw} label="Em andamento" value={inProgress.length} tint="bg-sky-500/10 text-sky-500" />
               <Stat icon={Eye} label="Em revisão" value={review.length} accent="text-amber-500" tint="bg-amber-500/10 text-amber-500" />
-              <Stat icon={Zap} label="Pontos ativos" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
+              <Stat icon={Zap} label="Peso ativo" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
             </div>
           </motion.div>
 
@@ -413,7 +413,7 @@ function BurndownCard({
               <LineChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                 {todayIdx >= 0 && (
-                  <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#6366f1" fillOpacity={0.06} />
+                  <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#8270DB" fillOpacity={0.06} />
                 )}
                 <XAxis
                   dataKey="date"
@@ -432,7 +432,7 @@ function BurndownCard({
                 <Line
                   type="monotone"
                   dataKey="ideal"
-                  stroke="#94a3b8"
+                  stroke="#8590A2"
                   strokeDasharray="4 4"
                   strokeWidth={1.5}
                   dot={false}
@@ -442,7 +442,7 @@ function BurndownCard({
                 <Line
                   type="monotone"
                   dataKey="real"
-                  stroke="#6366f1"
+                  stroke="#8270DB"
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -456,7 +456,7 @@ function BurndownCard({
                     x={data[todayIdx].date}
                     y={data[todayIdx].real as number}
                     r={4}
-                    fill="#6366f1"
+                    fill="#8270DB"
                     stroke="white"
                     strokeWidth={2}
                   />
@@ -501,7 +501,7 @@ function FocusCard({ card }: { card: BoardCard }) {
       </span>
       {card.points != null && card.points > 0 && (
         <span className="shrink-0 rounded-md bg-paper-100 dark:bg-ink-700 px-1.5 py-0.5 text-[11px] font-medium text-paper-500 dark:text-paper-400 tabular">
-          {card.points}pts
+          peso {card.points}
         </span>
       )}
     </motion.div>
@@ -632,7 +632,7 @@ function PulseIntelligence({
     inProgressCount > 3
       ? `Você tem ${inProgressCount} cards em andamento. Considere focar em concluir antes de puxar novos.`
       : points > 20
-        ? `${points} pontos em aberto. Boa carga! Mantenha o ritmo.`
+        ? `${points} de peso em aberto. Boa carga! Mantenha o ritmo.`
         : "Sua sprint está tranquila. Bom momento para antecipar itens do backlog."
 
   return (

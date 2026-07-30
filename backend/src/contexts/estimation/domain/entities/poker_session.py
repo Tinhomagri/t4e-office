@@ -12,7 +12,9 @@ class SessionStatus(str, Enum):
     DONE = "done"
 
 
-FIBONACCI = ["1", "2", "3", "5", "8", "13", "21", "?"]
+# "?" (não sei) e "☕" (pausa) são votos válidos que não viram pontuação —
+# `DECK_POINTS` só tem os numéricos.
+FIBONACCI = ["1", "2", "3", "5", "8", "13", "21", "?", "☕"]
 
 
 @dataclass

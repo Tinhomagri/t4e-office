@@ -10,7 +10,6 @@ from contexts.presence.application.assign_desk import (
     assign_desk,
     list_desk_assignments,
 )
-from contexts.presence.infrastructure.django.models import DeskAssignmentModel
 
 
 @pytest.fixture

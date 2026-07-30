@@ -31,6 +31,18 @@ export async function heartbeat(sessionId: string): Promise<void> {
   await api.post(`/poker/${sessionId}/heartbeat/`)
 }
 
+export async function sendReaction(
+  sessionId: string,
+  toUserId: string,
+  emoji: string,
+): Promise<void> {
+  await api.post(`/poker/${sessionId}/reactions/`, { to_user_id: toUserId, emoji })
+}
+
+export async function sendEmote(sessionId: string, emote: string): Promise<void> {
+  await api.post(`/poker/${sessionId}/reactions/`, { emote })
+}
+
 export async function submitVote(sessionId: string, value: string): Promise<void> {
   await api.post(`/poker/${sessionId}/vote/`, { value })
 }

@@ -453,3 +453,28 @@ export async function createTasksFromDocument(
   })
   return data
 }
+
+// ── Assistência de escrita no editor (descrição/comentário de card) ─────────
+export type WriteAssistAction =
+  | "improve"
+  | "fix_grammar"
+  | "summarize"
+  | "expand"
+  | "shorten"
+  | "to_bullets"
+  | "acceptance_criteria"
+
+export async function writeAssist(
+  workspaceId: string,
+  text: string,
+  action: WriteAssistAction,
+  instruction = "",
+): Promise<string> {
+  const { data } = await api.post<{ text: string }>("/copilot/write-assist/", {
+    workspace_id: workspaceId,
+    text,
+    action,
+    instruction,
+  })
+  return data.text
+}

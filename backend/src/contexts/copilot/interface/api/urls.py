@@ -18,6 +18,7 @@ from contexts.copilot.interface.api.views import (
     DocumentAnalyzeView,
     DocumentCreateTasksView,
     DocumentListCreateView,
+    WriteAssistView,
 )
 
 urlpatterns = [
@@ -33,6 +34,7 @@ urlpatterns = [
     path("ai-config/", AiConfigView.as_view(), name="ai-config"),
     path("ai-config/test/", AiConfigTestView.as_view(), name="ai-config-test"),
     path("chat/", CopilotChatView.as_view(), name="copilot-chat"),
+    path("write-assist/", WriteAssistView.as_view(), name="copilot-write-assist"),
     path("agent/execute/", AgentExecuteView.as_view(), name="copilot-agent-execute"),
     path("metrics/", CopilotMetricsView.as_view(), name="copilot-metrics"),
     path("feedback/", CopilotFeedbackView.as_view(), name="copilot-feedback"),

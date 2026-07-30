@@ -33,7 +33,14 @@ import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
 
+// Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
+// backend) — não é o caminho do movimento.
 const KEEPALIVE_MS = 3000
+// Piso entre publicações durante o movimento. 3s de keepalive como único canal
+// desenhava o colega até 3s atrás — daí "em cada tela estou num lugar". 150ms
+// dá ~7 amostras/s, suficiente para a interpolação do cliente suavizar sem
+// transformar cada passo numa requisição.
+const MOVE_PUBLISH_MS = 150
 
 function formatDoingSince(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -98,7 +105,14 @@ export function OfficeRoom({
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Instante da última publicação de posição — base do throttle do movimento.
+  const lastPublishRef = useRef(0)
+  const publishRef = useRef<(() => void) | null>(null)
   const engineRef = useRef<OfficeEngine | null>(null)
+  // Contador de "engine pronto". O efeito de presença precisa rodar de novo
+  // quando o motor nasce: a primeira amostra da sala costuma chegar ANTES do
+  // engine existir, e naquele instante a sincronia era descartada.
+  const [engineEpoch, setEngineEpoch] = useState(0)
   const liveRef = useRef<{ x: number; y: number; facing: Direction }>({
     x: 0.5,
     y: 0.5,
@@ -154,6 +168,14 @@ export function OfficeRoom({
       },
       onMove: (x, y, facing) => {
         liveRef.current = { x, y, facing }
+        // Publica durante o movimento, não só no keepalive: sem isto a posição
+        // que os outros veem fica até 3s velha. `performance.now()` porque só
+        // interessa o intervalo, não a hora do dia.
+        const now = performance.now()
+        if (now - lastPublishRef.current >= MOVE_PUBLISH_MS) {
+          lastPublishRef.current = now
+          publishRef.current?.()
+        }
       },
       onInteract: (seat) => {
         // Dentro da cabine, E chama o painel do elevador em vez de procurar
@@ -185,6 +207,7 @@ export function OfficeRoom({
       },
     })
     engineRef.current = engine
+    setEngineEpoch((n) => n + 1)
 
     engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
 
@@ -216,14 +239,23 @@ export function OfficeRoom({
   // Atribuições de mesa (de quem é cada uma) — vêm do backend, não mais hash.
   // A seta acima da própria mesa e os rótulos com nome de todo mundo dependem
   // dos dois: precisa recalcular sempre que a lista OU o mapa mudar.
+  //
+  // `engineEpoch` pelo mesmo motivo da sincronia de presença: as atribuições
+  // costumam chegar ANTES de o motor existir, e aí o `return` descartava a
+  // chamada. Como o React Query devolve a MESMA referência quando o payload
+  // volta deep-equal (structural sharing), o poll de 15s não disparava o efeito
+  // de novo — e a seta nunca era desenhada, mesmo com mesa atribuída.
+  //
+  // A ref é atualizada fora do guard: o `onInteract` a lê pra decidir se liga o
+  // PC, e isso não pode depender de o motor já ter nascido.
   useEffect(() => {
-    const engine = engineRef.current
-    if (!engine) return
     const rows = deskAssignments.data ?? []
     deskAssignmentsRef.current = rows
+    const engine = engineRef.current
+    if (!engine) return
     engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
     engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
-  }, [deskAssignments.data, me?.id, map])
+  }, [deskAssignments.data, me?.id, map, engineEpoch])
 
   // canManageDesks só é conhecido depois que useMembers resolve — atualiza a
   // ref lida pelo onInteract (ver comentário acima de canManageDesksRef).
@@ -232,15 +264,29 @@ export function OfficeRoom({
   }, [canManageDesks])
 
   // Presença dos outros → atores da cena.
+  //
+  // `engineEpoch` na lista de dependências é o que corrige "entrei e estou
+  // sozinho": quem entra depois recebe a primeira amostra da sala antes de o
+  // motor existir, e o `?.` descartava a chamada sem erro. Como o React Query
+  // reaproveita a MESMA referência quando o payload volta deep-equal (structural
+  // sharing), com todos parados o efeito nunca rodava de novo — e os colegas
+  // jamais entravam na cena. Movimentar alguém "consertava", porque mudava o
+  // payload. Agora o nascimento do motor também dispara a sincronia.
   useEffect(() => {
-    if (!room.data) return
-    engineRef.current?.syncRemote(room.data)
-  }, [room.data])
+    const engine = engineRef.current
+    if (!engine || !room.data) return
+    engine.syncRemote(room.data)
+  }, [room.data, engineEpoch])
 
   // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
   // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
   // Fora do andar do poker, zera: sem isso as plaquinhas apareciam sobre os
   // avatares do bullpen (andar 1), que não estão em votação nenhuma.
+  //
+  // `engineEpoch` pelo mesmo motivo dos outros dois efeitos de motor: quem
+  // chega no andar 2 com votação já rolando recebe o `sessionDetail` antes de o
+  // motor nascer, e o poll devolve a mesma referência enquanto ninguém mexe no
+  // voto — as plaquinhas nunca subiam.
   useEffect(() => {
     const engine = engineRef.current
     if (!engine) return
@@ -252,11 +298,13 @@ export function OfficeRoom({
       buildVoteBadges(sessionDetail),
       sessionDetail.status === "revealed",
     )
-  }, [sessionDetail, onPokerFloor, map])
+  }, [sessionDetail, onPokerFloor, map, engineEpoch])
 
-  // Keepalive: mantém a presença viva mesmo parado.
+  // Publicação de presença. Dois gatilhos: o movimento (via `publishRef`, com
+  // throttle) e este intervalo, que cobre quem está parado.
   useEffect(() => {
-    const send = () =>
+    const send = () => {
+      lastPublishRef.current = performance.now()
       heartbeat.mutate({
         workspace_id: workspaceId,
         x: liveRef.current.x,
@@ -267,9 +315,16 @@ export function OfficeRoom({
         // trocar de andar sem remontar o keepalive.
         floor: useWorldStore.getState().floor,
       })
+    }
+    // O engine chama isto pelo ref: ele é criado num efeito com deps próprias
+    // e não pode fechar sobre este `send`.
+    publishRef.current = send
     send()
     const t = window.setInterval(send, KEEPALIVE_MS)
-    return () => window.clearInterval(t)
+    return () => {
+      window.clearInterval(t)
+      publishRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 

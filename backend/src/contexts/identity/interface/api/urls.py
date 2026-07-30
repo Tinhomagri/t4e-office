@@ -1,6 +1,6 @@
 """Rotas do contexto identity."""
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from contexts.identity.interface.api.views import (
     ForgotPasswordView,
@@ -9,6 +9,7 @@ from contexts.identity.interface.api.views import (
     MeView,
     RegisterView,
     ResetPasswordView,
+    TokenRefreshSafeView,
     VerifyEmailView,
     WorkspaceCreateView,
 )
@@ -16,6 +17,7 @@ from contexts.identity.interface.api.workspace_views import (
     AcceptInvitationView,
     AuditLogView,
     InvitationListCreateView,
+    InvitationPreviewView,
     MemberDetailView,
     MembersView,
     RevokeInvitationView,
@@ -28,7 +30,7 @@ urlpatterns = [
     path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),
     # Login: recebe email + password (USERNAME_FIELD=email)
     path("login/", TokenObtainPairView.as_view(), name="login"),
-    path("refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("refresh/", TokenRefreshSafeView.as_view(), name="token-refresh"),
     # Login/cadastro via Google: sem senha, email já verificado pelo Google.
     path("google/login-url/", GoogleLoginUrlView.as_view(), name="google-login-url"),
     path(
@@ -57,6 +59,11 @@ urlpatterns = [
         "workspaces/<uuid:workspace_id>/audit-log/",
         AuditLogView.as_view(),
         name="workspace-audit-log",
+    ),
+    path(
+        "invitations/preview/",
+        InvitationPreviewView.as_view(),
+        name="invitation-preview",
     ),
     path(
         "invitations/accept/",

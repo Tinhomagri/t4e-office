@@ -21,6 +21,7 @@ from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoCommentRepository,
     DjangoHistoryRepository,
     DjangoProjectRepository,
+    DjangoStatusCategoryResolver,
     DjangoWorkspaceAccess,
 )
 from contexts.projects.interface.api import capabilities as caps
@@ -67,6 +68,12 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "labels": card.labels,
         "channel": card.channel,
         "publish_date": card.publish_date,
+        "resolution": card.resolution.value if card.resolution else None,
+        "resolved_at": card.resolved_at.isoformat() if card.resolved_at else None,
+        "original_estimate_seconds": card.original_estimate_seconds,
+        "remaining_estimate_seconds": card.remaining_estimate_seconds,
+        "archived": card.is_archived,
+        "archived_at": card.archived_at.isoformat() if card.archived_at else None,
         "created_at": card.created_at.isoformat() if card.created_at else None,
         "updated_at": card.updated_at.isoformat() if card.updated_at else None,
     }
@@ -125,7 +132,10 @@ class CardListCreateView(APIView):
                 jql_filter = parse_jql(jql, actor_id=str(request.user.id))
             except ValueError as exc:
                 return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-            qs = CardModel.objects.filter(project_id=project_id).filter(jql_filter)
+            qs = (
+                CardModel.objects.filter(project_id=project_id, archived_at__isnull=True)
+                .filter(jql_filter)
+            )
             project = projects.get(project_id=project_id)
             counts = _counts_map(str(project_id))
             rows = []
@@ -155,6 +165,14 @@ class CardListCreateView(APIView):
                     "labels": cm.labels or [],
                     "channel": cm.channel,
                     "publish_date": cm.publish_date,
+                    # Sem estes o card vindo por JQL cairia nos defaults do
+                    # serializer e apareceria como não resolvido no board.
+                    "resolution": cm.resolution or None,
+                    "resolved_at": cm.resolved_at,
+                    "original_estimate_seconds": cm.original_estimate_seconds,
+                    "remaining_estimate_seconds": cm.remaining_estimate_seconds,
+                    "archived": cm.archived_at is not None,
+                    "archived_at": cm.archived_at,
                 })
             return Response(CardSerializer(rows, many=True).data)
 
@@ -222,7 +240,13 @@ class CardDetailView(APIView):
                 epic_id=serializer.validated_data["epic_id"],
             )
 
-        use_case = UpdateCard(projects, cards, access, DjangoHistoryRepository())
+        use_case = UpdateCard(
+            projects,
+            cards,
+            access,
+            DjangoHistoryRepository(),
+            DjangoStatusCategoryResolver(),
+        )
         card = use_case.execute(
             card_id=card_id,
             actor_id=str(request.user.id),

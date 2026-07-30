@@ -14,8 +14,18 @@ export function useRoom(workspaceId: string | null, floor: number) {
     queryKey: ["office-room", workspaceId, floor],
     queryFn: () => officeApi.getRoom(workspaceId!, floor),
     enabled: !!workspaceId,
-    refetchInterval: 1000,
+    // 600ms: com a posição sendo publicada a cada 150ms durante o movimento, o
+    // poll passa a ser o gargalo. Menos que isso não melhora a percepção — a
+    // interpolação do cliente já cobre o intervalo entre amostras.
+    refetchInterval: 600,
+    // Aba oculta não faz poll (não há o que desenhar), mas ao voltar o foco a
+    // sala é buscada na hora: sem isso a cena reaparecia com o último estado
+    // conhecido, que podia ser de minutos antes.
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: "always",
+    // A amostra vale pelo intervalo do poll; marcá-la como fresca só faria o
+    // React Query servir cache velho ao remontar a cena (troca de andar).
+    staleTime: 0,
   })
 }
 

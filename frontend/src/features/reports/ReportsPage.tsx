@@ -44,7 +44,7 @@ import type { Card, CardPriority, CardStatus, CardType, Member } from "@/feature
 import { Button, PageHeader, Select, Spinner, cx } from "@/shared/ui/primitives"
 
 // ── Paleta (estilo Power BI) ────────────────────────────────────────────────
-const BRAND = "#6c5cf0"
+const BRAND = "#8270DB"
 
 // Relatório vazio — usado quando o workspace não tem projeto ativo, pra
 // mostrar a mesma UI (com estados vazios de cada gráfico) em vez de sumir com tudo.
@@ -59,24 +59,26 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
   briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
 }
+// Tons das escalas do tailwind.config (Atlassian). Antes eram valores padrão do
+// Tailwind, que não existem no design system e destoavam do resto do app.
 const STATUS_COLOR: Record<CardStatus, string> = {
-  backlog: "#94a3b8", todo: "#818cf8", doing: "#6c5cf0", review: "#a855f7", done: "#16a34a",
-  briefing: "#8b5cf6", criacao: "#6c5cf0", aprovacao: "#f59e0b", agendado: "#06b6d4", publicado: "#16a34a",
+  backlog: "#8590A2", todo: "#9F8FEF", doing: "#8270DB", review: "#CD519D", done: "#1F845A",
+  briefing: "#6E5DC6", criacao: "#8270DB", aprovacao: "#E2B203", agendado: "#2898BD", publicado: "#1F845A",
 }
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Épico",
   post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const TYPE_COLOR: Record<CardType, string> = {
-  feature: "#6c5cf0", bug: "#ef4444", debt: "#f97316", spike: "#06b6d4", chore: "#94a3b8", epic: "#a855f7",
-  post: "#6c5cf0", peca: "#94a3b8", campanha: "#a855f7", artigo: "#f97316", email: "#f59e0b",
+  feature: "#8270DB", bug: "#E2483D", debt: "#E56910", spike: "#2898BD", chore: "#8590A2", epic: "#CD519D",
+  post: "#8270DB", peca: "#8590A2", campanha: "#CD519D", artigo: "#E56910", email: "#E2B203",
 }
 const PRIORITY_ORDER: CardPriority[] = ["urgent", "high", "medium", "low"]
 const PRIORITY_LABEL: Record<CardPriority, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
 }
 const PRIORITY_COLOR: Record<CardPriority, string> = {
-  low: "#94a3b8", medium: "#6c5cf0", high: "#f59e0b", urgent: "#ef4444",
+  low: "#8590A2", medium: "#8270DB", high: "#E2B203", urgent: "#E2483D",
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,8 +189,8 @@ function ReportBody({
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Kpi icon={Layers} tint="from-slate-500 to-slate-700" label="Cards totais" value={m.total} sub="no projeto" />
         <Kpi icon={CheckCircle2} tint="from-emerald-500 to-green-700" label="Concluídos" value={m.done} sub={`${m.donePct}% do total`} />
-        <Kpi icon={Zap} tint="from-violet-500 to-purple-700" label="Pontos entregues" value={m.donePoints} sub={`de ${m.totalPoints} pts`} />
-        <Kpi icon={Gauge} tint="from-indigo-500 to-blue-700" label="Velocidade média" value={m.avgVel} sub="pts / sprint" />
+        <Kpi icon={Zap} tint="from-violet-500 to-purple-700" label="Peso entregue" value={m.donePoints} sub={`de ${m.totalPoints} de peso`} />
+        <Kpi icon={Gauge} tint="from-indigo-500 to-blue-700" label="Velocidade média" value={m.avgVel} sub="peso / sprint" />
         <Kpi icon={TrendingUp} tint="from-amber-500 to-orange-700" label="Em progresso" value={m.wip} sub="doing + review" />
         <Kpi icon={AlertTriangle} tint="from-rose-500 to-red-700" label="Vencidos" value={m.overdue} sub="prazo estourado" />
       </div>
@@ -246,7 +248,7 @@ function computeMetrics(reports: ProjectReports, cards: Card[]) {
     count: cards.filter((c) => c.priority === p).length,
   }))
 
-  // Carga por responsável (top 8 por pontos)
+  // Carga por responsável (top 8 por peso)
   const assigneeMap = new Map<string, { id: string | null; count: number; points: number; done: number }>()
   for (const c of cards) {
     const k = c.assignee_id ?? "__none__"
@@ -379,7 +381,7 @@ function BurndownChart({ data }: { data: ProjectReports["burndown"] }) {
       icon={LineChartIcon}
       action={data.sprint && (
         <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-          {data.sprint.total_points} pts
+          peso {data.sprint.total_points}
         </span>
       )}
     >
@@ -400,13 +402,13 @@ function BurndownChart({ data }: { data: ProjectReports["burndown"] }) {
                 <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={24} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={34} />
                 <Tooltip content={<TT />} labelFormatter={(v) => fmtDay(String(v))} />
-                <Line type="monotone" dataKey="ideal" name="Ideal" stroke="#94a3b8" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="ideal" name="Ideal" stroke="#8590A2" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
                 <Line type="monotone" dataKey="real" name="Real" stroke={BRAND} strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <Legend items={[
-            { color: "#94a3b8", label: "Ideal", dashed: true },
+            { color: "#8590A2", label: "Ideal", dashed: true },
             { color: BRAND, label: "Real" },
           ]} />
         </>
@@ -422,7 +424,7 @@ function VelocityChart({ data }: { data: ProjectReports["velocity"] }) {
 
   return (
     <ChartCard title="Velocidade" icon={TrendingUp}
-      action={data.length > 0 && <span className="text-[11px] text-paper-400">média {avg} pts</span>}>
+      action={data.length > 0 && <span className="text-[11px] text-paper-400">peso médio {avg}</span>}>
       {data.length === 0 ? (
         <EmptyChart label="Nenhuma sprint encerrada." />
       ) : (
@@ -435,13 +437,13 @@ function VelocityChart({ data }: { data: ProjectReports["velocity"] }) {
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={34} />
                 <Tooltip content={<TT />} cursor={{ fill: "rgba(108,92,240,0.06)" }} />
                 <ReferenceLine y={avg} stroke={BRAND} strokeDasharray="4 3" strokeWidth={1} />
-                <Bar dataKey="committed" name="Comprometido" fill="#d8d8e0" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="committed" name="Comprometido" fill="#DCDFE4" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="delivered" name="Entregue" fill={BRAND} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <Legend items={[
-            { color: "#d8d8e0", label: "Comprometido" },
+            { color: "#DCDFE4", label: "Comprometido" },
             { color: BRAND, label: "Entregue" },
           ]} />
         </>
@@ -465,26 +467,26 @@ function ThroughputChart({ data }: { data: { week: string; criados: number; conc
               <AreaChart data={data} margin={{ top: 5, right: 8, left: -18, bottom: 0 }}>
                 <defs>
                   <linearGradient id="cr" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#818cf8" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#9F8FEF" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#9F8FEF" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="cc" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#16a34a" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#1F845A" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#1F845A" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                 <XAxis dataKey="week" tickFormatter={fmtWeek} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                 <Tooltip content={<TT />} labelFormatter={(v) => `Semana de ${fmtWeek(String(v))}`} />
-                <Area type="monotone" dataKey="criados" name="Criados" stroke="#818cf8" strokeWidth={2} fill="url(#cr)" />
-                <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#16a34a" strokeWidth={2} fill="url(#cc)" />
+                <Area type="monotone" dataKey="criados" name="Criados" stroke="#9F8FEF" strokeWidth={2} fill="url(#cr)" />
+                <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#1F845A" strokeWidth={2} fill="url(#cc)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <Legend items={[
-            { color: "#818cf8", label: "Criados" },
-            { color: "#16a34a", label: "Concluídos" },
+            { color: "#9F8FEF", label: "Criados" },
+            { color: "#1F845A", label: "Concluídos" },
           ]} />
         </>
       )}
@@ -597,7 +599,7 @@ function WorkloadChart({ data, memberName }: {
                     <div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600" style={{ width: `${(d.points / maxPts) * 100}%` }} />
                   </div>
                 </div>
-                <span className="w-12 shrink-0 text-right text-[11px] font-semibold tabular text-brand-600 dark:text-brand-300">{d.points} pts</span>
+                <span className="w-12 shrink-0 text-right text-[11px] font-semibold tabular text-brand-600 dark:text-brand-300">peso {d.points}</span>
               </div>
             )
           })}
@@ -688,7 +690,7 @@ function Legend({ items }: { items: { color: string; label: string; dashed?: boo
 // ── Export CSV ───────────────────────────────────────────────────────────────
 function exportCsv(cards: Card[], projectKey: string, memberName: (id: string | null) => string) {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
-  const header = ["Ref", "Título", "Tipo", "Status", "Prioridade", "Pontos", "Responsável", "Prazo", "Criado em"]
+  const header = ["Ref", "Título", "Tipo", "Status", "Prioridade", "Peso", "Responsável", "Prazo", "Criado em"]
   const rows = cards.map((c) => [
     c.ref, c.title, TYPE_LABEL[c.type], STATUS_LABEL[c.status], PRIORITY_LABEL[c.priority],
     c.points ?? "", memberName(c.assignee_id), c.due_date ?? "", c.created_at?.slice(0, 10) ?? "",

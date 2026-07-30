@@ -9,7 +9,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from contexts.google.infrastructure.django.oauth_provider_impl import (
     LOGIN_SCOPES,
@@ -213,6 +215,24 @@ class ResetPasswordView(APIView):
         except ValidationError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"message": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK)
+
+
+class TokenRefreshSafeView(TokenRefreshView):
+    """Refresh que trata token órfão como 401, não como 500.
+
+    O `TokenRefreshSerializer` do simplejwt busca o usuário do `user_id` do
+    token e deixa `UserModel.DoesNotExist` subir — 500. Isso acontece sempre que
+    o banco é recriado ou o usuário é removido enquanto um refresh token válido
+    segue no browser: o front então nem sabe que precisa reautenticar, porque
+    500 não é o sinal que ele trata. 401 é a resposta correta — o token existe,
+    mas não autentica mais ninguém.
+    """
+
+    def post(self, request: Request, *args: object, **kwargs: object) -> Response:
+        try:
+            return super().post(request, *args, **kwargs)
+        except UserModel.DoesNotExist:
+            raise InvalidToken("Usuário do token não existe mais.") from None
 
 
 class MeView(APIView):

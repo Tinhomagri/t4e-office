@@ -1,14 +1,14 @@
 import { motion } from "framer-motion"
-import { Suspense, lazy, type ReactNode } from "react"
+import { type ReactNode } from "react"
 
 import { EASE } from "@/shared/lib/motion"
 import { DecorBoundary } from "@/shared/ui/DecorBoundary"
+import { SplineScene } from "@/shared/ui/SplineScene"
+import { Spotlight } from "@/shared/ui/Spotlight"
 
-// Cena WebGL (túnel wireframe) carregada sob demanda: Three.js fica fora do
-// bundle inicial das telas.
-const Scene = lazy(() =>
-  import("@/three/LoginScene").then((m) => ({ default: m.LoginScene })),
-)
+// Cena Spline (robô que acompanha o ponteiro). O runtime é lazy dentro do
+// próprio SplineScene, então nada disso entra no bundle inicial.
+const ROBOT_SCENE = "https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
 
 interface AuthLayoutProps {
   title: string
@@ -29,19 +29,24 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             derruba a tela inteira. */}
         <div className="absolute inset-0">
           <DecorBoundary>
-            <Suspense fallback={null}>
-              <Scene />
-            </Suspense>
+            {/* Halo que segue o cursor. Precisa ser irmão da cena e filho
+                direto do painel: ele promove o pai a relative/overflow-hidden. */}
+            <Spotlight className="-top-32 left-0 md:-top-16 md:left-24" size={380} />
+            {/* Reduz e sobe o robô: em escala 1 ele invade o canto inferior
+                esquerdo, onde mora a headline. */}
+            <div className="h-full w-full origin-center -translate-y-[6%] scale-[0.72]">
+              <SplineScene scene={ROBOT_SCENE} className="h-full w-full" />
+            </div>
           </DecorBoundary>
         </div>
 
-        {/* Vinheta radial: escurece as bordas → foco no centro do túnel e
-            legibilidade do branding sobreposto. */}
+        {/* Vinheta: escurece bordas e, principalmente, a base — é ali que o
+            branding fica sobre o robô. */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(120% 90% at 50% 45%, transparent 30%, rgba(10,11,13,0.75) 100%)",
+              "radial-gradient(110% 80% at 55% 38%, transparent 30%, rgba(10,11,13,0.72) 100%), linear-gradient(to top, rgba(10,11,13,0.92) 4%, transparent 42%)",
           }}
         />
 

@@ -10,10 +10,9 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-  useDndContext,
 } from "@dnd-kit/core"
 import { useQueryClient } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
   ArrowLeft,
   ArrowRight,
@@ -32,21 +31,24 @@ import {
   Pencil,
   Plus,
   Rows3,
+  SlidersHorizontal,
   Trash2,
   X,
   Zap,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { forwardRef, useEffect, useMemo, useState } from "react"
+import type { Ref } from "react"
+import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
-import { EASE, dropZone, liftCard, popCheck, settleSpring } from "@/shared/lib/motion"
+import { cardFade, dragLift, dropFlight, popCheck, settleSpring } from "@/shared/lib/motion"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
-import { useBoardPrefs, colKey, type SwimlaneMode } from "../board.prefs.store"
+import { useBoardPrefs, colKey } from "../board.prefs.store"
+import type { SwimlaneMode } from "@/features/workspace/workspace.types"
 import {
   ColoredAvatar,
   InitialsDot,
-  PRIORITY_BAR,
   PRIORITY_LABEL,
   STATUS_LABEL,
   TYPE_COLOR,
@@ -60,6 +62,7 @@ import {
   useCreateCard,
   useCreateSavedFilter,
   useCreateSprint,
+  useBoardConfig,
   useCreateWorkflowStatus,
   useDeleteSavedFilter,
   useDeleteWorkflowStatus,
@@ -67,6 +70,7 @@ import {
   useMembers,
   useProjectPermissions,
   useSprints,
+  useUpdateBoardConfig,
   useUpdateCard,
   useUpdateWorkflowStatus,
   useWorkflowStatuses,
@@ -98,6 +102,7 @@ const SWIMLANE_LABEL: Record<SwimlaneMode, string> = {
   epic: "Épico",
   assignee: "Responsável",
   priority: "Prioridade",
+  subtask: "Subtarefa",
 }
 
 export function KanbanView({
@@ -128,14 +133,16 @@ export function KanbanView({
   const createWorkflowStatus = useCreateWorkflowStatus(projectId)
   const deleteWorkflowStatus = useDeleteWorkflowStatus(projectId)
   const updateWorkflowStatus = useUpdateWorkflowStatus(projectId)
-  const [manageWorkflowOpen, setManageWorkflowOpen] = useState(false)
   const [jqlResults, setJqlResults] = useState<Card[] | null>(null)
   const [chipJql, setChipJql] = useState<string | null>(null)
   const [currentJql, setCurrentJql] = useState("")
   const [saveFilterOpen, setSaveFilterOpen] = useState(false)
 
-  const swimlane = useBoardPrefs((s) => s.swimlanes[projectId] ?? "none")
-  const setSwimlane = useBoardPrefs((s) => s.setSwimlane)
+  // Swimlane vem da config do quadro (compartilhada com o time), não mais do
+  // localStorage — assim todo mundo vê o board agrupado do mesmo jeito.
+  const { data: boardConfig } = useBoardConfig(projectId)
+  const updateBoardConfig = useUpdateBoardConfig(projectId)
+  const swimlane: SwimlaneMode = boardConfig?.swimlane_mode ?? "none"
 
   const columns: WorkflowStatus[] = useMemo(
     () => [...(workflowStatuses ?? [])].sort((a, b) => a.order - b.order),
@@ -143,6 +150,9 @@ export function KanbanView({
   )
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  // O voo do clone é uma animação WAAPI de duração fixa, fora do alcance do
+  // framer: sem este guarda ele ignoraria `prefers-reduced-motion`.
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     const active = sprints?.find((s) => s.status === "active")
@@ -255,7 +265,10 @@ export function KanbanView({
           )}
 
           {/* Swimlane / agrupar por */}
-          <SwimlaneDropdown mode={swimlane} onChange={(m) => setSwimlane(projectId, m)} />
+          <SwimlaneDropdown
+            mode={swimlane}
+            onChange={(m) => updateBoardConfig.mutate({ swimlane_mode: m })}
+          />
 
           {/* Filter button */}
           <button
@@ -289,13 +302,9 @@ export function KanbanView({
             <BarChart3 className="size-3.5" /> Insights
           </button>
 
-          {/* Workflow manager */}
-          <button
-            onClick={() => setManageWorkflowOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-dashed border-paper-300 px-3 py-1.5 text-xs font-medium text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
-          >
-            <Zap className="size-3.5" /> Workflow
-          </button>
+          {/* Menu do board (…): workflow já é gerenciado nas colunas, então só
+              tem Configurações — não vale um botão próprio na toolbar. */}
+          <BoardMenu projectId={projectId} />
 
           {/* Global create */}
           <button
@@ -367,7 +376,7 @@ export function KanbanView({
                   onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
                 />
               ) : (
-                <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 288}px` }}>
+                <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
                   {columns.map((ws, i) => (
                     <Column
                       key={ws.slug}
@@ -378,6 +387,10 @@ export function KanbanView({
                       members={members ?? []}
                       projectId={projectId}
                       sprintId={currentSprintId}
+                      wipLimit={ws.wip_limit}
+                      onWipChange={(wip_limit) =>
+                        updateWorkflowStatus.mutate({ statusId: ws.id, input: { wip_limit } })
+                      }
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
                       onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
@@ -394,17 +407,22 @@ export function KanbanView({
                   <AddColumn
                     projectId={projectId}
                     onCreate={(name) =>
-                      createWorkflowStatus.mutateAsync({ name, category: "todo", color: "#6b7280" })
+                      createWorkflowStatus.mutateAsync({ name, category: "todo", color: "#626F86" })
                     }
                   />
                 </div>
               )}
-              <DragOverlay dropAnimation={null}>
+              {/* `key` e `id` são obrigatórios: o AnimationManager do dnd-kit só
+                  segura o clone durante o voo de drop se o filho tiver os dois —
+                  sem eles a animação era descartada e o card teleportava. */}
+              <DragOverlay dropAnimation={reduceMotion ? null : dropFlight}>
                 {activeCard ? (
                   <motion.div
-                    initial={{ scale: 1, rotate: 0 }}
-                    animate={{ scale: 1.04, rotate: -2.5 }}
-                    transition={liftCard}
+                    key={activeCard.id}
+                    id={activeCard.id}
+                    initial={{ scale: 1 }}
+                    animate={{ scale: 1.02 }}
+                    transition={dragLift}
                     className="cursor-grabbing"
                   >
                     <CardCell card={activeCard} members={members ?? []} dragging />
@@ -427,13 +445,6 @@ export function KanbanView({
 
       {/* Modals */}
       <NewSprintModal projectId={projectId} open={newSprintOpen} onClose={() => setNewSprintOpen(false)} />
-      <ManageWorkflowModal
-        open={manageWorkflowOpen}
-        statuses={columns}
-        onClose={() => setManageWorkflowOpen(false)}
-        onCreate={(input) => createWorkflowStatus.mutateAsync(input)}
-        onDelete={(id) => deleteWorkflowStatus.mutate(id)}
-      />
       {saveFilterOpen && (
         <SaveFilterModal
           projectId={projectId}
@@ -481,6 +492,38 @@ function SwimlaneDropdown({ mode, onChange }: { mode: SwimlaneMode; onChange: (m
                 {m === mode && <Check className="size-3.5" />}
               </button>
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── board menu (…) ───────────────────────────────────────────────────────────
+
+function BoardMenu({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Mais opções do quadro"
+        className="grid size-8 place-items-center rounded-full border border-paper-300 text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:hover:text-paper"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1 shadow-pop">
+            <Link
+              to={`/app/boards/${projectId}/settings`}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-1.5 text-left text-xs text-ink dark:text-paper hover:bg-paper-100 dark:hover:bg-ink-700"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Configurações do quadro
+            </Link>
           </div>
         </>
       )}
@@ -769,6 +812,13 @@ function SwimlaneBoard({
         { key: "_none", label: "Sem responsável", cards: nonEpic.filter((c) => !c.assignee_id) },
       ]
     }
+    if (mode === "subtask") {
+      // Separa o trabalho que pendura em outro card do trabalho de topo.
+      return [
+        { key: "_parent", label: "Itens principais", cards: nonEpic.filter((c) => !c.parent_id) },
+        { key: "_subtask", label: "Subtarefas", cards: nonEpic.filter((c) => !!c.parent_id) },
+      ]
+    }
     // priority — da mais urgente para a mais baixa (estilo Jira).
     const order: CardPriority[] = ["urgent", "high", "medium", "low"]
     return order.map((p) => ({
@@ -779,7 +829,7 @@ function SwimlaneBoard({
   }, [mode, epics, members, nonEpic])
 
   return (
-    <div className="flex flex-col gap-6" style={{ minWidth: `${columns.length * 288}px` }}>
+    <div className="flex flex-col gap-6" style={{ minWidth: `${columns.length * 296}px` }}>
       {groups.map((group) => {
         if (group.cards.length === 0) return null
         return (
@@ -808,6 +858,7 @@ function SwimlaneBoard({
                   members={members}
                   projectId={projectId}
                   sprintId={sprintId}
+                  wipLimit={ws.wip_limit}
                   onAddDetailed={() => onAddDetailed(ws.slug as CardStatus)}
                   onOpen={onOpen}
                   onDone={onDone}
@@ -839,6 +890,8 @@ function Column({
   onRename,
   onMoveLeft,
   onMoveRight,
+  wipLimit,
+  onWipChange,
   compact = false,
 }: {
   status: string
@@ -848,6 +901,9 @@ function Column({
   members: Member[]
   projectId: string
   sprintId: string | null
+  // Ausentes nas swimlanes, onde o WIP é só exibido e não editável.
+  wipLimit?: number | null
+  onWipChange?: (limit: number | null) => void
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
@@ -860,13 +916,13 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: status })
   const totalPoints = cards.reduce((acc, c) => acc + (c.points ?? 0), 0)
   const displayLabel = label ?? (STATUS_LABEL[status as CardStatus] ?? status)
-  const displayColor = color ?? "#6b7280"
+  const displayColor = color ?? "#626F86"
 
+  // Colapso segue local: é preferência de visualização de cada pessoa, ao
+  // contrário do WIP, que é regra do time e vem do WorkflowStatus.
   const key = colKey(projectId, status)
-  const wipLimit = useBoardPrefs((s) => s.wipLimits[key])
   const collapsed = useBoardPrefs((s) => s.collapsed[key] ?? false)
   const toggleCollapse = useBoardPrefs((s) => s.toggleCollapse)
-  const setWip = useBoardPrefs((s) => s.setWip)
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(displayLabel)
@@ -903,22 +959,28 @@ function Column({
   }
 
   return (
-    <motion.div
+    // Sem `motion` nem `scale` no drop: escalar o painel arrastava junto o header
+    // e todos os cards de dentro. A troca de cor/borda abaixo (transição CSS) já
+    // diz "solta aqui" sem mover nada — e sai o `will-change` permanente, que
+    // mantinha uma camada de composição por coluna sem necessidade.
+    <div
       ref={setNodeRef}
-      variants={dropZone}
-      animate={isOver ? "over" : "idle"}
       className={cx(
-        "flex w-[272px] shrink-0 flex-col rounded-2xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out will-change-transform",
+        // 284 = card de 272 + 4px de padding lateral da lista + 2px de borda em cada
+        // lado. É o que faz o card bater exatamente com os 272px do Jira.
+        "flex w-[284px] shrink-0 flex-col rounded-xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
         compact ? "max-h-[300px]" : "max-h-[calc(100vh-22rem)]",
         isOver
           ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow"
           : overWip
             ? "border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10"
-            : "border-transparent bg-paper-100/70 dark:bg-ink-900/60",
+            // Opaco, não `/60`: com alpha a coluna se misturava à página e o board
+            // perdia a leitura de "painel". Um passo acima da página, como no Jira.
+            : "border-transparent bg-paper-100/70 dark:bg-ink-900",
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+      <div className="group/head flex items-center justify-between gap-2 px-3 pt-3 pb-2">
         <div className="flex min-w-0 items-center gap-2">
           <button
             onClick={() => toggleCollapse(key)}
@@ -941,26 +1003,41 @@ function Column({
               className="w-28 rounded border border-brand-300 bg-paper dark:bg-ink-900 px-1 py-0.5 text-[12px] font-bold uppercase tracking-wider text-ink dark:text-paper outline-none"
             />
           ) : (
-            <span className="truncate text-[12px] font-bold uppercase tracking-wider text-paper-600 dark:text-paper-400">
+            // Sem uppercase + bold + tracking: o Jira usa o rótulo em caixa
+            // normal, e o peso todo no header competia com o título dos cards.
+            <span className="truncate text-sm font-medium leading-5 text-paper-600 dark:text-paper-300">
               {displayLabel}
             </span>
           )}
           <span
             className={cx(
-              "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-semibold",
+              // 12/16 medium: a contagem do header de coluna do Jira.
+              "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-xs font-medium leading-4",
+              // Fora do estouro de WIP a contagem é texto solto, sem pílula: no
+              // Jira ela é informação de apoio, não um badge disputando atenção.
               overWip
-                ? "bg-red-100 text-red-700"
-                : "bg-paper-200 dark:bg-ink-800 text-paper-600 dark:text-paper-400",
+                ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                : "text-paper-400",
             )}
             title={wipLimit != null ? `${cards.length} de ${wipLimit} (limite WIP)` : undefined}
           >
             {wipLimit != null ? `${cards.length}/${wipLimit}` : cards.length}
           </span>
           {totalPoints > 0 && (
-            <span className="shrink-0 text-[10px] font-medium text-paper-400 tabular">{totalPoints}pts</span>
+            <span className="shrink-0 text-[10px] font-medium text-paper-400 tabular">peso {totalPoints}</span>
           )}
         </div>
-        <div className="relative flex items-center gap-0.5">
+        {/* Ações só no hover/foco da coluna (como no Jira): dois ícones fixos por
+            coluna somavam mais controles que conteúdo num board com 5 colunas.
+            `focus-visible:opacity-100` mantém o acesso por teclado. */}
+        <div
+          className={cx(
+            "relative flex items-center gap-0.5 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100",
+            // Com o menu aberto tem de continuar visível: o dropdown é filho
+            // deste wrapper e sairia da tela junto ao tirar o mouse.
+            menu ? "opacity-100" : "opacity-0",
+          )}
+        >
           <button
             onClick={onAddDetailed}
             className="grid size-6 place-items-center rounded-md text-paper-400 transition-colors hover:bg-paper-200 dark:hover:bg-ink-700 hover:text-ink dark:hover:text-paper"
@@ -1000,8 +1077,10 @@ function Column({
                     min={0}
                     defaultValue={wipLimit ?? ""}
                     placeholder="Sem limite"
-                    onChange={(e) =>
-                      setWip(key, e.target.value === "" ? null : Number(e.target.value))
+                    disabled={!onWipChange}
+                    // Grava no blur, não a cada tecla: cada mudança é um PATCH.
+                    onBlur={(e) =>
+                      onWipChange?.(e.target.value === "" ? null : Number(e.target.value))
                     }
                     className="w-full rounded border border-paper-300 dark:border-ink-600 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
                   />
@@ -1023,25 +1102,10 @@ function Column({
         </div>
       </div>
 
-      {/* Drop zone hint — entra/sai animado */}
-      <AnimatePresence initial={false}>
-        {isOver && (
-          <motion.div
-            key="drop-hint"
-            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.18, ease: EASE }}
-            className="mx-2 overflow-hidden rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 py-2 text-center text-xs font-medium text-brand-500 dark:bg-brand-900/20"
-          >
-            Soltar aqui
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Card list */}
-      <div className="flex min-h-[60px] flex-1 flex-col gap-2 overflow-y-auto p-2 scrollbar-slim">
-        <AnimatePresence mode="popLayout" initial={false}>
+      {/* gap 4px e padding 1px/4px — o scroll-container do Jira. */}
+      <div className="flex min-h-[60px] flex-1 flex-col gap-1 overflow-y-auto px-1 py-px scrollbar-slim">
+        <AnimatePresence initial={false}>
           {cards.map((card) => (
             <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
           ))}
@@ -1060,7 +1124,7 @@ function Column({
       <div className="p-2 pt-0">
         <QuickAdd projectId={projectId} status={status} sprintId={sprintId} />
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -1105,14 +1169,14 @@ function AddColumn({
       <button
         onClick={() => setOpen(true)}
         title="Criar coluna"
-        className="flex h-11 w-[272px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-paper-300 text-sm font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-700 dark:hover:border-brand-500/50"
+        className="flex h-11 w-[284px] shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-paper-300 text-sm font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-700 dark:hover:border-brand-500/50"
       >
         <Plus className="size-4" /> Criar coluna
       </button>
     )
 
   return (
-    <div className="flex w-[272px] shrink-0 flex-col gap-2 rounded-2xl border-2 border-brand-300 bg-paper p-2 dark:bg-ink-900">
+    <div className="flex w-[284px] shrink-0 flex-col gap-2 rounded-xl border-2 border-brand-300 bg-paper p-2 dark:bg-ink-900">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -1220,8 +1284,8 @@ function InsightsPanel({
         </button>
       </div>
 
-      {/* Progresso em pontos */}
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-paper-400">Progresso (pontos)</p>
+      {/* Progresso em peso */}
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-paper-400">Progresso (peso)</p>
       {totalPts > 0 ? (
         <>
           <div className="flex h-2.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
@@ -1231,7 +1295,7 @@ function InsightsPanel({
           </div>
           <div className="mt-1.5 flex justify-between text-[10px] text-paper-500">
             <span>✓ {pts(done)} feito</span>
-            <span>{pts(doing)} andamento</span>
+            <span>{pts(doing)} em andamento</span>
             <span>{pts(todo)} a fazer</span>
           </div>
         </>
@@ -1358,49 +1422,61 @@ function QuickAdd({
 
 // ─── card components ──────────────────────────────────────────────────────────
 
-function DraggableCard({
-  card,
-  members,
-  onOpen,
-  onDone,
-}: {
+function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
+  return (node: T) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") ref(node)
+      else if (ref && typeof ref === "object") (ref as { current: T }).current = node
+    }
+  }
+}
+
+const DraggableCard = forwardRef<HTMLDivElement, {
   card: Card
   members: Member[]
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
-}) {
+}>(function DraggableCard({ card, members, onOpen, onDone }, forwardedRef) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
-  // Enquanto QUALQUER card está sendo arrastado, desligamos a animação de layout:
-  // ela reflui os vizinhos a cada frame do ponteiro (e quando o indicador de drop
-  // aparece), o que causava o "tremido". No drop, `active` volta a null e a
-  // animação religa, fazendo o card deslizar suavemente para a nova coluna.
-  const { active } = useDndContext()
-  const dragActive = active != null
   return (
     <motion.div
-      ref={setNodeRef}
+      ref={mergeRefs<HTMLDivElement>(setNodeRef, forwardedRef)}
       {...attributes}
       {...listeners}
-      layout={dragActive ? false : "position"}
-      layoutId={card.id}
-      initial={{ opacity: 0, scale: 0.97 }}
-      // O card de origem "esvazia" enquanto o clone é carregado no overlay:
-      // encolhe e apaga, como se tivesse sido retirado do lugar.
-      animate={{
-        opacity: isDragging ? 0.35 : 1,
-        scale: isDragging ? 0.96 : 1,
-        filter: isDragging ? "grayscale(0.4)" : "grayscale(0)",
-      }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      // Assentamento elástico no drop (quando religa o layout).
-      transition={settleSpring}
+      // Uma única autoridade sobre o transform. Antes havia três disputando o
+      // mesmo elemento — `layoutId` (FLIP de shared element entre colunas),
+      // `layout="position"` e o `mode="popLayout"` do AnimatePresence —, e o
+      // resultado era o card tremendo e saltando no drop. Quem move o card de
+      // uma coluna para a outra agora é só o voo do clone no DragOverlay; aqui
+      // ficam apenas entrada e saída da lista.
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={cardFade}
       onClick={() => onOpen(card)}
       className="cursor-grab touch-none active:cursor-grabbing"
     >
-      <CardCell card={card} members={members} onDone={onDone} />
+      {/* Slot fantasma: o card sai de cena e fica o buraco do tamanho exato,
+          então a coluna não reflui durante o arrasto. `visibility` (e não
+          `display`) preserva a altura, e o clone no cursor é o único conteúdo
+          visível — sem cópia pálida competindo com ele. */}
+      <div
+        className={cx(
+          // Transição nas cores: sem isto a moldura tracejada piscava de uma vez
+          // no primeiro frame do arrasto.
+          "rounded-lg border border-dashed transition-colors duration-150",
+          isDragging
+            ? "border-paper-300 dark:border-ink-600 bg-paper-100/50 dark:bg-ink-900/40"
+            : "border-transparent",
+        )}
+      >
+        <div className={cx(isDragging && "invisible")}>
+          <CardCell card={card} members={members} onDone={onDone} />
+        </div>
+      </div>
     </motion.div>
   )
-}
+})
 
 export function CardCell({
   card,
@@ -1427,24 +1503,21 @@ export function CardCell({
   return (
     <div
       className={cx(
-        "group relative overflow-hidden rounded-md border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
+        "group relative overflow-hidden rounded-lg border bg-paper dark:bg-ink-800 shadow-card dark:shadow-none",
         "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
-        "hover:-translate-y-1 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
+        // Levantar 4px a cada hover fazia a coluna inteira "respirar" ao passar o
+        // mouse; 2px já dá o retorno sem agitar o board.
+        "hover:-translate-y-0.5 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
         "active:translate-y-0 active:shadow-card active:duration-75",
         dragging && "shadow-pop ring-1 ring-ink/10",
         isEpic ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800" : "border-paper-200 dark:border-ink-700",
         isDone && "opacity-60",
       )}
     >
-      {/* Barra de prioridade (cor cheia à esquerda) — engrossa no hover */}
-      <span
-        className={cx(
-          "absolute inset-y-0 left-0 w-1 origin-left transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-[2.2]",
-          PRIORITY_BAR[card.priority],
-        )}
-      />
-
-      <div className="px-3 py-2.5 pl-4">
+      {/* Sem barra de prioridade: o sinal já vem do PriorityIcon no rodapé, e a
+          faixa colorida cheia (que ainda engrossava no hover) era o que fazia o
+          board parecer carregado ao lado do Jira. */}
+      <div className="px-3 py-2.5">
         {/* Título + checkbox de conclusão */}
         <div className="flex items-start gap-2">
           {onDone && (
@@ -1478,7 +1551,9 @@ export function CardCell({
             </motion.button>
           )}
           <p className={cx(
-            "text-[13px] font-medium leading-snug text-ink dark:text-paper line-clamp-2",
+            // 14/20 regular: a tipografia do título de card do Jira. O clamp em 2
+            // linhas é nosso — o Jira deixa o card crescer.
+            "text-sm font-normal leading-5 text-ink dark:text-paper line-clamp-2",
             isDone && "line-through text-paper-400",
           )}>
             {card.title}
@@ -1544,7 +1619,7 @@ export function CardCell({
           </div>
         )}
 
-        {/* Rodapé: tipo + chave + prioridade + pontos + responsável */}
+        {/* Rodapé: tipo + chave + prioridade + peso + responsável */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <IssueTypeIcon type={card.type} />
@@ -1619,104 +1694,6 @@ function ScopeChip({
 }
 
 // ─── modals ───────────────────────────────────────────────────────────────────
-
-function ManageWorkflowModal({
-  open,
-  statuses,
-  onClose,
-  onCreate,
-  onDelete,
-}: {
-  open: boolean
-  statuses: WorkflowStatus[]
-  onClose: () => void
-  onCreate: (input: { name: string; category: WorkflowStatus["category"]; color: string }) => Promise<unknown>
-  onDelete: (id: string) => void
-}) {
-  const [name, setName] = useState("")
-  const [category, setCategory] = useState<WorkflowStatus["category"]>("todo")
-  const [color, setColor] = useState("#6b7280")
-  const [saving, setSaving] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  const save = async () => {
-    if (!name.trim()) return
-    setSaving(true)
-    setCreateError(null)
-    try {
-      await onCreate({ name: name.trim(), category, color })
-      setName("")
-    } catch (e) {
-      setCreateError(errMsg(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Gerenciar workflow"
-      description="Configure os status do board deste projeto."
-      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}
-    >
-      <div className="space-y-3">
-        {/* Existing statuses */}
-        <ul className="space-y-1.5">
-          {statuses.map((s) => (
-            <li key={s.id} className="flex items-center gap-2.5 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-900 px-3 py-2">
-              <span className="size-3 rounded-full border border-paper-200 dark:border-ink-700" style={{ backgroundColor: s.color }} />
-              <span className="flex-1 text-sm font-medium text-ink dark:text-paper">{s.name}</span>
-              <span className="text-[10px] text-paper-400 uppercase tracking-wide">{s.category}</span>
-              {!s.is_default && (
-                <button onClick={() => onDelete(s.id)} className="text-paper-300 hover:text-danger">
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        {/* Create new */}
-        <div className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-900 p-3 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-paper-400">Novo status</p>
-          <div className="flex gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="Nome do status"
-              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
-            />
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="size-9 cursor-pointer rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 p-0.5"
-              title="Cor"
-            />
-          </div>
-          <div className="flex gap-2 items-center">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as WorkflowStatus["category"])}
-              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
-            >
-              <option value="todo">A fazer</option>
-              <option value="in_progress">Em andamento</option>
-              <option value="done">Concluído</option>
-            </select>
-            <Button size="sm" onClick={save} loading={saving} disabled={!name.trim()}>
-              Criar
-            </Button>
-          </div>
-          {createError && <p className="text-xs text-danger">{createError}</p>}
-        </div>
-      </div>
-    </Modal>
-  )
-}
 
 function NewSprintModal({
   projectId,
