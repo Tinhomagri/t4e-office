@@ -239,14 +239,23 @@ export function OfficeRoom({
   // Atribuições de mesa (de quem é cada uma) — vêm do backend, não mais hash.
   // A seta acima da própria mesa e os rótulos com nome de todo mundo dependem
   // dos dois: precisa recalcular sempre que a lista OU o mapa mudar.
+  //
+  // `engineEpoch` pelo mesmo motivo da sincronia de presença: as atribuições
+  // costumam chegar ANTES de o motor existir, e aí o `return` descartava a
+  // chamada. Como o React Query devolve a MESMA referência quando o payload
+  // volta deep-equal (structural sharing), o poll de 15s não disparava o efeito
+  // de novo — e a seta nunca era desenhada, mesmo com mesa atribuída.
+  //
+  // A ref é atualizada fora do guard: o `onInteract` a lê pra decidir se liga o
+  // PC, e isso não pode depender de o motor já ter nascido.
   useEffect(() => {
-    const engine = engineRef.current
-    if (!engine) return
     const rows = deskAssignments.data ?? []
     deskAssignmentsRef.current = rows
+    const engine = engineRef.current
+    if (!engine) return
     engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
     engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
-  }, [deskAssignments.data, me?.id, map])
+  }, [deskAssignments.data, me?.id, map, engineEpoch])
 
   // canManageDesks só é conhecido depois que useMembers resolve — atualiza a
   // ref lida pelo onInteract (ver comentário acima de canManageDesksRef).
@@ -273,6 +282,11 @@ export function OfficeRoom({
   // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
   // Fora do andar do poker, zera: sem isso as plaquinhas apareciam sobre os
   // avatares do bullpen (andar 1), que não estão em votação nenhuma.
+  //
+  // `engineEpoch` pelo mesmo motivo dos outros dois efeitos de motor: quem
+  // chega no andar 2 com votação já rolando recebe o `sessionDetail` antes de o
+  // motor nascer, e o poll devolve a mesma referência enquanto ninguém mexe no
+  // voto — as plaquinhas nunca subiam.
   useEffect(() => {
     const engine = engineRef.current
     if (!engine) return
@@ -284,7 +298,7 @@ export function OfficeRoom({
       buildVoteBadges(sessionDetail),
       sessionDetail.status === "revealed",
     )
-  }, [sessionDetail, onPokerFloor, map])
+  }, [sessionDetail, onPokerFloor, map, engineEpoch])
 
   // Publicação de presença. Dois gatilhos: o movimento (via `publishRef`, com
   // throttle) e este intervalo, que cobre quem está parado.
