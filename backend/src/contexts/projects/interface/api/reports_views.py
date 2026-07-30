@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.projects.domain.entities.card import CardResolution
 from contexts.projects.infrastructure.django.models import CardModel, SprintModel
 from contexts.projects.interface.api.permissions import assert_project_member
 
@@ -89,9 +90,9 @@ def _is_delivered(card) -> bool:
     status — o backfill da migration 0023 cobre o histórico, mas um card criado
     fora do fluxo normal ainda pode chegar aqui sem `resolution`.
     """
-    if card.resolution is not None:
-        return card.resolution.counts_as_delivered
-    return card.status.value == "done"
+    if card.resolution:
+        return CardResolution(card.resolution).counts_as_delivered
+    return card.status == "done"
 
 
 # ── Velocidade ────────────────────────────────────────────────────────────────
