@@ -59,13 +59,15 @@ export const T = {
   DECK: 11,
   /** Guarda-corpo: montantes com vão, céu aparece no meio. */
   RAILING: 12,
+  /** Porta do elevador embutida na parede — não é prop solto, é tile. */
+  ELEVATOR_DOOR: 13,
 } as const
 
 export type TileId = (typeof T)[keyof typeof T]
 
 /** Tiles que bloqueiam passagem. */
 export const SOLID_TILES = new Set<number>([
-  T.VOID, T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.RAILING,
+  T.VOID, T.WALL, T.WALL_TOP, T.WALL_V, T.GLASS, T.RAILING, T.ELEVATOR_DOOR,
 ])
 
 /**
@@ -249,6 +251,29 @@ function drawWallV(ctx: Ctx, v: number): void {
   rect(ctx, 14, 0, 2, TILE, shade(top, 0.82))
 }
 
+/**
+ * Porta do elevador embutida na parede — duas folhas de aço com junta ao
+ * meio e indicador de andar aceso em cima. Substitui o prop solto: agora é
+ * bloco de parede igual à vidraça, então acompanha a altura dela sem
+ * flutuar desencostada.
+ */
+function drawElevatorDoor(ctx: Ctx, v: number): void {
+  rect(ctx, 0, 0, TILE, TILE, COLORS.steel)
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      if (hash2(x + v * 5, y + v * 7, 11) > 0.92) px(ctx, x, y, shade(COLORS.steel, 0.85))
+    }
+  }
+  rect(ctx, 0, 0, TILE, 1, tint(COLORS.steel, 1.2))
+  rect(ctx, 0, 15, TILE, 1, COLORS.metalDark)
+  // Junta central das duas folhas.
+  rect(ctx, 7, 0, 2, TILE, shade(COLORS.steel, 0.55))
+  // Indicador de andar, sempre aceso.
+  rect(ctx, 5, 2, 6, 2, "#2f363d")
+  px(ctx, 7, 2, "#e8d24a")
+  px(ctx, 8, 2, "#e8d24a")
+}
+
 function drawDoorway(ctx: Ctx, v: number): void {
   rect(ctx, 0, 0, TILE, TILE, COLORS.wood)
   drawWood(ctx, v)
@@ -270,6 +295,7 @@ const PAINTERS: Record<number, (ctx: Ctx, v: number) => void> = {
   [T.GLASS_DOOR]: drawGlassDoor,
   [T.DECK]: drawDeck,
   [T.RAILING]: drawRailing,
+  [T.ELEVATOR_DOOR]: drawElevatorDoor,
 }
 
 export interface TileAtlas {

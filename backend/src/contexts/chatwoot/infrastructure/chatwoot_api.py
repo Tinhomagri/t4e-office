@@ -44,6 +44,25 @@ def _unwrap(payload):
     return payload or []
 
 
+def _absolutize(url: str, root: str) -> str:
+    """Resolve uma URL de anexo relativa contra o domínio do Chatwoot.
+
+    Instância self-hosted sem `active_storage.service_url_options` configurado
+    devolve `data_url`/`thumb_url` como caminho (`/rails/active_storage/...`)
+    em vez de URL absoluta. O browser resolve isso contra o domínio da NOSSA
+    app, não do Chatwoot — a imagem quebra e o link não abre, sem erro visível.
+    """
+    if not url or url.startswith(("http://", "https://")):
+        return url
+    return f"{root}{url}" if url.startswith("/") else f"{root}/{url}"
+
+
+def _fix_attachment_urls(message, root: str) -> None:
+    for attachment in message.attachments:
+        attachment.data_url = _absolutize(attachment.data_url, root)
+        attachment.thumb_url = _absolutize(attachment.thumb_url, root)
+
+
 class ChatwootHttpGateway:
     """Implementação real do `ChatwootGateway` sobre httpx."""
 
@@ -126,14 +145,26 @@ class ChatwootHttpGateway:
         }
         if labels:
             params["labels[]"] = labels
-        return ConversationPage.from_api(self._get("/conversations", **params))
+        page = ConversationPage.from_api(self._get("/conversations", **params))
+        self._fix_page_attachments(page)
+        return page
 
     def filter_conversations(self, payload: list[dict], *, page: int = 1) -> ConversationPage:
         raw = self._post("/conversations/filter", {"payload": payload}, page=page)
-        return ConversationPage.from_api(raw)
+        result = ConversationPage.from_api(raw)
+        self._fix_page_attachments(result)
+        return result
 
     def get_conversation(self, conversation_id: int) -> Conversation:
-        return Conversation.from_api(self._get(f"/conversations/{conversation_id}"))
+        conversation = Conversation.from_api(self._get(f"/conversations/{conversation_id}"))
+        for message in conversation.messages:
+            _fix_attachment_urls(message, self._root)
+        return conversation
+
+    def _fix_page_attachments(self, page: ConversationPage) -> None:
+        for conversation in page.conversations:
+            for message in conversation.messages:
+                _fix_attachment_urls(message, self._root)
 
     def conversation_counts(self) -> dict:
         raw = self._get("/conversations/meta")
@@ -190,9 +221,12 @@ class ChatwootHttpGateway:
     # ── Mensagens ────────────────────────────────────────────────────────────
     def list_messages(self, conversation_id: int, *, before: int | None = None) -> list[Message]:
         raw = self._get(f"/conversations/{conversation_id}/messages", before=before)
-        return [
+        messages = [
             Message.from_api(m, conversation_id=conversation_id) for m in (_unwrap(raw) or [])
         ]
+        for message in messages:
+            _fix_attachment_urls(message, self._root)
+        return messages
 
     def send_message(
         self,
@@ -216,7 +250,9 @@ class ChatwootHttpGateway:
         if template_params:
             body["template_params"] = template_params
         raw = self._post(f"/conversations/{conversation_id}/messages", body)
-        return Message.from_api(raw, conversation_id=conversation_id)
+        message = Message.from_api(raw, conversation_id=conversation_id)
+        _fix_attachment_urls(message, self._root)
+        return message
 
     def delete_message(self, conversation_id: int, message_id: int) -> None:
         self._delete(f"/conversations/{conversation_id}/messages/{message_id}")

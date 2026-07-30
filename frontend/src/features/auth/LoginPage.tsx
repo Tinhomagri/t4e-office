@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertCircle, Lock, Mail } from "lucide-react"
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { extractApiError } from "@/shared/api/client"
 import { fadeUpItem, revealCollapse, staggerContainer } from "@/shared/lib/motion"
@@ -19,7 +19,11 @@ export function LoginPage() {
   const setSession = useAuthStore((s) => s.setSession)
   const setUser = useAuthStore((s) => s.setUser)
 
-  const [email, setEmail] = useState("")
+  // Vindo de um convite: o e-mail já é conhecido e o destino é voltar para o
+  // link do convite, não para /app — senão a pessoa precisa reabrir o e-mail.
+  const [params] = useSearchParams()
+  const next = params.get("next")
+  const [email, setEmail] = useState(params.get("email") ?? "")
   const [password, setPassword] = useState("")
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -31,7 +35,7 @@ export function LoginPage() {
       const user = await fetchMe()
       setUser(user)
     },
-    onSuccess: () => navigate("/app"),
+    onSuccess: () => navigate(next ?? "/app"),
     onError: (err) => setError(extractApiError(err)),
   })
 

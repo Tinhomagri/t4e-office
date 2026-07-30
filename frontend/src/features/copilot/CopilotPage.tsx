@@ -117,11 +117,11 @@ export function CopilotPage() {
 
 // ── Paleta do relatório (categórica, tons distintos) ─────────────────────────
 const C = {
-  chat: "#8b5cf6", // violet-500 — conversas
-  doc: "#6366f1", // indigo-500 — documentos
-  card: "#06b6d4", // cyan-500 — cards
-  up: "#10b981", // emerald-500 — satisfação
-  down: "#f43f5e", // rose-500 — insatisfação
+  chat: "#6E5DC6", // violet-500 — conversas
+  doc: "#8270DB", // indigo-500 — documentos
+  card: "#2898BD", // cyan-500 — cards
+  up: "#22A06B", // emerald-500 — satisfação
+  down: "#E2483D", // rose-500 — insatisfação
 }
 
 function Report({ usage }: { usage: CopilotMetrics }) {
@@ -376,7 +376,7 @@ function SatisfactionRadial({ usage }: { usage: CopilotMetrics }) {
       </div>
     )
 
-  const tone = pct >= 70 ? C.up : pct >= 40 ? "#f59e0b" : C.down
+  const tone = pct >= 70 ? C.up : pct >= 40 ? "#E2B203" : C.down
   const data = [{ name: "sat", value: pct, fill: tone }]
   return (
     <div className="relative">

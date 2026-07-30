@@ -11,6 +11,8 @@ interface Props {
   scale?: number
   /** Ocupa o container, escolhendo a maior escala INTEIRA que couber. */
   responsive?: boolean
+  /** Congela no primeiro frame do clipe — pose estática, sem ciclo. */
+  frozen?: boolean
   className?: string
 }
 
@@ -22,6 +24,7 @@ export function AvatarCanvas({
   dir = "down",
   scale,
   responsive = false,
+  frozen = false,
   className,
 }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -81,8 +84,9 @@ export function AvatarCanvas({
     // O primeiro frame aparece imediatamente — sem esperar um tick do rAF.
     blit(0)
 
-    // Movimento reduzido: fica na pose inicial em vez de rodar o ciclo.
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    // Movimento reduzido (ou congelado pelo chamador): fica na pose inicial em
+    // vez de rodar o ciclo.
+    if (frozen || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
 
     let raf = 0
     let acc = 0
@@ -101,7 +105,7 @@ export function AvatarCanvas({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [config, anim, dir, drawScale])
+  }, [config, anim, dir, drawScale, frozen])
 
   const canvas = <canvas ref={ref} className={className} style={{ imageRendering: "pixelated" }} />
 

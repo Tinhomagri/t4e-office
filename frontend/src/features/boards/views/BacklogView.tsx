@@ -140,7 +140,7 @@ export function BacklogView({
             <div>
               <h3 className="text-sm font-bold text-ink dark:text-paper">Backlog &amp; Sprints</h3>
               <p className="text-xs text-paper-400">
-                {totalCards} cards · {totalBacklogPts} pts no backlog · Arraste para mover entre sprints
+                {totalCards} cards · {totalBacklogPts} de peso no backlog · Arraste para mover entre sprints
                 {epicFilter && " · filtrado por épico"}
               </p>
             </div>
@@ -420,7 +420,7 @@ function SprintSection({
               </div>
               <span className="text-[11px] font-semibold text-paper-600 tabular">
                 {doneCount}/{cards.length}
-                <span className="text-paper-400 font-normal"> · {done}/{total}pts</span>
+                <span className="text-paper-400 font-normal"> · peso {done}/{total}</span>
               </span>
             </div>
           )}
@@ -506,7 +506,7 @@ function BacklogSection({
         <span className="text-xs text-paper-400">{cards.length} cards</span>
         {total > 0 && (
           <span className="rounded-full bg-paper-100 dark:bg-ink-800 px-2.5 py-0.5 text-[11px] font-semibold text-paper-600">
-            {total} pts
+            peso {total}
           </span>
         )}
       </div>

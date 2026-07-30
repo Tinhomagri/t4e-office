@@ -6,6 +6,7 @@ import { extractApiError } from "@/shared/api/client"
 import { fetchMe } from "./auth.api"
 import { AuthLayout } from "./AuthLayout"
 import { useAuthStore } from "./auth.store"
+import { takePendingInvite } from "@/features/workspace/pendingInvite"
 
 const ERROR_MESSAGES: Record<string, string> = {
   denied: "Você cancelou o login com o Google.",
@@ -44,7 +45,12 @@ export function GoogleCallbackPage() {
     fetchMe()
       .then((user) => {
         setUser(user)
-        navigate("/app", { replace: true })
+        // Voltou de um convite: retoma o fluxo em vez de largar em /app, onde a
+        // pessoa teria de reabrir o e-mail para achar o link.
+        const invite = takePendingInvite()
+        navigate(invite ? `/invite?token=${encodeURIComponent(invite)}` : "/app", {
+          replace: true,
+        })
       })
       .catch((err) => setError(extractApiError(err)))
   }, [params, navigate, setSession, setUser])

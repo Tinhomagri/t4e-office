@@ -9,21 +9,50 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AvatarConfig, Direction } from "@/features/avatar/avatar.types"
 import { useAuthStore } from "@/features/auth/auth.store"
+import { useMembers } from "@/features/workspace/workspace.hooks"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
+import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
+
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useHeartbeat, useRoom } from "./office.hooks"
+import { useActiveCard } from "./pc/activeCard.hooks"
 import { isMyDesk } from "./pc/desk"
+import type { DeskAssignment } from "./pc/desks.api"
+import { useDeskAssignments } from "./pc/desks.hooks"
 import { usePcStore } from "./pc/pc.store"
 import { Win98Desktop } from "./pc/Win98Desktop"
+import { PokerConsolePanel } from "./poker/PokerConsolePanel"
+import { PokerSeatHint, PokerVoteWheel } from "./poker/PokerVoteWheel"
+import { usePokerRoomStore } from "./poker/pokerRoom.store"
+import { buildVoteBadges } from "./poker/voteBadges"
 import { OfficeEngine } from "./world/engine"
 import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
 
+// Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
+// backend) — não é o caminho do movimento.
 const KEEPALIVE_MS = 3000
+// Piso entre publicações durante o movimento. 3s de keepalive como único canal
+// desenhava o colega até 3s atrás — daí "em cada tela estou num lugar". 150ms
+// dá ~7 amostras/s, suficiente para a interpolação do cliente suavizar sem
+// transformar cada passo numa requisição.
+const MOVE_PUBLISH_MS = 150
+
+function formatDoingSince(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const minutes = Math.max(0, Math.floor(ms / 60000))
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours === 0) return `${mins}min`
+  return `${hours}h${mins > 0 ? ` ${mins}min` : ""}`
+}
+
+/** Andar da sala de Planning Poker (ver world/floors/index.ts). */
+const POKER_FLOOR = 2
 
 // Emotes: reusam clipes que o gerador de avatar já sabe animar.
 const EMOTES: { anim: string; label: string; icon: string }[] = [
@@ -48,9 +77,42 @@ export function OfficeRoom({
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
 
+  // A listagem do workspace só serve para descobrir QUAL sessão está ativa:
+  // o serializer da lista devolve apenas contadores agregados, sem
+  // `participants`/`votes`. O detalhe (useSession) é quem traz esses campos.
+  const activeSession = useActivePokerSession(workspaceId).data ?? null
+  const voteSeatId = usePokerRoomStore((s) => s.voteSeatId)
+  const onPokerFloor = floor === POKER_FLOOR
+  // Só polla o detalhe onde ele é usado (as plaquinhas do andar 2).
+  const sessionDetail =
+    useSession(onPokerFloor ? (activeSession?.id ?? null) : null).data ?? null
+
+  const deskAssignments = useDeskAssignments(workspaceId, floor)
+
+  // Owner/admin conseguem ligar QUALQUER PC mesmo sem mesa atribuída — sem
+  // isso, ninguém abre o "Mesas" pela primeira vez (a mesa de todo mundo,
+  // incluindo a do owner, começa livre, então isMyDesk nunca é true até
+  // alguém já ter atribuído algo — trava circular numa instalação nova).
+  const members = useMembers(workspaceId)
+  const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
+  const canManageDesks = myRole === "owner" || myRole === "admin"
+
+  const [hoverUserId, setHoverUserId] = useState<string | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
+  // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
+  const hoverPosRef = useRef<{ x: number; y: number } | null>(null)
+  const activeCard = useActiveCard(workspaceId, hoverUserId, canManageDesks)
+
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Instante da última publicação de posição — base do throttle do movimento.
+  const lastPublishRef = useRef(0)
+  const publishRef = useRef<(() => void) | null>(null)
   const engineRef = useRef<OfficeEngine | null>(null)
+  // Contador de "engine pronto". O efeito de presença precisa rodar de novo
+  // quando o motor nasce: a primeira amostra da sala costuma chegar ANTES do
+  // engine existir, e naquele instante a sincronia era descartada.
+  const [engineEpoch, setEngineEpoch] = useState(0)
   const liveRef = useRef<{ x: number; y: number; facing: Direction }>({
     x: 0.5,
     y: 0.5,
@@ -59,6 +121,15 @@ export function OfficeRoom({
   // Id da zona atual (não o rótulo): é o que diferencia "elevador" de
   // qualquer outra zona no onInteract, sem esperar o próximo render.
   const zoneIdRef = useRef<string | null>(null)
+  // onInteract é criado uma única vez (efeito de montagem do motor, deps
+  // [map]) — fechar sobre `deskAssignments.data`/`canManageDesks` direto
+  // congelaria os valores de quando o engine foi criado (undefined/[] e
+  // false, respectivamente, já que as queries ainda não resolveram nesse
+  // instante). Guardamos os valores atuais em refs, atualizados sempre que
+  // mudam, e o onInteract lê `.current` — mesmo motivo do
+  // `useWorldStore.getState()` no branch do elevador logo abaixo.
+  const deskAssignmentsRef = useRef<DeskAssignment[]>([])
+  const canManageDesksRef = useRef(false)
 
   const [zone, setZone] = useState<{ label: string; hint: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -97,6 +168,14 @@ export function OfficeRoom({
       },
       onMove: (x, y, facing) => {
         liveRef.current = { x, y, facing }
+        // Publica durante o movimento, não só no keepalive: sem isto a posição
+        // que os outros veem fica até 3s velha. `performance.now()` porque só
+        // interessa o intervalo, não a hora do dia.
+        const now = performance.now()
+        if (now - lastPublishRef.current >= MOVE_PUBLISH_MS) {
+          lastPublishRef.current = now
+          publishRef.current?.()
+        }
       },
       onInteract: (seat) => {
         // Dentro da cabine, E chama o painel do elevador em vez de procurar
@@ -107,14 +186,28 @@ export function OfficeRoom({
           useWorldStore.getState().openPanel()
           return
         }
+        // O console do andar 2 abre o painel de host em vez de mostrar toast
+        // de "de pé" — mesma lógica do elevador, zona sem assento.
+        if (!seat && zoneIdRef.current === "poker-console") {
+          usePokerRoomStore.getState().openConsole()
+          return
+        }
         setToast(seat ? seat.label : "De pé")
         // Só a mesa da própria pessoa liga o computador. Sentar em qualquer
-        // outro assento continua sendo só sentar.
-        if (seat && me?.id && isMyDesk(me.id, seat, map.seats)) bootPc(seat.id)
-        else if (!seat) shutdownPc()
+        // outro assento continua sendo só sentar. Assento da mesa de poker
+        // abre a roda de votos em vez de ligar o PC.
+        const mine = seat && me?.id && isMyDesk(me.id, seat, deskAssignmentsRef.current)
+        if (seat && seat.kind === "pc" && (mine || canManageDesksRef.current)) bootPc(seat.id)
+        else if (seat && seat.kind === "poker") {
+          usePokerRoomStore.getState().openVote(seat.id)
+        } else if (!seat) {
+          shutdownPc()
+          usePokerRoomStore.getState().closeVote()
+        }
       },
     })
     engineRef.current = engine
+    setEngineEpoch((n) => n + 1)
 
     engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
 
@@ -143,15 +236,75 @@ export function OfficeRoom({
     engineRef.current?.updateSelfConfig(myConfig)
   }, [myConfig])
 
-  // Presença dos outros → atores da cena.
+  // Atribuições de mesa (de quem é cada uma) — vêm do backend, não mais hash.
+  // A seta acima da própria mesa e os rótulos com nome de todo mundo dependem
+  // dos dois: precisa recalcular sempre que a lista OU o mapa mudar.
+  //
+  // `engineEpoch` pelo mesmo motivo da sincronia de presença: as atribuições
+  // costumam chegar ANTES de o motor existir, e aí o `return` descartava a
+  // chamada. Como o React Query devolve a MESMA referência quando o payload
+  // volta deep-equal (structural sharing), o poll de 15s não disparava o efeito
+  // de novo — e a seta nunca era desenhada, mesmo com mesa atribuída.
+  //
+  // A ref é atualizada fora do guard: o `onInteract` a lê pra decidir se liga o
+  // PC, e isso não pode depender de o motor já ter nascido.
   useEffect(() => {
-    if (!room.data) return
-    engineRef.current?.syncRemote(room.data)
-  }, [room.data])
+    const rows = deskAssignments.data ?? []
+    deskAssignmentsRef.current = rows
+    const engine = engineRef.current
+    if (!engine) return
+    engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
+    engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
+  }, [deskAssignments.data, me?.id, map, engineEpoch])
 
-  // Keepalive: mantém a presença viva mesmo parado.
+  // canManageDesks só é conhecido depois que useMembers resolve — atualiza a
+  // ref lida pelo onInteract (ver comentário acima de canManageDesksRef).
   useEffect(() => {
-    const send = () =>
+    canManageDesksRef.current = canManageDesks
+  }, [canManageDesks])
+
+  // Presença dos outros → atores da cena.
+  //
+  // `engineEpoch` na lista de dependências é o que corrige "entrei e estou
+  // sozinho": quem entra depois recebe a primeira amostra da sala antes de o
+  // motor existir, e o `?.` descartava a chamada sem erro. Como o React Query
+  // reaproveita a MESMA referência quando o payload volta deep-equal (structural
+  // sharing), com todos parados o efeito nunca rodava de novo — e os colegas
+  // jamais entravam na cena. Movimentar alguém "consertava", porque mudava o
+  // payload. Agora o nascimento do motor também dispara a sincronia.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine || !room.data) return
+    engine.syncRemote(room.data)
+  }, [room.data, engineEpoch])
+
+  // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
+  // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
+  // Fora do andar do poker, zera: sem isso as plaquinhas apareciam sobre os
+  // avatares do bullpen (andar 1), que não estão em votação nenhuma.
+  //
+  // `engineEpoch` pelo mesmo motivo dos outros dois efeitos de motor: quem
+  // chega no andar 2 com votação já rolando recebe o `sessionDetail` antes de o
+  // motor nascer, e o poll devolve a mesma referência enquanto ninguém mexe no
+  // voto — as plaquinhas nunca subiam.
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    if (!onPokerFloor || !sessionDetail) {
+      engine.setPokerVotes(new Map(), false)
+      return
+    }
+    engine.setPokerVotes(
+      buildVoteBadges(sessionDetail),
+      sessionDetail.status === "revealed",
+    )
+  }, [sessionDetail, onPokerFloor, map, engineEpoch])
+
+  // Publicação de presença. Dois gatilhos: o movimento (via `publishRef`, com
+  // throttle) e este intervalo, que cobre quem está parado.
+  useEffect(() => {
+    const send = () => {
+      lastPublishRef.current = performance.now()
       heartbeat.mutate({
         workspace_id: workspaceId,
         x: liveRef.current.x,
@@ -162,9 +315,16 @@ export function OfficeRoom({
         // trocar de andar sem remontar o keepalive.
         floor: useWorldStore.getState().floor,
       })
+    }
+    // O engine chama isto pelo ref: ele é criado num efeito com deps próprias
+    // e não pode fechar sobre este `send`.
+    publishRef.current = send
     send()
     const t = window.setInterval(send, KEEPALIVE_MS)
-    return () => window.clearInterval(t)
+    return () => {
+      window.clearInterval(t)
+      publishRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
@@ -219,9 +379,56 @@ export function OfficeRoom({
   // Escritório remontaria com a tela ligada e o avatar de pé — teclado morto.
   useEffect(() => () => usePcStore.getState().shutdown(), [])
 
+  // Mesmo motivo para o store do poker — e também a cada troca de andar: sem
+  // isto, pegar o elevador sentado na mesa deixava a roda de cartas flutuando
+  // no andar 1, votando na sessão do andar 2.
+  useEffect(
+    () => () => {
+      const poker = usePokerRoomStore.getState()
+      poker.closeVote()
+      poker.closeConsole()
+    },
+    [map],
+  )
+
   const onCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    engineRef.current?.clickTo(e.clientX - rect.left, e.clientY - rect.top)
+    const engine = engineRef.current
+    if (!engine) return
+    engine.clickTo(e.clientX - rect.left, e.clientY - rect.top)
+    // clickTo levanta o avatar sem passar pelo onInteract — quem estava
+    // sentado na mesa de poker precisa perder a roda de cartas aqui.
+    if (!engine.isSeated()) usePokerRoomStore.getState().closeVote()
+  }, [])
+
+  const onCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const engine = engineRef.current
+    if (!engine) return
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+    const userId = engine.hoverSeatAt(localX, localY)
+    setHoverUserId(userId)
+    // Mousemove dispara dezenas de vezes por segundo; sem limiar, cada pixel
+    // re-renderizava a árvore toda. A ref espelha o último valor aplicado pra
+    // comparar sem entrar nas deps do callback (que precisa ser estável).
+    if (!userId) {
+      if (hoverPosRef.current !== null) {
+        hoverPosRef.current = null
+        setHoverPos(null)
+      }
+      return
+    }
+    const prev = hoverPosRef.current
+    if (prev && Math.abs(prev.x - localX) <= 2 && Math.abs(prev.y - localY) <= 2) return
+    hoverPosRef.current = { x: localX, y: localY }
+    setHoverPos({ x: localX, y: localY })
+  }, [])
+
+  const onCanvasMouseLeave = useCallback(() => {
+    setHoverUserId(null)
+    hoverPosRef.current = null
+    setHoverPos(null)
   }, [])
 
   const sendChat = () => {
@@ -262,14 +469,57 @@ export function OfficeRoom({
       <canvas
         ref={canvasRef}
         onClick={onCanvasClick}
+        onMouseMove={onCanvasMouseMove}
+        onMouseLeave={onCanvasMouseLeave}
         className="absolute inset-0 size-full cursor-pointer"
         style={{ imageRendering: "pixelated" }}
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
 
+      {canManageDesks && hoverUserId && hoverPos && activeCard.data && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-[220px] rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
+          /* Clamp no topo: sem isto, passar o mouse num avatar perto da borda
+             de cima jogava o balão pra `top` negativo (cortado, invisível). */
+          style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4) }}
+        >
+          {activeCard.data.active ? (
+            <>
+              <div className="font-semibold">
+                #{activeCard.data.card!.number} {activeCard.data.card!.title}
+              </div>
+              <div className="text-gray-300">
+                há {formatDoingSince(activeCard.data.doing_since!)} em andamento
+              </div>
+              {activeCard.data.working_note && (
+                <div className="mt-1 border-t border-gray-700 pt-1 text-gray-200">
+                  {activeCard.data.working_note}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-gray-300">Sem card ativo</div>
+          )}
+        </div>
+      )}
+
       <Win98Desktop />
 
       <ElevatorPanel />
+      {/* Poker só existe no andar 2 — segunda linha de defesa além do
+          reset do store na troca de andar. */}
+      {onPokerFloor && <PokerConsolePanel />}
+      {onPokerFloor &&
+        voteSeatId &&
+        (activeSession ? (
+          <PokerVoteWheel
+            sessionId={activeSession.id}
+            status={activeSession.status}
+            onClose={() => usePokerRoomStore.getState().closeVote()}
+          />
+        ) : (
+          <PokerSeatHint>Aguardando sessão — abra pelo console</PokerSeatHint>
+        ))}
 
       {/* Rótulo da zona atual — só faz sentido com o PC desligado */}
       <AnimatePresence>

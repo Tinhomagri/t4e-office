@@ -24,7 +24,7 @@ describe("<DesktopIcons />", () => {
     await userEvent.dblClick(screen.getByRole("button", { name: /Trabalho/ }))
     expect(usePcStore.getState().openFolderId).toBe("trabalho")
     expect(screen.getByText("Boards")).toBeInTheDocument()
-    expect(screen.getByText("Planning Poker")).toBeInTheDocument()
+    expect(screen.getByText("Meu Dia")).toBeInTheDocument()
   })
 
   it("duplo clique num app habilitado abre a janela", async () => {
@@ -37,10 +37,10 @@ describe("<DesktopIcons />", () => {
   it("app desabilitado não abre e avisa que vem depois", async () => {
     render(<DesktopIcons />)
     await userEvent.dblClick(screen.getByRole("button", { name: /Trabalho/ }))
-    const poker = screen.getByRole("button", { name: /Planning Poker/ })
-    expect(poker).toBeDisabled()
-    expect(poker).toHaveAttribute("title", "Em breve")
-    await userEvent.dblClick(poker)
+    const meuDia = screen.getByRole("button", { name: /Meu Dia/ })
+    expect(meuDia).toBeDisabled()
+    expect(meuDia).toHaveAttribute("title", "Em breve")
+    await userEvent.dblClick(meuDia)
     expect(usePcStore.getState().windows).toHaveLength(0)
   })
 

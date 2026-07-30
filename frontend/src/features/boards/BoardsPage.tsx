@@ -2,6 +2,7 @@
 // compartilhados. O quadro Kanban em si vive em views/KanbanView.tsx.
 import {
   CalendarDays,
+  CheckCircle2,
   FileText,
   FolderPlus,
   GanttChartSquare,
@@ -14,6 +15,7 @@ import {
   SquareKanban,
   Spade,
   Target,
+  X,
   Zap,
 } from "lucide-react"
 import { AnimatePresence } from "framer-motion"
@@ -46,7 +48,8 @@ import {
 } from "@/shared/ui/primitives"
 import { CardDrawer } from "./CardDrawer"
 import { NotificationBell } from "./NotificationBell"
-import { PRIORITY_LABEL, STATUS_DOT, STATUS_LABEL, TYPE_LABEL, errMsg } from "./board.shared"
+import { ColoredAvatar, PRIORITY_LABEL, STATUS_DOT, STATUS_LABEL, TYPE_LABEL, errMsg } from "./board.shared"
+import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import {
   useCards,
   useCreateCard,
@@ -65,7 +68,12 @@ import type {
   Project,
   ProjectTemplate,
 } from "@/features/workspace/workspace.types"
-import { useCreateProjectSession, useProjectSessions } from "@/features/poker/poker.hooks"
+import {
+  useCloseProjectSession,
+  useCreateProjectSession,
+  useProjectSessions,
+} from "@/features/poker/poker.hooks"
+import { useAuthStore } from "@/features/auth/auth.store"
 
 type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "marketing" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
 
@@ -246,7 +254,9 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
               key={v.id}
               onClick={() => setActiveView(v.id)}
               className={cx(
-                "relative flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium transition-colors rounded-t-lg",
+                // Aba do Jira: 32px de altura, 14/20 medium, e o estado ativo é só a
+                // cor do texto — não há sublinhado. Ver docs/jira-ui-spec.md.
+                "relative flex h-8 items-center gap-1.5 px-2.5 text-sm font-medium leading-5 transition-colors rounded-t-lg",
                 activeView === v.id
                   ? "text-brand-600"
                   : "text-paper-400 hover:text-ink dark:hover:text-paper hover:bg-paper-50 dark:hover:bg-ink-900",
@@ -254,9 +264,6 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
             >
               {v.icon}
               {v.label}
-              {activeView === v.id && (
-                <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-brand-500" />
-              )}
             </button>
           ))}
         </div>
@@ -279,7 +286,11 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
         onCreated={(p) => setProjectId(p.id)}
       />
       {pokerModalOpen && activeProject && (
-        <PokerLaunchModal projectId={activeProject.id} onClose={() => setPokerModalOpen(false)} />
+        <PokerLaunchModal
+          projectId={activeProject.id}
+          workspaceId={workspaceId}
+          onClose={() => setPokerModalOpen(false)}
+        />
       )}
     </div>
   )
@@ -727,22 +738,59 @@ function EmptyProjects({ onCreate }: { onCreate: () => void }) {
 
 // ─── Planning Poker — lançar sala a partir do board ──────────────────────────
 
-function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+// Status da SALA de poker (não confundir com STATUS_LABEL/STATUS_DOT do
+// board.shared, que são de card). Só os estados que aparecem em sala aberta.
+const POKER_STATUS_LABEL: Record<string, string> = {
+  waiting: "Aguardando", voting: "Votando", revealed: "Revelando", done: "Concluída",
+}
+const POKER_STATUS_DOT: Record<string, string> = {
+  waiting: "bg-paper-400", voting: "bg-warning", revealed: "bg-brand-500", done: "bg-success",
+}
+
+// "há 5min" / "há 2h" / "há 3d" — a sala é efêmera, então a idade importa mais
+// que a data exata.
+function sinceLabel(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return "agora"
+  if (mins < 60) return `há ${mins}min`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `há ${hours}h`
+  return `há ${Math.round(hours / 24)}d`
+}
+
+function PokerLaunchModal({
+  projectId,
+  workspaceId,
+  onClose,
+}: {
+  projectId: string
+  workspaceId: string
+  onClose: () => void
+}) {
   const navigate = useNavigate()
   const { data: sessions, isLoading } = useProjectSessions(projectId)
   const { data: cards } = useCards(projectId)
+  const { data: members } = useMembers(workspaceId)
   const createSession = useCreateProjectSession(projectId)
+  const closeSession = useCloseProjectSession(projectId)
+  const userId = useAuthStore((s) => s.user?.id)
   const [error, setError] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const [name, setName] = useState("Planning Poker")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [includeEstimated, setIncludeEstimated] = useState(false)
+  const [closingId, setClosingId] = useState<string | null>(null)
 
   const openSessions = (sessions ?? []).filter((s) => s.status !== "done")
   const enterRoom = (id: string) => navigate(`/app/poker/${id}`)
 
-  // Candidatos à votação: todos os cards não-épicos do board.
-  const candidates = (cards ?? []).filter((c) => c.type !== "epic")
+  // Candidatos à votação: cards não-épicos ainda SEM peso. Estimar de novo o que
+  // já tem peso é a exceção, não a regra — listar tudo enchia o modal de ruído e
+  // obrigava a desmarcar na mão. Quem precisa reestimar liga o toggle.
+  const pending = (cards ?? []).filter((c) => c.type !== "epic" && c.points == null)
+  const estimatedCards = (cards ?? []).filter((c) => c.type !== "epic" && c.points != null)
+  const candidates = includeEstimated ? [...pending, ...estimatedCards] : pending
   const visible = query.trim()
     ? candidates.filter(
         (c) =>
@@ -752,8 +800,8 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
     : candidates
 
   const startPicking = () => {
-    // Pré-seleciona os cards ainda sem pontuação — o caso comum.
-    setSelected(new Set(candidates.filter((c) => c.points == null).map((c) => c.id)))
+    // Tudo que está sem peso já vem marcado — é o caso comum.
+    setSelected(new Set(pending.map((c) => c.id)))
     setPicking(true)
   }
 
@@ -791,7 +839,7 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
         open
         onClose={onClose}
         title="Nova sala de Planning Poker"
-        description="Selecione os cards do board que serão votados nesta sala."
+        description="Cards sem peso do board já vêm marcados. Ajuste a seleção e abra a sala."
         size="xl"
         footer={
           <>
@@ -812,29 +860,64 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
 
-          <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-paper px-1 py-1 dark:bg-ink-900">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar card por título ou chave…"
-              className="flex-1"
-            />
-            <span className="shrink-0 rounded-full bg-paper-100 dark:bg-ink-800 px-2.5 py-1 text-xs font-semibold text-paper-500">
-              {selected.size} selecionado{selected.size !== 1 ? "s" : ""}
-            </span>
-            <button
-              onClick={() =>
-                setSelected((prev) => {
-                  const next = new Set(prev)
-                  if (allVisibleSelected) visible.forEach((c) => next.delete(c.id))
-                  else visible.forEach((c) => next.add(c.id))
-                  return next
-                })
-              }
-              className="shrink-0 text-xs font-medium text-brand-600 hover:underline"
-            >
-              {allVisibleSelected ? "Desmarcar todos" : "Selecionar todos"}
-            </button>
+          <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-paper px-1 pb-2 pt-1 dark:bg-ink-900">
+            <div className="flex items-center gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar card por título ou chave…"
+                className="flex-1"
+              />
+              <button
+                onClick={() =>
+                  setSelected((prev) => {
+                    const next = new Set(prev)
+                    if (allVisibleSelected) visible.forEach((c) => next.delete(c.id))
+                    else visible.forEach((c) => next.add(c.id))
+                    return next
+                  })
+                }
+                disabled={visible.length === 0}
+                className="shrink-0 rounded-md px-2 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-40 dark:hover:bg-brand-500/10"
+              >
+                {allVisibleSelected ? "Desmarcar todos" : "Selecionar todos"}
+              </button>
+            </div>
+
+            {/* Barra de contexto: o que está selecionado e o que sobra de trabalho.
+                Sem isto o host cria a sala sem saber o tamanho da fila. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">
+                <Spade className="size-3" aria-hidden />
+                {selected.size} para votar
+              </span>
+              <span className="text-paper-400">
+                {pending.length} sem peso no board
+              </span>
+              {estimatedCards.length > 0 && (
+                <label className="ml-auto inline-flex cursor-pointer items-center gap-1.5 text-paper-500 transition-colors hover:text-ink dark:hover:text-paper">
+                  <input
+                    type="checkbox"
+                    checked={includeEstimated}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setIncludeEstimated(on)
+                      // Ao esconder de novo, tira da seleção o que saiu da lista —
+                      // senão a sala nasceria com cards que o host não vê mais.
+                      if (!on) {
+                        setSelected((prev) => {
+                          const next = new Set(prev)
+                          estimatedCards.forEach((c) => next.delete(c.id))
+                          return next
+                        })
+                      }
+                    }}
+                    className="size-3.5 accent-brand-500"
+                  />
+                  Reestimar {estimatedCards.length} card{estimatedCards.length !== 1 ? "s" : ""} já com peso
+                </label>
+              )}
+            </div>
           </div>
 
           <div className="max-h-[58vh] space-y-4 overflow-y-auto pr-1 scrollbar-slim">
@@ -849,11 +932,12 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {g.items.map((c) => {
                     const checked = selected.has(c.id)
+                    const assignee = members?.find((m) => m.user_id === c.assignee_id)
                     return (
                       <label
                         key={c.id}
                         className={cx(
-                          "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
+                          "group/row flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors",
                           checked
                             ? "border-brand-300 bg-brand-50/60 dark:border-brand-500/40 dark:bg-brand-500/10"
                             : "border-paper-200 dark:border-ink-700 hover:border-paper-300 dark:hover:border-ink-600",
@@ -865,12 +949,21 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
                           onChange={() => toggle(c.id)}
                           className="size-3.5 shrink-0 accent-brand-500"
                         />
+                        {/* Tipo e prioridade são o que faz o host reconhecer o card
+                            de relance — os mesmos ícones do board, não texto novo. */}
+                        <IssueTypeIcon type={c.type} className="size-3.5 shrink-0" />
                         <span className="shrink-0 font-mono text-[10px] text-paper-400">{c.ref}</span>
                         <span className="min-w-0 flex-1 truncate text-sm text-ink dark:text-paper">{c.title}</span>
+                        <PriorityIcon priority={c.priority} className="size-3.5 shrink-0" />
                         {c.points != null && (
                           <span className="shrink-0 rounded-full bg-paper-100 dark:bg-ink-700 px-1.5 py-0.5 text-[10px] font-bold text-paper-500">
-                            {c.points} pts
+                            {c.points}
                           </span>
+                        )}
+                        {assignee ? (
+                          <ColoredAvatar name={assignee.name} size="xs" />
+                        ) : (
+                          <span className="size-5 shrink-0" aria-hidden />
                         )}
                       </label>
                     )
@@ -879,7 +972,25 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
               </div>
             ))}
             {visible.length === 0 && (
-              <p className="py-10 text-center text-xs text-paper-400">Nenhum card encontrado.</p>
+              <div className="py-10 text-center">
+                {query.trim() ? (
+                  <p className="text-xs text-paper-400">
+                    Nenhum card corresponde a “{query.trim()}”.
+                  </p>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mx-auto size-7 text-success" aria-hidden />
+                    <p className="mt-2 text-sm font-medium text-ink dark:text-paper">
+                      Todo o board já está estimado
+                    </p>
+                    <p className="mt-0.5 text-xs text-paper-400">
+                      {estimatedCards.length > 0
+                        ? "Marque “Reestimar” acima para votar um card de novo."
+                        : "Crie cards no board para poder votar."}
+                    </p>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -888,36 +999,137 @@ function PokerLaunchModal({ projectId, onClose }: { projectId: string; onClose: 
   }
 
   return (
-    <Modal open onClose={onClose} title="Planning Poker">
+    <Modal
+      open
+      onClose={onClose}
+      title="Planning Poker"
+      description="Estime cards em equipe. Entre numa sala aberta ou crie uma nova."
+    >
       <div className="space-y-4">
         {isLoading ? (
-          <Skeleton className="h-16 w-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
         ) : openSessions.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-paper-400">Salas abertas</p>
-            {openSessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => enterRoom(s.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40"
-              >
-                <span className="text-sm font-medium text-ink dark:text-paper">{s.name}</span>
-                <span className="text-xs text-paper-400">{s.card_ids.length} cards</span>
-              </button>
-            ))}
+            <div className="flex items-baseline justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-paper-400">
+                Salas abertas
+              </p>
+              <span className="text-xs text-paper-400">{openSessions.length}</span>
+            </div>
+            {openSessions.map((s) => {
+              const isHost = s.created_by === userId
+              const confirming = closingId === s.id
+              return (
+                <div
+                  key={s.id}
+                  className="group flex items-center gap-2 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2.5 transition-colors hover:border-brand-300 dark:hover:border-brand-500/40"
+                >
+                  <button
+                    onClick={() => enterRoom(s.id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 rounded-lg"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-ink dark:text-paper">
+                          {s.name}
+                        </span>
+                        {isHost && (
+                          <span className="shrink-0 rounded bg-paper-100 dark:bg-ink-700 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-paper-500">
+                            host
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-paper-400">
+                        <span className={cx("size-1.5 shrink-0 rounded-full", POKER_STATUS_DOT[s.status])} />
+                        {POKER_STATUS_LABEL[s.status]}
+                        <span aria-hidden>·</span>
+                        {s.card_ids.length} card{s.card_ids.length !== 1 ? "s" : ""}
+                        {s.created_at && (
+                          <>
+                            <span aria-hidden>·</span>
+                            {sinceLabel(s.created_at)}
+                          </>
+                        )}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-brand-600 opacity-0 transition-opacity group-hover:opacity-100">
+                      Entrar
+                    </span>
+                  </button>
+
+                  {/* Só o host encerra — é a mesma regra do backend. Confirmação
+                      inline em dois passos: window.confirm trava a página e sai
+                      do visual do produto. */}
+                  {isHost &&
+                    (confirming ? (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          onClick={() => {
+                            closeSession.mutate(s.id)
+                            setClosingId(null)
+                          }}
+                          className="rounded-md bg-danger px-2 py-1 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+                        >
+                          Encerrar
+                        </button>
+                        <button
+                          onClick={() => setClosingId(null)}
+                          className="rounded-md px-1.5 py-1 text-[11px] text-paper-500 transition-colors hover:text-ink dark:hover:text-paper"
+                        >
+                          Não
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setClosingId(s.id)}
+                        title="Encerrar sala"
+                        aria-label={`Encerrar a sala ${s.name}`}
+                        className="grid size-7 shrink-0 place-items-center rounded-md text-paper-400 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    ))}
+                </div>
+              )
+            })}
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-dashed border-paper-300 dark:border-ink-700 p-4 text-center">
-          <Spade className="mx-auto mb-2 size-6 text-brand-400" />
-          <p className="text-sm text-paper-500">
-            Crie uma sala nova escolhendo quais cards do board serão votados.
-          </p>
-          <Button className="mx-auto mt-3" onClick={startPicking}>
+        {/* Caixa tracejada só quando não há nada — com salas na lista ela lia como
+            placeholder de conteúdo faltando. Com salas, o CTA vira uma linha. */}
+        {openSessions.length > 0 ? (
+          <button
+            onClick={startPicking}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-paper-200 dark:border-ink-700 py-2.5 text-sm font-medium text-brand-600 transition-colors hover:border-brand-300 hover:bg-brand-50/50 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10"
+          >
+            <Plus className="size-4" aria-hidden />
             Nova sala
-          </Button>
-          {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-        </div>
+          </button>
+        ) : (
+          <div className="rounded-xl border border-dashed border-paper-300 dark:border-ink-700 px-4 py-8 text-center">
+            <span className="mx-auto grid size-10 place-items-center rounded-full bg-brand-50 dark:bg-brand-500/15">
+              <Spade className="size-5 text-brand-500" aria-hidden />
+            </span>
+            <p className="mt-3 text-sm font-medium text-ink dark:text-paper">
+              Nenhuma sala aberta
+            </p>
+            <p className="mx-auto mt-1 max-w-xs text-xs text-paper-400">
+              Escolha os cards sem peso do board e estime em equipe, carta a carta.
+            </p>
+            <Button className="mx-auto mt-4" onClick={startPicking} icon={<Spade className="size-4" />}>
+              Criar sala
+            </Button>
+          </div>
+        )}
+
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
       </div>
     </Modal>
   )

@@ -35,7 +35,7 @@ export function Win98Desktop() {
       {/* Painel: 78% do canvas, centralizado. O escritório continua visível em volta. */}
       <div
         data-testid="win98-panel"
-        className="win98 win98-raised absolute inset-[11%] flex flex-col overflow-hidden bg-[var(--w98-desktop)]"
+        className="win98 win98-raised win98-wallpaper absolute inset-[11%] flex flex-col overflow-hidden"
       >
         <div className="relative flex-1 overflow-hidden">
           <DesktopIcons />
@@ -54,7 +54,7 @@ export function Win98Desktop() {
 
       {/* Camada expandida: fora do painel, tela cheia, sem transform. */}
       {expanded && (
-        <div data-testid="win98-expanded" className="absolute inset-0 z-20 flex flex-col bg-[var(--w98-desktop)]">
+        <div data-testid="win98-expanded" className="win98-wallpaper absolute inset-0 z-20 flex flex-col">
           <div className="relative flex-1 overflow-hidden">
             <Win98Window
               win={expanded}

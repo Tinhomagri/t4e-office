@@ -9,6 +9,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
+import { extractApiError } from "@/shared/api/client"
 import { toast } from "@/shared/ui/toast"
 
 import * as inboxApi from "./inbox.api"
@@ -57,6 +58,7 @@ export function useConnectChatwoot(workspaceId: string | null) {
       qc.invalidateQueries({ queryKey: inboxKeys.catalog(workspaceId) })
       toast.success("Chatwoot conectado.")
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -68,6 +70,7 @@ export function useTestChatwootConnection(workspaceId: string | null) {
       qc.invalidateQueries({ queryKey: inboxKeys.connection(workspaceId) })
       toast.success("Conexão validada.")
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -79,6 +82,9 @@ export function useDisconnectChatwoot(workspaceId: string | null) {
       qc.invalidateQueries({ queryKey: inboxKeys.connection(workspaceId) })
       toast.success("Chatwoot desconectado.")
     },
+    // Desconectar exige admin do workspace no backend — sem isso o clique
+    // parecia não fazer nada.
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -184,6 +190,7 @@ export function useDeleteMessage(workspaceId: string | null, conversationId: num
       qc.invalidateQueries({ queryKey: inboxKeys.messages(workspaceId, conversationId) })
       toast.success("Mensagem apagada.")
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -212,6 +219,7 @@ export function useChangeStatus(workspaceId: string | null, conversationId: numb
       invalidate()
       if (payload.status === "resolved") toast.success("Conversa resolvida.")
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -221,6 +229,7 @@ export function useChangePriority(workspaceId: string | null, conversationId: nu
     mutationFn: (priority: string | null) =>
       inboxApi.changePriority(workspaceId as string, conversationId as number, priority),
     onSuccess: invalidate,
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -230,6 +239,7 @@ export function useAssignConversation(workspaceId: string | null, conversationId
     mutationFn: (assignee: { assignee_id?: number | null; team_id?: number | null }) =>
       inboxApi.assignConversation(workspaceId as string, conversationId as number, assignee),
     onSuccess: invalidate,
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -239,6 +249,7 @@ export function useSetLabels(workspaceId: string | null, conversationId: number 
     mutationFn: (labels: string[]) =>
       inboxApi.setLabels(workspaceId as string, conversationId as number, labels),
     onSuccess: invalidate,
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -248,6 +259,7 @@ export function useSetMuted(workspaceId: string | null, conversationId: number |
     mutationFn: (muted: boolean) =>
       inboxApi.setMuted(workspaceId as string, conversationId as number, muted),
     onSuccess: invalidate,
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -266,6 +278,7 @@ export function useLinkConversation(workspaceId: string | null, conversationId: 
         toast.success("Vinculada aqui — o Chatwoot não respondeu para espelhar.")
       }
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 
@@ -278,6 +291,7 @@ export function useUnlinkConversation(workspaceId: string | null, conversationId
       invalidate()
       toast.success("Vínculo removido.")
     },
+    onError: (error) => toast.error(extractApiError(error)),
   })
 }
 

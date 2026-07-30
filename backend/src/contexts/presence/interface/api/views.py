@@ -1,6 +1,7 @@
 """Views da API de Presença (Escritório Virtual — MVP)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from rest_framework import status
@@ -10,12 +11,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.identity.infrastructure.django.models import MembershipModel
+from contexts.presence.application.active_card import get_active_card, update_working_note
+from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.domain.status_resolver import VALID_STATUSES, resolve_status
 from contexts.presence.infrastructure.django.models import (
     PresenceModel,
     UserAvatarModel,
 )
 from contexts.presence.infrastructure.meeting import refresh_busy_until
+from contexts.projects.interface.api.permissions import _assert_workspace
 from shared.domain.errors import PermissionDeniedError
 
 # Janela de frescor: presenças mais antigas que isto não estão "na sala".
@@ -188,3 +192,133 @@ def _effective(presence: PresenceModel, now: datetime) -> str:
         manual_status_at=presence.manual_status_at,
         busy_until=presence.busy_until,
     )
+
+
+def _serialize_desk_assignments(rows) -> list[dict]:
+    return [
+        {
+            "seat_id": r.seat_id,
+            "floor": r.floor,
+            "user_id": str(r.user_id),
+            "user_name": r.user.full_name,
+        }
+        for r in rows
+    ]
+
+
+class DeskAssignmentsView(APIView):
+    """GET /api/presence/desks/?workspace_id=&floor= — qualquer membro lê."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        if not workspace_id:
+            return Response({"error": "workspace_id obrigatório"}, status=400)
+        _assert_workspace(workspace_id, str(request.user.id), min_role="member")
+        floor = _clamp_floor(request.query_params.get("floor", 1))
+        rows = list_desk_assignments(workspace_id=workspace_id, floor=floor)
+        return Response(_serialize_desk_assignments(rows))
+
+
+class AssignDeskView(APIView):
+    """POST /api/presence/desks/assign/ — só owner/admin do workspace."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        workspace_id = str(request.data.get("workspace_id", ""))
+        seat_id = str(request.data.get("seat_id", ""))
+        if not workspace_id or not seat_id:
+            return Response({"error": "workspace_id e seat_id obrigatórios"}, status=400)
+        _assert_workspace(workspace_id, str(request.user.id), min_role="admin")
+
+        floor = _clamp_floor(request.data.get("floor", 1))
+        raw_user_id = request.data.get("user_id")
+        user_id = str(raw_user_id) if raw_user_id else None
+
+        if user_id is not None:
+            try:
+                uuid.UUID(user_id)
+            except (ValueError, AttributeError):
+                return Response({"error": "user_id inválido."}, status=400)
+            if not MembershipModel.objects.filter(
+                workspace_id=workspace_id, user_id=user_id
+            ).exists():
+                return Response(
+                    {"error": "Usuário não é membro deste workspace."}, status=400
+                )
+
+        assign_desk(
+            workspace_id=workspace_id, floor=floor, seat_id=seat_id, user_id=user_id
+        )
+        rows = list_desk_assignments(workspace_id=workspace_id, floor=floor)
+        return Response(_serialize_desk_assignments(rows))
+
+
+def _validate_uuid(value: str, field_name: str) -> Response | None:
+    try:
+        uuid.UUID(value)
+    except (ValueError, AttributeError):
+        return Response({"error": f"{field_name} inválido."}, status=400)
+    return None
+
+
+class ActiveCardView(APIView):
+    """GET /api/presence/active-card/?workspace_id=&user_id= — card em
+    'Em andamento' de alguém, com há quanto tempo e a observação. Só
+    owner/admin do workspace veem o card de OUTRA pessoa; qualquer membro
+    lê o próprio card (é o que a app "Meu Card" faz)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        user_id = str(request.query_params.get("user_id", ""))
+        if not workspace_id or not user_id:
+            return Response({"error": "workspace_id e user_id obrigatórios"}, status=400)
+
+        error = _validate_uuid(workspace_id, "workspace_id")
+        if error:
+            return error
+        error = _validate_uuid(user_id, "user_id")
+        if error:
+            return error
+
+        # Ler o próprio card exige só membership; ler o de outra pessoa exige
+        # admin/owner.
+        min_role = "member" if user_id == str(request.user.id) else "admin"
+        _assert_workspace(workspace_id, str(request.user.id), min_role=min_role)
+
+        if not MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id).exists():
+            return Response({"error": "Usuário não é membro deste workspace."}, status=400)
+
+        result = get_active_card(workspace_id=workspace_id, user_id=user_id)
+        return Response(result or {"active": False})
+
+
+MAX_NOTE_LENGTH = 500
+
+
+class ActiveCardNoteView(APIView):
+    """PATCH /api/presence/active-card/note/ — só o responsável do card
+    edita a observação."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request) -> Response:
+        card_id = str(request.data.get("card_id", ""))
+        note = str(request.data.get("note", ""))
+        if not card_id:
+            return Response({"error": "card_id obrigatório"}, status=400)
+        if len(note) > MAX_NOTE_LENGTH:
+            return Response(
+                {"error": f"observação muito longa (máximo {MAX_NOTE_LENGTH} caracteres)."},
+                status=400,
+            )
+        error = _validate_uuid(card_id, "card_id")
+        if error:
+            return error
+
+        update_working_note(card_id=card_id, user_id=str(request.user.id), note=note)
+        return Response({"ok": True})

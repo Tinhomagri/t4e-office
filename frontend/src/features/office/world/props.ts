@@ -5,6 +5,7 @@
 // tela é desenhado por cima. É o truque clássico de top-down 2.5D.
 import { COLORS, INK, TILE } from "./tiles"
 import { type Ctx, chamfer, hash2, makeCanvas, mix, outline, px, rect, shade, tint } from "./pixels"
+import { isoBox, isoCanvasFor, isoPanel, pt } from "./isoProps"
 
 export interface PropSprite {
   canvas: HTMLCanvasElement
@@ -13,13 +14,21 @@ export interface PropSprite {
 }
 
 export interface PropDef {
-  /** Largura/altura em pixels do sprite (múltiplos de 16 na maior parte). */
+  /** Largura/altura em pixels do CANVAS do sprite — pra props isométricos
+   * (ver `isoProps.ts`) isso é maior que a pegada real no chão, porque sobra
+   * espaço pro losango projetado + a altura do objeto. A pegada de colisão
+   * de verdade é `solid`, não `w/h`. */
   w: number
   h: number
-  /** Retângulo de colisão em pixels, relativo ao canto superior esquerdo. */
+  /** Retângulo de colisão em pixels, relativo ao canto superior esquerdo do
+   * MUNDO onde o prop foi colocado (cartesiano — independente de `anchor`). */
   solid?: { x: number; y: number; w: number; h: number } | null
   /** Deslocamento do pé em relação ao topo — define a ordem de desenho. */
   baseline?: number
+  /** Ponto do canvas que corresponde à posição de mundo `p.x, p.y` do prop
+   * (canto norte da pegada isométrica). Omitido = canto superior esquerdo do
+   * canvas (comportamento antigo, sprite plano). */
+  anchor?: { x: number; y: number }
   draw(ctx: Ctx): void
 }
 
@@ -80,68 +89,87 @@ function mug(ctx: Ctx, x: number, y: number, color = "#c85a4a"): void {
   outline(ctx, x, y, 4, 4, INK)
 }
 
-/**
- * Corpo da baia em U: divisória de três lados na altura do peito + tampo em L
- * com monitor, teclado, caneca e a bagunça de mesa. `cubicle` e `cubicleFlip`
- * são o mesmo desenho espelhado no eixo Y — a abertura para o corredor troca
- * de lado (sul ↔ norte) para que o par encoste de costas na planta.
- *
- * `my(y, h)` reflete um bloco de altura `h` no eixo Y do sprite (48px): a
- * banda do fundo/laterais e o mobiliário usam a mesma reflexão, então a
- * geometria inteira vira de cabeça para baixo de uma vez só — sem duplicar os
- * ~15 comandos de desenho entre os dois props.
- */
+// ── Baia isométrica ──────────────────────────────────────────────────────
+//
+// Mesa (caixa com 3 faces) + divisória atrás (painel vertical) + monitor
+// (caixa menor por cima) — volume de verdade em vez de ícone achatado
+// cisalhado. `cubicle`/`cubicleFlip` só trocam de que lado a divisória fica
+// (a abertura pro corredor troca de norte pra sul), pro par encostar de
+// costas na planta — mesma ideia de antes, geometria nova.
+const CUBICLE_W = 64
+const CUBICLE_D = 20
+const DESK_H = 14
+const PANEL_H = 22
+const CUBICLE_GEO = isoCanvasFor(CUBICLE_W, CUBICLE_D, DESK_H + PANEL_H)
+
+const PLANT_GEO = isoCanvasFor(10, 10, 23)
+const WATER_COOLER_GEO = isoCanvasFor(12, 12, 26)
+const LAMP_GEO = isoCanvasFor(8, 8, 25)
+const ELEVATOR_GEO = isoCanvasFor(64, 6, 36)
+const POKER_TABLE_GEO = isoCanvasFor(256, 112, 18)
+const POKER_SCREEN_GEO = isoCanvasFor(128, 8, 26)
+const POKER_CONSOLE_GEO = isoCanvasFor(32, 20, 16)
+const CHAIR_GEO = isoCanvasFor(12, 12, 16)
+
 function drawCubicleBody(ctx: Ctx, flip: boolean): void {
-  const H = 48
-  const my = (y: number, h: number) => (flip ? H - y - h : y)
+  const { ax, ay } = CUBICLE_GEO
+  const deskTop = "#b98d5f"
 
-  // Divisória: banda do fundo (lado oposto à abertura) + duas laterais. Cada
-  // sub-linha (destaque, sombra, ranhuras) espelha o próprio par (y, altura),
-  // em vez de somar um offset fixo sobre `bandY` — somar offset não-espelhado
-  // sobre um `y` já espelhado inverte a posição relativa da sub-linha dentro
-  // do bloco quando `flip` é `true`.
-  const bandY = my(0, 12)
-  rect(ctx, 0, bandY, 64, 12, COLORS.panel)
-  rect(ctx, 0, my(0, 1), 64, 1, tint(COLORS.panel, 1.15))
-  rect(ctx, 0, my(10, 2), 64, 2, COLORS.panelDark)
-  outline(ctx, 0, bandY, 64, 12, INK)
-  for (let x = 6; x < 58; x += 4) rect(ctx, x, my(2, 8), 1, 8, shade(COLORS.panel, 0.9))
+  // Divisória: painel vertical na borda de trás (norte pra `cubicle`, sul —
+  // ou seja, a mesma borda espelhada — pra `cubicleFlip`).
+  const panelAnchor = flip ? pt(ax, ay, 0, CUBICLE_D) : [ax, ay] as [number, number]
+  isoPanel(ctx, panelAnchor[0], panelAnchor[1], CUBICLE_W, PANEL_H, { top: COLORS.panel }, DESK_H)
 
-  const wallY = my(0, 40)
-  rect(ctx, 0, wallY, 4, 40, COLORS.panel)
-  rect(ctx, 60, wallY, 4, 40, COLORS.panel)
-  if (!flip) {
-    // Pé das laterais escurecido — só faz sentido do lado que não foi
-    // espelhado sobre a própria banda do fundo.
-    rect(ctx, 0, 38, 4, 2, COLORS.panelDark)
-    rect(ctx, 60, 38, 4, 2, COLORS.panelDark)
-  }
+  // Mesa: caixa rasa ocupando o footprint inteiro, com textura de superfície
+  // (sem isso o tampo lê como plástico liso, não madeira).
+  isoBox(ctx, ax, ay, CUBICLE_W, CUBICLE_D, DESK_H, {
+    top: deskTop, right: tint(deskTop, 1.1), left: shade(deskTop, 0.74), textured: true,
+  })
 
-  // Tampo em L encostado na divisória do fundo, com monitor, teclado e caneca.
-  tabletop(ctx, 5, my(12, 20), 54, 20)
-  legs(ctx, 8, my(30, 6), 48, 6)
-  monitor(ctx, flip ? 38 : 12, my(4, 11), true)
-  keyboard(ctx, 14, my(22, 3))
-  mug(ctx, flip ? 30 : 44, my(20, 4), flip ? "#5a8a6b" : undefined)
+  // Monitor: silhueta fina (tela de verdade, não cubo grosso) + pezinho —
+  // numa escala pequena, o que faz ler "computador" é o CONTORNO fino e o
+  // brilho forte da tela, não o detalhe interno (que vira ruído de longe).
+  const monW = 15
+  const monD = 2
+  const monH = 10
+  const monAnchor = pt(ax, ay, 23, 4)
+  // Pezinho: conecta o monitor à mesa, é o que dá a leitura "tela em pé".
+  const footAnchor = pt(monAnchor[0], monAnchor[1], 6, 0)
+  isoBox(ctx, footAnchor[0], footAnchor[1], 3, 2, 3, { top: "#2f363d" }, DESK_H)
+  isoBox(ctx, monAnchor[0], monAnchor[1], monW, monD, monH, {
+    top: "#2f363d", right: "#3b444d", left: "#232a30",
+  }, DESK_H + 3)
+  const screenColor = tint(SCREEN_ON, 1.2)
+  const screenAnchor = pt(monAnchor[0], monAnchor[1], 1, 0)
+  isoPanel(ctx, screenAnchor[0], screenAnchor[1], monW - 2, monH - 2, { top: screenColor }, DESK_H + 4)
+  const codeA = mix(screenColor, "#ffffff", 0.7)
+  const l1 = pt(monAnchor[0], monAnchor[1], 2, 0)
+  isoPanel(ctx, l1[0], l1[1], monW - 4, 1, { top: codeA }, DESK_H + 3 + monH - 3)
+  const l2 = pt(monAnchor[0], monAnchor[1], 2, 0)
+  isoPanel(ctx, l2[0], l2[1], monW - 6, 1, { top: codeA }, DESK_H + 3 + monH - 5)
 
-  // Bagunça de mesa determinística por hash — cada baia sorteia algo
-  // diferente, e a semente muda entre as duas versões.
+  // Teclado: caixa baixa (não decalque plano) — a espessura+contorno é o
+  // que separa "objeto sobre a mesa" de "mancha pintada na mesa".
+  const kbAnchor = pt(ax, ay, 20, 12)
+  isoBox(ctx, kbAnchor[0], kbAnchor[1], 10, 4, 2, {
+    top: "#c8c2b6", right: tint("#c8c2b6", 1.05), left: shade("#c8c2b6", 0.85),
+  }, DESK_H)
+
+  // Mouse: baixinho, encostado no teclado — antes era um cubo colorido
+  // solto no meio da mesa, que não lia como acessório nenhum.
+  const mouseAnchor = pt(ax, ay, 31, 13)
+  isoBox(ctx, mouseAnchor[0], mouseAnchor[1], 4, 3, 2, {
+    top: "#d8d2c8", right: tint("#d8d2c8", 1.05), left: shade("#d8d2c8", 0.82),
+  }, DESK_H)
+
+  // Caneca — sorteio determinístico, cada baia recebe (ou não) uma.
   const seed = flip ? 11 : 7
   if (hash2(seed, 31, 5) > 0.4) {
-    const w = flip ? 8 : 7
-    rect(ctx, flip ? 20 : 38, my(24, 5), w, 5, "#e8e2d2")
-    rect(ctx, flip ? 20 : 38, my(24, 1), w, 1, "#cfc7b4")
+    const mugAnchor = pt(ax, ay, 46, 8)
+    isoBox(ctx, mugAnchor[0], mugAnchor[1], 5, 5, 5, {
+      top: flip ? "#5a8a6b" : "#c85a4a",
+    }, DESK_H)
   }
-  if (hash2(seed, 9, 41) > 0.5) {
-    rect(ctx, 50, my(22, 6), 4, 6, "#6b5540")
-    rect(ctx, 51, my(20, 3), 1, 3, "#c8a24a")
-    rect(ctx, 53, my(20, 3), 1, 3, "#4a6fa5")
-  }
-  rect(ctx, 30, my(3, 4), 5, 4, "#e8d24a")
-  rect(ctx, 24, my(5, 3), 4, 3, "#9ad2c0")
-
-  // Sombra de contato no chão, do lado da abertura.
-  rect(ctx, 4, my(39, 1), 56, 1, "rgba(43,30,26,0.25)")
 }
 
 // ── Definições ──────────────────────────────────────────────────────────────
@@ -183,48 +211,52 @@ export const PROPS: Record<string, PropDef> = {
   },
 
   chair: {
-    w: 16,
-    h: 20,
-    solid: { x: 3, y: 10, w: 10, h: 8 },
+    w: CHAIR_GEO.cw,
+    h: CHAIR_GEO.ch,
+    // Sem colisão própria: cadeira fica na faixa livre de entrada da baia
+    // (deixada de propósito pelo `solid` do cubicle) — bloquear aqui de novo
+    // fecharia o único acesso ao assento.
+    solid: null,
     baseline: 19,
+    anchor: { x: CHAIR_GEO.ax, y: CHAIR_GEO.ay },
     draw(ctx) {
-      // Encosto.
-      chamfer(ctx, 3, 0, 10, 9, CHAIR)
-      rect(ctx, 4, 1, 8, 1, tint(CHAIR, 1.2))
-      outline(ctx, 3, 0, 10, 9, INK)
+      const { ax, ay } = CHAIR_GEO
+      // Base + coluna giratória.
+      isoBox(ctx, ax, ay, 5, 5, 3, { top: "#3b444d", right: "#2f363d", left: "#232a30" }, 0)
+      const postAnchor = pt(ax, ay, 2, 2)
+      isoBox(ctx, postAnchor[0], postAnchor[1], 1, 1, 5, { top: "#4a545e" }, 3)
       // Assento.
-      chamfer(ctx, 2, 9, 12, 5, CHAIR_D)
-      outline(ctx, 2, 9, 12, 5, INK)
-      // Coluna + base em estrela.
-      rect(ctx, 7, 14, 2, 3, "#3b444d")
-      rect(ctx, 3, 17, 10, 1, "#3b444d")
-      px(ctx, 3, 18, "#2f363d")
-      px(ctx, 12, 18, "#2f363d")
-      rect(ctx, 3, 19, 10, 1, "rgba(43,30,26,0.25)")
+      isoBox(ctx, ax, ay, 12, 12, 5, {
+        top: CHAIR_D, right: tint(CHAIR_D, 1.12), left: shade(CHAIR_D, 0.74),
+      }, 8)
+      // Encosto na borda SUL (mesmo truque de espelhar `cubicleFlip`): quem
+      // senta fica de costas pro sul e de frente pra mesa, que está ao norte.
+      const backAnchor = pt(ax, ay, 0, 12)
+      isoPanel(ctx, backAnchor[0], backAnchor[1], 12, 10, { top: CHAIR }, 13)
     },
   },
 
   plant: {
-    w: 16,
-    h: 24,
+    w: PLANT_GEO.cw,
+    h: PLANT_GEO.ch,
     solid: { x: 4, y: 16, w: 8, h: 6 },
     baseline: 23,
+    anchor: { x: PLANT_GEO.ax, y: PLANT_GEO.ay },
     draw(ctx) {
-      // Folhagem: 3 camadas de tom para dar volume sem virar mancha.
-      const g = COLORS.plant
-      const gd = COLORS.plantDark
-      rect(ctx, 6, 0, 4, 4, g)
-      rect(ctx, 3, 3, 10, 6, g)
-      rect(ctx, 2, 6, 12, 5, g)
-      rect(ctx, 2, 9, 12, 2, gd)
-      rect(ctx, 4, 4, 3, 2, tint(g, 1.18))
-      for (let i = 0; i < 6; i++) px(ctx, 3 + i * 2, 7 + (i % 2), gd)
+      const { ax, ay } = PLANT_GEO
       // Vaso de barro.
-      chamfer(ctx, 4, 12, 8, 8, "#a8623f")
-      rect(ctx, 4, 12, 8, 2, tint("#a8623f", 1.15))
-      rect(ctx, 5, 18, 6, 2, shade("#a8623f", 0.72))
-      outline(ctx, 4, 12, 8, 8, INK)
-      rect(ctx, 4, 21, 8, 1, "rgba(43,30,26,0.25)")
+      isoBox(ctx, ax, ay, 10, 10, 8, {
+        top: "#a8623f", right: tint("#a8623f", 1.12), left: shade("#a8623f", 0.7),
+      })
+      // Folhagem em 2 caixas empilhadas — dá volume sem virar mancha.
+      const potAnchor = pt(ax, ay, 1, 1)
+      isoBox(ctx, potAnchor[0], potAnchor[1], 8, 8, 8, {
+        top: COLORS.plant, right: tint(COLORS.plant, 1.1), left: COLORS.plantDark,
+      }, 8)
+      const topAnchor = pt(ax, ay, 2, 2)
+      isoBox(ctx, topAnchor[0], topAnchor[1], 6, 6, 8, {
+        top: tint(COLORS.plant, 1.15), right: COLORS.plant, left: COLORS.plantDark,
+      }, 15)
     },
   },
 
@@ -349,22 +381,22 @@ export const PROPS: Record<string, PropDef> = {
   },
 
   waterCooler: {
-    w: 16,
-    h: 28,
+    w: WATER_COOLER_GEO.cw,
+    h: WATER_COOLER_GEO.ch,
     solid: { x: 3, y: 16, w: 10, h: 8 },
     baseline: 26,
+    anchor: { x: WATER_COOLER_GEO.ax, y: WATER_COOLER_GEO.ay },
     draw(ctx) {
-      // Garrafão translúcido.
-      chamfer(ctx, 3, 0, 10, 12, "#8fc4d8")
-      rect(ctx, 4, 1, 3, 9, "#b5dced")
-      outline(ctx, 3, 0, 10, 12, INK)
+      const { ax, ay } = WATER_COOLER_GEO
       // Bebedouro.
-      chamfer(ctx, 2, 12, 12, 12, "#d8d2c8")
-      outline(ctx, 2, 12, 12, 12, INK)
-      rect(ctx, 6, 16, 4, 2, "#5f6b75")
-      px(ctx, 7, 18, "#8fc4d8")
-      rect(ctx, 3, 21, 10, 2, "#b0aa9e")
-      rect(ctx, 2, 27, 12, 1, "rgba(43,30,26,0.25)")
+      isoBox(ctx, ax, ay, 12, 12, 16, {
+        top: "#d8d2c8", right: tint("#d8d2c8", 1.1), left: shade("#d8d2c8", 0.74),
+      })
+      // Garrafão translúcido por cima.
+      const jugAnchor = pt(ax, ay, 2, 2)
+      isoBox(ctx, jugAnchor[0], jugAnchor[1], 8, 8, 10, {
+        top: "#b5dced", right: "#8fc4d8", left: shade("#8fc4d8", 0.75),
+      }, 16)
     },
   },
 
@@ -396,20 +428,32 @@ export const PROPS: Record<string, PropDef> = {
   },
 
   lamp: {
-    w: 16,
-    h: 30,
+    w: LAMP_GEO.cw,
+    h: LAMP_GEO.ch,
     solid: { x: 5, y: 22, w: 6, h: 5 },
     baseline: 28,
+    anchor: { x: LAMP_GEO.ax, y: LAMP_GEO.ay },
     draw(ctx) {
-      // Cúpula.
-      chamfer(ctx, 2, 2, 12, 8, "#e8d2a0")
-      rect(ctx, 3, 3, 10, 2, "#f5e6c0")
-      outline(ctx, 2, 2, 12, 8, "#a8916a")
-      // Haste e base.
-      rect(ctx, 7, 10, 2, 13, "#8a8175")
-      chamfer(ctx, 4, 23, 8, 4, "#6b6560")
-      outline(ctx, 4, 23, 8, 4, INK)
-      rect(ctx, 3, 29, 10, 1, "rgba(43,30,26,0.25)")
+      const { ax, ay } = LAMP_GEO
+      // Base.
+      isoBox(ctx, ax, ay, 8, 8, 4, {
+        top: "#6b6560", right: tint("#6b6560", 1.1), left: shade("#6b6560", 0.7),
+      })
+      // Haste.
+      const poleAnchor = pt(ax, ay, 3, 3)
+      isoBox(ctx, poleAnchor[0], poleAnchor[1], 2, 2, 14, {
+        top: "#8a8175", right: "#8a8175", left: shade("#8a8175", 0.75),
+      }, 4)
+      // Cúpula — bem clara e quente, pra ler "acesa" mesmo à luz do dia (a
+      // cor por si só não basta à noite: o furo em `map.lights` é o que
+      // realmente ilumina, ver floor1.ts).
+      const shadeAnchor = pt(ax, ay, 1, 1)
+      isoBox(ctx, shadeAnchor[0], shadeAnchor[1], 6, 6, 7, {
+        top: "#fff6da", right: "#ffe9ad", left: shade("#ffe9ad", 0.82),
+      }, 18)
+      // Filamento aceso — pontinho bem branco no topo da cúpula.
+      const bulbAnchor = pt(ax, ay, 3, 3)
+      isoBox(ctx, bulbAnchor[0], bulbAnchor[1], 2, 2, 2, { top: "#ffffff" }, 24)
     },
   },
 
@@ -492,11 +536,12 @@ export const PROPS: Record<string, PropDef> = {
    * compartilhado com `cubicleFlip`.
    */
   cubicle: {
-    w: 64,
-    h: 48,
+    w: CUBICLE_GEO.cw,
+    h: CUBICLE_GEO.ch,
     // A faixa de baixo (14 px) fica livre: é a entrada da baia.
     solid: { x: 0, y: 0, w: 64, h: 34 },
     baseline: 46,
+    anchor: { x: CUBICLE_GEO.ax, y: CUBICLE_GEO.ay },
     draw(ctx) {
       drawCubicleBody(ctx, false)
     },
@@ -504,10 +549,11 @@ export const PROPS: Record<string, PropDef> = {
 
   /** Mesma baia com a abertura ao NORTE — forma o par encostado de costas. */
   cubicleFlip: {
-    w: 64,
-    h: 48,
+    w: CUBICLE_GEO.cw,
+    h: CUBICLE_GEO.ch,
     solid: { x: 0, y: 14, w: 64, h: 34 },
     baseline: 47,
+    anchor: { x: CUBICLE_GEO.ax, y: CUBICLE_GEO.ay },
     draw(ctx) {
       drawCubicleBody(ctx, true)
     },
@@ -614,26 +660,82 @@ export const PROPS: Record<string, PropDef> = {
   },
 
   elevatorDoors: {
-    w: 64,
-    h: 40,
+    w: ELEVATOR_GEO.cw,
+    h: ELEVATOR_GEO.ch,
     solid: { x: 0, y: 0, w: 64, h: 36 },
     baseline: 38,
+    anchor: { x: ELEVATOR_GEO.ax, y: ELEVATOR_GEO.ay },
     draw(ctx) {
-      // Moldura + duas folhas com junta no meio.
-      rect(ctx, 0, 0, 64, 36, shade(COLORS.steel, 0.7))
-      rect(ctx, 3, 3, 58, 30, COLORS.steel)
-      rect(ctx, 3, 3, 58, 1, tint(COLORS.steel, 1.2))
-      rect(ctx, 31, 3, 2, 30, shade(COLORS.steel, 0.62))
-      for (let x = 7; x < 60; x += 5) {
-        if (x > 28 && x < 36) continue
-        rect(ctx, x, 6, 1, 24, shade(COLORS.steel, 0.86))
-      }
-      outline(ctx, 0, 0, 64, 36, INK)
-      // Indicador aceso acima da porta.
-      rect(ctx, 26, 0, 12, 3, "#2f363d")
-      rect(ctx, 29, 1, 2, 1, "#e8d24a")
-      rect(ctx, 33, 1, 2, 1, "#3b444d")
-      rect(ctx, 2, 37, 60, 1, "rgba(43,30,26,0.25)")
+      const { ax, ay } = ELEVATOR_GEO
+      // Moldura de aço com espessura de verdade — a cabine "entra" na parede
+      // em vez de ser um adesivo colado nela.
+      isoBox(ctx, ax, ay, 64, 6, 36, {
+        top: shade(COLORS.steel, 0.85), right: COLORS.steel, left: shade(COLORS.steel, 0.62),
+      })
+      // Junta central das duas folhas + indicador aceso, na face frontal.
+      const seamAnchor = pt(ax, ay, 31, 0)
+      isoPanel(ctx, seamAnchor[0], seamAnchor[1], 2, 30, { top: shade(COLORS.steel, 0.5) }, 3)
+      const indAnchor = pt(ax, ay, 26, 0)
+      isoPanel(ctx, indAnchor[0], indAnchor[1], 12, 3, { top: "#2f363d" }, 33)
+    },
+  },
+
+  /**
+   * Mesa em U da sala de Planning Poker: abre ao norte (lado da entrada). A
+   * colisão é o retângulo cheio — ninguém precisa andar dentro do vão do U,
+   * só ao redor, onde ficam os assentos.
+   */
+  pokerTable: {
+    w: POKER_TABLE_GEO.cw,
+    h: POKER_TABLE_GEO.ch,
+    solid: { x: 0, y: 0, w: 256, h: 112 },
+    baseline: 108,
+    anchor: { x: POKER_TABLE_GEO.ax, y: POKER_TABLE_GEO.ay },
+    draw(ctx) {
+      const { ax, ay } = POKER_TABLE_GEO
+      const top = "#8f6a44"
+      const colors = { top, right: tint(top, 1.12), left: shade(top, 0.74), textured: true }
+      // Mesa em U de verdade: 3 caixas (braço oeste, braço leste, base ao
+      // sul) — o vão do meio fica sem caixa nenhuma, revelando o piso.
+      isoBox(ctx, ax, ay, 32, 112, 18, colors) // braço oeste
+      const eastAnchor = pt(ax, ay, 224, 0)
+      isoBox(ctx, eastAnchor[0], eastAnchor[1], 32, 112, 18, colors) // braço leste
+      const southAnchor = pt(ax, ay, 0, 80)
+      isoBox(ctx, southAnchor[0], southAnchor[1], 256, 32, 18, colors) // base
+    },
+  },
+
+  /** Telão montado na parede sul da sala de poker. */
+  pokerScreen: {
+    w: POKER_SCREEN_GEO.cw,
+    h: POKER_SCREEN_GEO.ch,
+    solid: { x: 0, y: 24, w: 128, h: 8 },
+    baseline: 30,
+    anchor: { x: POKER_SCREEN_GEO.ax, y: POKER_SCREEN_GEO.ay },
+    draw(ctx) {
+      const { ax, ay } = POKER_SCREEN_GEO
+      isoBox(ctx, ax, ay, 128, 8, 26, {
+        top: shade("#12161c", 0.85), right: "#1b2733", left: shade("#1b2733", 0.7),
+      })
+      const glowAnchor = pt(ax, ay, 46, 1)
+      isoPanel(ctx, glowAnchor[0], glowAnchor[1], 36, 8, { top: "#26333f" }, 20)
+    },
+  },
+
+  /** Console do host: onde a tecla E abre o painel de controle da sessão. */
+  pokerConsole: {
+    w: POKER_CONSOLE_GEO.cw,
+    h: POKER_CONSOLE_GEO.ch,
+    solid: { x: 0, y: 10, w: 32, h: 18 },
+    baseline: 28,
+    anchor: { x: POKER_CONSOLE_GEO.ax, y: POKER_CONSOLE_GEO.ay },
+    draw(ctx) {
+      const { ax, ay } = POKER_CONSOLE_GEO
+      isoBox(ctx, ax, ay, 32, 20, 16, {
+        top: "#7d5b41", right: tint("#7d5b41", 1.1), left: shade("#7d5b41", 0.72),
+      })
+      const screenAnchor = pt(ax, ay, 8, 4)
+      isoPanel(ctx, screenAnchor[0], screenAnchor[1], 16, 9, { top: "#4a6fa5" }, 16)
     },
   },
 }

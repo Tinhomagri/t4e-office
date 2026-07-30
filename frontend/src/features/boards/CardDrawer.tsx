@@ -180,6 +180,7 @@ export function CardDrawer({
 }) {
   const updateCard = useUpdateCard(projectId)
   const { data: allCards } = useCards(projectId)
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const [draft, setDraft] = useState<Card | null>(card)
   const [savedHint, setSavedHint] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -297,6 +298,13 @@ export function CardDrawer({
                 value={draft.description}
                 onChange={(html) => set("description", html)}
                 placeholder="Adicione uma descrição detalhada…"
+                // Sem workspace ativo não há IA configurada para chamar, então
+                // o menu de IA nem aparece.
+                onAiAssist={
+                  workspaceId
+                    ? (text, action) => copilotApi.writeAssist(workspaceId, text, action)
+                    : undefined
+                }
               />
               {draft.description !== card.description && (
                 <div className="mt-2 flex gap-2">
@@ -349,7 +357,7 @@ export function CardDrawer({
               />
               {card.points != null && (
                 <span className="flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700 ring-1 ring-brand-200">
-                  🃏 {card.points} pts
+                  🃏 peso {card.points}
                 </span>
               )}
             </div>
@@ -383,7 +391,7 @@ export function CardDrawer({
               {parent ? (
                 <span
                   className="inline-flex max-w-full items-center gap-1 truncate rounded px-1.5 py-0.5 text-xs font-medium text-white"
-                  style={{ backgroundColor: parent.epic_color || "#6b7280" }}
+                  style={{ backgroundColor: parent.epic_color || "#626F86" }}
                   title={parent.title}
                 >
                   <span className="font-mono">{parent.ref}</span>
@@ -414,7 +422,7 @@ export function CardDrawer({
               options={(Object.keys(PRIORITY_LABEL) as CardPriority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))}
             />
 
-            <DetailRow label="Pontos">
+            <DetailRow label="Peso">
               <input
                 type="number"
                 min={0}
@@ -1465,7 +1473,7 @@ const FIELD_LABEL: Record<string, string> = {
   status: "Status",
   type: "Tipo",
   priority: "Prioridade",
-  points: "Pontos",
+  points: "Peso",
   assignee_id: "Responsável",
   reporter_id: "Relator",
   sprint_id: "Sprint",

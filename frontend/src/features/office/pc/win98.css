@@ -18,6 +18,13 @@
   -webkit-font-smoothing: none;
 }
 
+.win98-wallpaper.win98-wallpaper {
+  background-color: var(--w98-desktop);
+  background-image: url("/textures/windows-98-yaa4sbkls0sleaqm.jpg");
+  background-size: cover;
+  background-position: center;
+}
+
 /* Relevo padrão do 98: claro em cima/esquerda, escuro em baixo/direita. */
 .win98-raised {
   background: var(--w98-face);

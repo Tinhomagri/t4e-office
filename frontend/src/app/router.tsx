@@ -4,6 +4,7 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { AppShell } from "@/features/shell/AppShell"
 import { AvatarLabPage } from "@/features/avatar/AvatarLabPage"
 import { BoardsPage } from "@/features/boards/BoardsPage"
+import { BoardSettingsPage } from "@/features/boards/settings/BoardSettingsPage"
 import { CopilotPage } from "@/features/copilot/CopilotPage"
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
 import { GoogleCallbackPage } from "@/features/auth/GoogleCallbackPage"
@@ -97,6 +98,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <MyDayPage /> },
       { path: "boards", element: <BoardsPage /> },
+      { path: "boards/:projectId/settings", element: <BoardSettingsPage /> },
       { path: "members", element: <MembersPage /> },
       { path: "poker", element: <PokerPage /> },
       { path: "poker/:sessionId", element: <PokerPage /> },

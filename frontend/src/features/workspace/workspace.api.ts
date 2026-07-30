@@ -6,6 +6,10 @@ import type {
   Attachment,
   AutomationRule,
   AutomationRunLog,
+  BoardConfig,
+  ProjectDetail,
+  UpdateBoardConfigInput,
+  UpdateProjectInput,
   Card,
   Notification,
   CreateAutomationRuleInput,
@@ -84,6 +88,22 @@ export async function createInvitation(
     `/auth/workspaces/${workspaceId}/invitations/`,
     payload,
   )
+  return data
+}
+
+/** Dados do convite antes do login — a tela usa para decidir login vs cadastro. */
+export interface InvitationPreview {
+  workspace_name: string
+  email: string
+  role: string
+  status: "pending" | "accepted" | "revoked"
+  account_exists: boolean
+  /** `google` = conta OAuth-only: login por senha falha sem explicar o motivo. */
+  auth_method: "password" | "google" | "none"
+}
+
+export async function getInvitationPreview(token: string): Promise<InvitationPreview> {
+  const { data } = await api.get("/auth/invitations/preview/", { params: { token } })
   return data
 }
 
@@ -380,6 +400,100 @@ export async function updateWorkflowStatus(statusId: string, payload: UpdateWork
 
 export async function deleteWorkflowStatus(statusId: string): Promise<void> {
   await api.delete(`/workflow-statuses/${statusId}/`)
+}
+
+// Aplica a ordem inteira de uma vez: um PATCH por coluna deixaria o board em
+// estado inconsistente entre as respostas durante o drag.
+export async function reorderWorkflowStatuses(
+  projectId: string,
+  statusIds: string[],
+): Promise<WorkflowStatus[]> {
+  const { data } = await api.post<WorkflowStatus[]>(
+    `/projects/${projectId}/workflow-statuses/reorder/`,
+    { status_ids: statusIds },
+  )
+  return data
+}
+
+// ---- Configuração do quadro / projeto ----
+export async function getProject(projectId: string): Promise<ProjectDetail> {
+  const { data } = await api.get<ProjectDetail>(`/projects/${projectId}/`)
+  return data
+}
+
+export async function updateProject(
+  projectId: string,
+  payload: UpdateProjectInput,
+): Promise<ProjectDetail> {
+  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, payload)
+  return data
+}
+
+// Avatar por upload precisa de multipart; passar `null` remove a imagem e o
+// projeto volta a exibir o par emoji+cor.
+export async function updateProjectAvatar(
+  projectId: string,
+  file: File | null,
+): Promise<ProjectDetail> {
+  // `null` limpa o avatar; senão manda o data URI já reduzido.
+  const avatar_image = file ? await shrinkToDataUri(file) : ""
+  const { data } = await api.patch<ProjectDetail>(`/projects/${projectId}/`, { avatar_image })
+  return data
+}
+
+// Reduz a imagem a um quadrado de AVATAR_SIZE e devolve data URI.
+//
+// O avatar é guardado como data URI numa coluna do banco (o deploy é serverless
+// e não tem disco persistente), então a imagem precisa chegar pequena: a foto
+// crua de um celular passaria de 3 MB e não caberia. WebP com corte central
+// deixa o resultado na casa dos KB.
+const AVATAR_SIZE = 128
+
+async function shrinkToDataUri(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const canvas = document.createElement("canvas")
+    canvas.width = AVATAR_SIZE
+    canvas.height = AVATAR_SIZE
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Não foi possível processar a imagem.")
+
+    // Corte central: recorta o maior lado para o avatar não sair achatado.
+    const side = Math.min(bitmap.width, bitmap.height)
+    ctx.drawImage(
+      bitmap,
+      (bitmap.width - side) / 2,
+      (bitmap.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      AVATAR_SIZE,
+      AVATAR_SIZE,
+    )
+
+    const webp = canvas.toDataURL("image/webp", 0.85)
+    // Safari antigo ignora o tipo pedido e devolve PNG — o backend aceita ambos.
+    return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png")
+  } finally {
+    bitmap.close()
+  }
+}
+
+export async function getBoardConfig(projectId: string): Promise<BoardConfig> {
+  const { data } = await api.get<BoardConfig>(`/projects/${projectId}/board-config/`)
+  return data
+}
+
+export async function updateBoardConfig(
+  projectId: string,
+  payload: UpdateBoardConfigInput,
+): Promise<BoardConfig> {
+  const { data } = await api.patch<BoardConfig>(
+    `/projects/${projectId}/board-config/`,
+    payload,
+  )
+  return data
 }
 
 // ---- Saved Filters (quick filters do board) ----

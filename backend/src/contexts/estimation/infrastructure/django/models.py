@@ -87,6 +87,49 @@ class PokerRoundModel(models.Model):
         ordering = ["decided_at"]
 
 
+class PokerReactionModel(models.Model):
+    """Reação efêmera de uma pessoa para outra dentro da sala (👏 🔥 😂 …).
+
+    Não é histórico: a linha existe só o tempo de a animação atravessar a mesa
+    no cliente. O detalhe da sessão devolve as dos últimos segundos e o próprio
+    POST varre as antigas — por isso não há índice de leitura por usuário nem
+    exibição em relatório.
+    """
+
+    EMOJIS = ["👏", "🔥", "😂", "🤔", "🎯", "❤️"]
+
+    # Emotes são o mesmo tipo de evento efêmero, só que sem destinatário: a
+    # pessoa anima o próprio sprite e a sala inteira vê pelo poll. Catálogo
+    # fechado pelos mesmos motivos do de emojis, e limitado aos clipes que o
+    # chibi.ts sabe desenhar.
+    EMOTES = ["wave", "dance", "jamal", "dab", "floss", "celebrate", "sleep", "coffee"]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(
+        PokerSessionModel, on_delete=models.CASCADE, related_name="reactions"
+    )
+    from_user = models.ForeignKey(
+        "identity.UserModel",
+        on_delete=models.CASCADE,
+        related_name="poker_reactions_sent",
+    )
+    to_user = models.ForeignKey(
+        "identity.UserModel",
+        on_delete=models.CASCADE,
+        related_name="poker_reactions_received",
+        null=True,
+        blank=True,
+    )
+    emoji = models.CharField(max_length=8, blank=True, default="")
+    emote = models.CharField(max_length=16, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "estimation_poker_reaction"
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["session", "created_at"])]
+
+
 class PokerVoteModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(

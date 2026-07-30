@@ -21,7 +21,7 @@ describe("world.store", () => {
 
   it("recusa ir para andar em obras e mantém o andar atual", () => {
     useWorldStore.getState().openPanel()
-    expect(useWorldStore.getState().goToFloor(2)).toBe(false)
+    expect(useWorldStore.getState().goToFloor(3)).toBe(false)
     expect(useWorldStore.getState().floor).toBe(1)
     expect(useWorldStore.getState().panelOpen).toBe(true)
   })

@@ -165,7 +165,9 @@ export function InboxPage({ workspaceId }: Props) {
       : null
 
   return (
-    <div className="flex h-[calc(100vh-14rem)] min-h-[520px] overflow-hidden rounded-lg border border-cw-border bg-white dark:border-ink-800 dark:bg-ink-900">
+    // min-h-0 em vez de min-h fixo: com altura mínima o painel empurrava a
+    // viewport em telas baixas e a última conversa ficava cortada.
+    <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-cw-border bg-white dark:border-ink-800 dark:bg-ink-900">
       <ConversationList
         conversations={conversations}
         counts={counts}
@@ -188,9 +190,10 @@ export function InboxPage({ workspaceId }: Props) {
         selectedLabels={selectedLabels}
         onLabelsChange={setSelectedLabels}
         onSearchChange={setSearch}
+        onOpenConnectionSettings={() => setShowSetup(true)}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AnimatePresence>
           {!connected && (
             <motion.p
