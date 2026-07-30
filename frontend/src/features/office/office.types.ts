@@ -10,6 +10,8 @@ export interface OfficeMember {
   facing: Direction
   status: PresenceStatus
   avatar_config: AvatarConfig | null
+  /** Mesa atribuída de uma presença automática por card em andamento. */
+  seat_id?: string
 }
 
 export interface HeartbeatInput {

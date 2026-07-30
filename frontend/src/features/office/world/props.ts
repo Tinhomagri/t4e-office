@@ -11,6 +11,8 @@ export interface PropSprite {
   canvas: HTMLCanvasElement
   w: number
   h: number
+  /** Camada de frente, desenhada depois dos avatares (ex.: encosto de cadeira). */
+  front?: HTMLCanvasElement
 }
 
 export interface PropDef {
@@ -30,6 +32,8 @@ export interface PropDef {
    * canvas (comportamento antigo, sprite plano). */
   anchor?: { x: number; y: number }
   draw(ctx: Ctx): void
+  /** Parte que deve ocultar apenas as pernas de quem está sentado. */
+  drawFront?(ctx: Ctx): void
 }
 
 const WOOD = "#8a6440"
@@ -229,8 +233,13 @@ export const PROPS: Record<string, PropDef> = {
       isoBox(ctx, ax, ay, 12, 12, 5, {
         top: CHAIR_D, right: tint(CHAIR_D, 1.12), left: shade(CHAIR_D, 0.74),
       }, 8)
+    },
+    drawFront(ctx) {
+      const { ax, ay } = CHAIR_GEO
       // Encosto na borda SUL (mesmo truque de espelhar `cubicleFlip`): quem
       // senta fica de costas pro sul e de frente pra mesa, que está ao norte.
+      // Esta metade é desenhada DEPOIS do avatar pelo engine: preserva o
+      // encosto à vista e dá a profundidade de uma pessoa sentada.
       const backAnchor = pt(ax, ay, 0, 12)
       isoPanel(ctx, backAnchor[0], backAnchor[1], 12, 10, { top: CHAIR }, 13)
     },
@@ -748,7 +757,14 @@ export function buildPropSprites(): Record<string, PropSprite> {
   for (const [name, def] of Object.entries(PROPS)) {
     const { canvas, ctx } = makeCanvas(def.w, def.h)
     def.draw(ctx)
-    out[name] = { canvas, w: def.w, h: def.h }
+    const front = def.drawFront
+      ? (() => {
+          const layer = makeCanvas(def.w, def.h)
+          def.drawFront!(layer.ctx)
+          return layer.canvas
+        })()
+      : undefined
+    out[name] = { canvas, w: def.w, h: def.h, front }
   }
   return out
 }

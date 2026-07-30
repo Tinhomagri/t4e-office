@@ -110,15 +110,28 @@ export function buildFloor1(): OfficeMap {
     lights.push({ x: 18 * TILE + 8, y: topB * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 })
 
     for (const tx of CUBICLE_COLS) {
-      const s1x = (tx + 1) * TILE
+      // As duas fileiras usam a mesma baia e a mesma câmera. A antiga posição
+      // `tx + 1` deixava as cadeiras das fileiras 1/3/5 um tile à esquerda das
+      // 2/4/6, parecendo viradas de outro jeito. Alinhar ambas em `tx + 2`
+      // uniformiza cadeira, avatar e teclado na projeção.
+      const s1x = (tx + 2) * TILE
       const s1y = (topA + 3) * TILE + 4
       const s2x = (tx + 2) * TILE
       const s2y = (topB + 3) * TILE + 4
       // A mesa fica ao NORTE do assento (a divisória do cubicle é que fica ao
       // sul, na borda de entrada) — sentado, o avatar precisa olhar pra cima
       // pra encarar a própria mesa, não pra baixo (que olharia pro corredor).
-      seats.push({ id: seatId("ws", s1x, s1y), x: s1x, y: s1y, facing: "up", label: "Baia", kind: "pc" })
-      seats.push({ id: seatId("ws", s2x, s2y), x: s2x, y: s2y, facing: "up", label: "Baia", kind: "pc" })
+      // A posição lógica fica no corredor para a interação e a presença. O
+      // sprite, porém, sobe 24px até o centro da cadeira: assim aparece atrás
+      // do encosto, voltado para o monitor, em vez de em pé à frente da mesa.
+      // A pose sentada se ancora lateralmente na borda da mesa (x-5/y-31
+      // a partir do ponto lógico). Isso deixa a cadeira atrás do avatar e dá
+      // a leitura de alguém trabalhando, em vez de parado sobre o assento.
+      const visualOffset = { x: -5, y: -31 }
+      // O id da fileira de cima fica estável para preservar atribuições que
+      // já foram persistidas antes do ajuste visual da cadeira.
+      seats.push({ id: seatId("ws", (tx + 1) * TILE, s1y), x: s1x, y: s1y, facing: "up", label: "Baia", kind: "pc", visualOffset })
+      seats.push({ id: seatId("ws", s2x, s2y), x: s2x, y: s2y, facing: "up", label: "Baia", kind: "pc", visualOffset })
       // Cadeira encostada na mesa — o assento (onde o avatar para) fica 2
       // tiles ao sul da mesa (aisle de passagem); a cadeira em si precisa
       // ficar bem mais perto da mesa, senão sobra vão vazio entre as duas.

@@ -7,7 +7,12 @@ from contexts.identity.infrastructure.django.models import (
     UserModel,
     WorkspaceModel,
 )
-from contexts.presence.infrastructure.django.models import PresenceModel
+from contexts.presence.infrastructure.django.models import (
+    DeskAssignmentModel,
+    PresenceModel,
+    UserAvatarModel,
+)
+from contexts.projects.infrastructure.django.models import CardModel, ProjectModel
 
 
 @pytest.fixture
@@ -138,6 +143,36 @@ def test_avatar_aparece_na_sala(scenario):
     room = _client(scenario["owner"]).get(f"/api/presence/room/?workspace_id={ws_id}")
     bob = next(m for m in room.data if m["name"] == "Bob Dev")
     assert bob["avatar_config"]["hair"] == 3
+
+
+def test_card_em_andamento_com_mesa_aparece_sentado_sem_heartbeat(scenario):
+    ws = scenario["ws"]
+    other = scenario["other"]
+    UserAvatarModel.objects.create(user=other, config={"name": "Bob", "hair": 3})
+    DeskAssignmentModel.objects.create(
+        workspace=ws, floor=1, seat_id="ws-9-4", user=other
+    )
+    project = ProjectModel.objects.create(workspace=ws, name="Produto", key="PROD")
+    CardModel.objects.create(
+        project=project, number=1, title="Em andamento", assignee=other, status="doing"
+    )
+
+    room = _client(scenario["owner"]).get(f"/api/presence/room/?workspace_id={ws.id}&floor=1")
+
+    assert room.status_code == 200
+    assert room.data == [
+        {
+            "user_id": str(other.id),
+            "name": "Bob Dev",
+            "x": 0.5,
+            "y": 0.5,
+            "facing": "up",
+            "floor": 1,
+            "status": "focus",
+            "seat_id": "ws-9-4",
+            "avatar_config": {"name": "Bob", "hair": 3},
+        }
+    ]
 
 
 def test_heartbeat_grava_o_andar(scenario):

@@ -32,6 +32,7 @@ import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
+import { getMockActiveCard, getMockRoom, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -67,41 +68,51 @@ const EMOTES: { anim: string; label: string; icon: string }[] = [
 export function OfficeRoom({
   workspaceId,
   myConfig,
+  mock = false,
 }: {
   workspaceId: string
   myConfig: AvatarConfig
+  mock?: boolean
 }) {
   const me = useAuthStore((s) => s.user)
   const floor = useWorldStore((s) => s.floor)
-  const room = useRoom(workspaceId, floor)
+  const queryWorkspaceId = mock ? null : workspaceId
+  const room = useRoom(queryWorkspaceId, floor)
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
 
   // A listagem do workspace só serve para descobrir QUAL sessão está ativa:
   // o serializer da lista devolve apenas contadores agregados, sem
   // `participants`/`votes`. O detalhe (useSession) é quem traz esses campos.
-  const activeSession = useActivePokerSession(workspaceId).data ?? null
+  const activeSession = useActivePokerSession(queryWorkspaceId).data ?? null
   const voteSeatId = usePokerRoomStore((s) => s.voteSeatId)
   const onPokerFloor = floor === POKER_FLOOR
   // Só polla o detalhe onde ele é usado (as plaquinhas do andar 2).
   const sessionDetail =
     useSession(onPokerFloor ? (activeSession?.id ?? null) : null).data ?? null
 
-  const deskAssignments = useDeskAssignments(workspaceId, floor)
+  const deskAssignments = useDeskAssignments(queryWorkspaceId, floor)
 
   // Owner/admin conseguem ligar QUALQUER PC mesmo sem mesa atribuída — sem
   // isso, ninguém abre o "Mesas" pela primeira vez (a mesa de todo mundo,
   // incluindo a do owner, começa livre, então isMyDesk nunca é true até
   // alguém já ter atribuído algo — trava circular numa instalação nova).
-  const members = useMembers(workspaceId)
+  const members = useMembers(queryWorkspaceId)
   const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
-  const canManageDesks = myRole === "owner" || myRole === "admin"
+  const canManageDesks = mock || myRole === "owner" || myRole === "admin"
 
   const [hoverUserId, setHoverUserId] = useState<string | null>(null)
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
   const hoverPosRef = useRef<{ x: number; y: number } | null>(null)
-  const activeCard = useActiveCard(workspaceId, hoverUserId, canManageDesks)
+  const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks && !mock)
+  const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, !mock)
+  const roomMembers = mock ? getMockRoom(floor) : room.data
+  const currentDeskAssignments = useMemo(
+    () => (mock && floor === 1 ? MOCK_DESK_ASSIGNMENTS : (deskAssignments.data ?? [])),
+    [mock, floor, deskAssignments.data],
+  )
+  const hoveredCard = mock ? getMockActiveCard(hoverUserId) : activeCard.data
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -209,7 +220,7 @@ export function OfficeRoom({
     engineRef.current = engine
     setEngineEpoch((n) => n + 1)
 
-    engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
+    engine.spawnSelf(mock ? "demo-admin" : (me?.id ?? "me"), mock ? "Admin Demo" : (me?.full_name ?? "Você"), myConfig)
 
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
@@ -237,25 +248,33 @@ export function OfficeRoom({
   }, [myConfig])
 
   // Atribuições de mesa (de quem é cada uma) — vêm do backend, não mais hash.
-  // A seta acima da própria mesa e os rótulos com nome de todo mundo dependem
-  // dos dois: precisa recalcular sempre que a lista OU o mapa mudar.
+  // O brilho da própria mesa depende das atribuições e do mapa: recalcula
+  // sempre que qualquer um dos dois mudar.
   //
   // `engineEpoch` pelo mesmo motivo da sincronia de presença: as atribuições
   // costumam chegar ANTES de o motor existir, e aí o `return` descartava a
   // chamada. Como o React Query devolve a MESMA referência quando o payload
   // volta deep-equal (structural sharing), o poll de 15s não disparava o efeito
-  // de novo — e a seta nunca era desenhada, mesmo com mesa atribuída.
+  // de novo — e o brilho nunca aparecia, mesmo com mesa atribuída.
   //
   // A ref é atualizada fora do guard: o `onInteract` a lê pra decidir se liga o
   // PC, e isso não pode depender de o motor já ter nascido.
   useEffect(() => {
-    const rows = deskAssignments.data ?? []
+    const rows = currentDeskAssignments
     deskAssignmentsRef.current = rows
     const engine = engineRef.current
     if (!engine) return
     engine.setMyDesk(me?.id ? rows.find((r) => r.user_id === me.id)?.seat_id ?? null : null)
-    engine.setDeskLabels(rows.map((r) => ({ seatId: r.seat_id, name: r.user_name })))
-  }, [deskAssignments.data, me?.id, map, engineEpoch])
+  }, [currentDeskAssignments, me?.id, map, engineEpoch])
+
+  // Entrar no Escritório já com um card em andamento coloca a pessoa na sua
+  // mesa sem abrir o PC. O próprio `seatSelfAt` publica um heartbeat imediato,
+  // então os demais clientes também a veem trabalhando.
+  useEffect(() => {
+    if (!myActiveCard.data?.active || !me?.id) return
+    const seatId = currentDeskAssignments.find((row) => row.user_id === me.id)?.seat_id
+    if (seatId) engineRef.current?.seatSelfAt(seatId)
+  }, [myActiveCard.data?.active, me?.id, currentDeskAssignments, engineEpoch])
 
   // canManageDesks só é conhecido depois que useMembers resolve — atualiza a
   // ref lida pelo onInteract (ver comentário acima de canManageDesksRef).
@@ -274,9 +293,9 @@ export function OfficeRoom({
   // payload. Agora o nascimento do motor também dispara a sincronia.
   useEffect(() => {
     const engine = engineRef.current
-    if (!engine || !room.data) return
-    engine.syncRemote(room.data)
-  }, [room.data, engineEpoch])
+    if (!engine || !roomMembers) return
+    engine.syncRemote(roomMembers)
+  }, [roomMembers, engineEpoch])
 
   // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
   // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).
@@ -303,6 +322,10 @@ export function OfficeRoom({
   // Publicação de presença. Dois gatilhos: o movimento (via `publishRef`, com
   // throttle) e este intervalo, que cobre quem está parado.
   useEffect(() => {
+    if (mock) {
+      publishRef.current = null
+      return
+    }
     const send = () => {
       lastPublishRef.current = performance.now()
       heartbeat.mutate({
@@ -326,7 +349,7 @@ export function OfficeRoom({
       publishRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId])
+  }, [workspaceId, mock])
 
   // O toast de interação some sozinho.
   useEffect(() => {
@@ -459,7 +482,7 @@ export function OfficeRoom({
     return () => window.removeEventListener("keydown", onKey)
   }, [pcState])
 
-  const online = room.data?.length ?? 1
+  const online = roomMembers?.length ?? 1
 
   return (
     <div
@@ -476,24 +499,24 @@ export function OfficeRoom({
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
 
-      {canManageDesks && hoverUserId && hoverPos && activeCard.data && (
+      {canManageDesks && hoverUserId && hoverPos && hoveredCard && (
         <div
           className="pointer-events-none absolute z-20 max-w-[220px] rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
           /* Clamp no topo: sem isto, passar o mouse num avatar perto da borda
              de cima jogava o balão pra `top` negativo (cortado, invisível). */
           style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4) }}
         >
-          {activeCard.data.active ? (
+          {hoveredCard.active ? (
             <>
               <div className="font-semibold">
-                #{activeCard.data.card!.number} {activeCard.data.card!.title}
+                #{hoveredCard.card!.number} {hoveredCard.card!.title}
               </div>
               <div className="text-gray-300">
-                há {formatDoingSince(activeCard.data.doing_since!)} em andamento
+                há {formatDoingSince(hoveredCard.doing_since!)} em andamento
               </div>
-              {activeCard.data.working_note && (
+              {hoveredCard.working_note && (
                 <div className="mt-1 border-t border-gray-700 pt-1 text-gray-200">
-                  {activeCard.data.working_note}
+                  {hoveredCard.working_note}
                 </div>
               )}
             </>

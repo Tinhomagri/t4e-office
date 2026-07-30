@@ -45,9 +45,10 @@ export function useSetStatus(workspaceId: string | null) {
   })
 }
 
-export function useMyAvatar() {
+export function useMyAvatar(enabled = true) {
   return useQuery({
     queryKey: ["office-my-avatar"],
     queryFn: officeApi.getMyAvatar,
+    enabled,
   })
 }

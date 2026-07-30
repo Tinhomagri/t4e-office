@@ -11,7 +11,7 @@
 import { buildAvatarSheet } from "@/features/avatar/chibi"
 import { ANIM_FPS, ANIMS, FH, FW, type AvatarConfig, type Direction } from "@/features/avatar/avatar.types"
 
-import { type OfficeMap, type Seat, isSolid, zoneAt } from "./map"
+import { type OfficeMap, type Seat, isSolid, seatIndexAt, zoneAt } from "./map"
 import { PROPS, buildPropSprites, buildShadowSprite, type PropSprite } from "./props"
 import {
   cameraTarget, focusScale, integerScale, offsetCamera, screenToWorld, viewOffsetFor, viewportFor,
@@ -29,9 +29,9 @@ const WALK_SPEED = 46 // px/s — ~3 tiles por segundo, ritmo de Stardew
 const RUN_SPEED = 82
 /** Raio do corpo usado na colisão: o avatar ocupa menos que o tile inteiro. */
 const BODY_R = 4
-/** Quantos px da base do sprite (pernas/pés) somem quando o avatar senta —
- * lê como "atrás do encosto da cadeira" em vez de "de pé do lado dela". */
-const SIT_CROP = 6
+/** Altura visível de quem está sentado: cabelo, cabeça e torso; as pernas
+ * não existem na pose `sit` e o encosto fecha a parte inferior. */
+const SEATED_TORSO_H = 27
 
 export interface Actor {
   id: string
@@ -60,6 +60,9 @@ export interface Actor {
   sheetKey: string
   frames: Record<string, { x: number; y: number }[]>
   seatIndex: number
+  /** Assento para o qual um colega está interpolando; só vira `seatIndex`
+   * quando ele chega, para não cortar o sprite durante a caminhada. */
+  targetSeatIndex: number
 }
 
 interface Particle {
@@ -132,13 +135,8 @@ export class OfficeEngine {
   /** Desligado enquanto o PC do escritório está aberto. */
   private inputEnabled = true
 
-  /** Assento da própria mesa (ver `desk.ts`) — só pra desenhar a
-   * seta indicativa acima dela. Não afeta física nem interação. */
+  /** Assento da própria mesa (ver `desk.ts`) — só para o brilho local. */
   private myDeskSeatId: string | null = null
-
-  /** Rótulos "de quem é a mesa" — vêm do backend (DeskAssignment), visíveis
-   * pra QUALQUER pessoa, não só a dona da mesa (diferente da seta acima). */
-  private deskLabels: { seatId: string; name: string }[] = []
 
   /** 0..1 — 0 = madrugada, 0.5 = meio-dia. Deriva do relógio real. */
   dayPhase = 0.5
@@ -205,7 +203,7 @@ export class OfficeEngine {
       self, status, say: "", sayUntil: 0, emote: "", emoteUntil: 0,
       pokerVote: null, pokerRevealed: false,
       sheet: sheet.canvas, sheetKey: JSON.stringify(config), frames: sheet.frames,
-      seatIndex: -1,
+      seatIndex: -1, targetSeatIndex: -1,
     }
   }
 
@@ -224,18 +222,27 @@ export class OfficeEngine {
 
   /** Reconcilia a lista de presença com os atores da cena. */
   syncRemote(
-    members: { user_id: string; name: string; x: number; y: number; facing: Direction; status: string; avatar_config: AvatarConfig | null }[],
+    members: { user_id: string; name: string; x: number; y: number; facing: Direction; status: string; avatar_config: AvatarConfig | null; seat_id?: string }[],
   ): void {
     const seen = new Set<string>()
     for (const m of members) {
       if (!m.avatar_config) continue
       if (this.me && m.user_id === this.me.id) continue
       seen.add(m.user_id)
-      const wx = m.x * this.map.width
-      const wy = m.y * this.map.height
+      const assignedSeatIndex = m.seat_id
+        ? this.map.seats.findIndex((seat) => seat.id === m.seat_id)
+        : -1
+      const assignedSeat = this.map.seats[assignedSeatIndex]
+      const wx = assignedSeat ? assignedSeat.x : m.x * this.map.width
+      const wy = assignedSeat ? assignedSeat.y : m.y * this.map.height
+      const targetSeatIndex = assignedSeatIndex >= 0 ? assignedSeatIndex : seatIndexAt(this.map, wx, wy)
       const existing = this.actors.get(m.user_id)
       if (!existing) {
         const actor = this.makeActor(m.user_id, m.name, m.avatar_config, wx, wy, false, m.status)
+        actor.facing = m.facing
+        actor.seatIndex = targetSeatIndex
+        actor.targetSeatIndex = targetSeatIndex
+        this.applySeatAnimation(actor)
         this.actors.set(m.user_id, actor)
         continue
       }
@@ -244,6 +251,7 @@ export class OfficeEngine {
       existing.ty = wy
       existing.status = m.status
       existing.name = m.name
+      existing.targetSeatIndex = targetSeatIndex
       const key = JSON.stringify(m.avatar_config)
       if (key !== existing.sheetKey) {
         const sheet = buildAvatarSheet(m.avatar_config)
@@ -299,16 +307,10 @@ export class OfficeEngine {
     }
   }
 
-  /** Marca qual assento é o da própria mesa — desenha uma seta em cima dela.
-   * `null` some com a seta (ex.: andar sem baias, como o de poker). */
+  /** Marca qual assento é o da própria mesa — mostra brilho local.
+   * `null` remove o brilho (ex.: andar sem baias, como o de poker). */
   setMyDesk(seatId: string | null): void {
     this.myDeskSeatId = seatId
-  }
-
-  /** Rótulos com nome acima de cada mesa atribuída — vindos do backend,
-   * visíveis pra todo mundo (a seta de `setMyDesk` só o dono vê). */
-  setDeskLabels(labels: { seatId: string; name: string }[]): void {
-    this.deskLabels = labels
   }
 
   // ── Entrada ───────────────────────────────────────────────────────────────
@@ -347,13 +349,40 @@ export class OfficeEngine {
     return (this.me?.seatIndex ?? -1) >= 0
   }
 
+  /** Senta a própria pessoa sem abrir o PC. Usado ao entrar com um card ativo. */
+  seatSelfAt(seatId: string): boolean {
+    const me = this.me
+    const seatIndex = this.map.seats.findIndex((seat) => seat.id === seatId)
+    if (!me || seatIndex < 0) return false
+    const seat = this.map.seats[seatIndex]
+    me.x = seat.x
+    me.y = seat.y
+    me.tx = seat.x
+    me.ty = seat.y
+    me.seatIndex = seatIndex
+    me.facing = seat.facing
+    this.applySeatAnimation(me)
+    this.target = null
+    this.updateCurrentZone(me)
+    this.cb.onMove?.(me.x / this.map.width, me.y / this.map.height, me.facing)
+    return true
+  }
+
   /** Usuário sentado numa baia perto do ponto de tela — null se não houver
    * ninguém ali perto. Usado pro balão de card ativo (hover, não clique). */
   hoverSeatAt(screenX: number, screenY: number): string | null {
     const iso = screenToWorld(this.camX, this.camY, this.scale, screenX, screenY)
     const { x, y } = isoToWorld(iso.x - this.isoOriginX, iso.y - this.isoOriginY)
-    const actors = [...this.actors.values()].map((a) => ({ id: a.id, x: a.x, y: a.y }))
-    return nearestSeatedUser(actors, this.map.seats, x, y)
+    const actors = [...this.actors.values()].map((actor) => {
+      const point = this.actorRenderPoint(actor)
+      return { id: actor.id, ...point }
+    })
+    const seats = this.map.seats.map((seat) => ({
+      ...seat,
+      x: seat.x + (seat.visualOffset?.x ?? 0),
+      y: seat.y + (seat.visualOffset?.y ?? 0),
+    }))
+    return nearestSeatedUser(actors, seats, x, y)
   }
 
   /** Senta na cadeira mais próxima (ou levanta, se já sentado). */
@@ -364,6 +393,7 @@ export class OfficeEngine {
       me.seatIndex = -1
       me.anim = "idle"
       this.viewOffset = { dx: 0, dy: 0 }
+      this.updateCurrentZone(me)
       this.cb.onInteract?.(null)
       // Levantar também precisa publicar a posição: updateSelf só dispara
       // onMove no ramo de movimento, então sem isto a posição transmitida
@@ -400,10 +430,11 @@ export class OfficeEngine {
         ? "lean"
         : seat.kind === "lounge" || seat.kind === "poker"
           ? "idle"
-          : "type"
+          : "sit"
     this.viewOffset =
       seat.kind === "view" ? viewOffsetFor(seat.facing) : { dx: 0, dy: 0 }
     this.target = null
+    this.updateCurrentZone(me)
     this.cb.onInteract?.(seat)
     // Sentar encosta a posição no assento; sem publicar isso agora, os outros
     // clientes continuariam vendo a posição de onde a pessoa estava andando
@@ -452,15 +483,7 @@ export class OfficeEngine {
     // dentro do bloco de movimento, então quem chegava a uma zona e ficava
     // parado sem antes se mexer (ex.: spawn dentro da própria zona) nunca
     // disparava onZoneChange, e o E não fazia nada.
-    const zone = zoneAt(this.map, me.x, me.y)
-    const zoneId = zone?.id ?? null
-    if (zoneId !== this.currentZone) {
-      this.currentZone = zoneId
-      this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
-      if (zone) {
-        for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
-      }
-    }
+    this.updateCurrentZone(me)
 
     let dx = 0
     let dy = 0
@@ -515,6 +538,19 @@ export class OfficeEngine {
     }
   }
 
+  /** Mantém a zona lógica alinhada a reposicionamentos instantâneos, como
+   * nascer sentado na própria mesa. */
+  private updateCurrentZone(me: Actor): void {
+    const zone = zoneAt(this.map, me.x, me.y)
+    const zoneId = zone?.id ?? null
+    if (zoneId === this.currentZone) return
+    this.currentZone = zoneId
+    this.cb.onZoneChange?.(zoneId, zone?.label ?? "", zone?.hint ?? "")
+    if (zone) {
+      for (let i = 0; i < 8; i++) this.spawn(me.x, me.y - 10, 1)
+    }
+  }
+
   private updateRemotes(dt: number): void {
     for (const actor of this.actors.values()) {
       if (actor.self) continue
@@ -524,22 +560,47 @@ export class OfficeEngine {
       if (dist < 0.5) {
         actor.x = actor.tx
         actor.y = actor.ty
-        actor.anim = "idle"
+        actor.seatIndex = actor.targetSeatIndex
+        this.applySeatAnimation(actor)
         continue
       }
       // Teleporta se a diferença for absurda (voltou de aba em background).
       if (dist > 200) {
         actor.x = actor.tx
         actor.y = actor.ty
+        actor.seatIndex = actor.targetSeatIndex
+        this.applySeatAnimation(actor)
         continue
       }
       // Persegue o alvo com velocidade proporcional: chega suave, sem overshoot.
       const step = Math.min(dist, Math.max(WALK_SPEED, dist * 3) * dt)
       actor.x += (dx / dist) * step
       actor.y += (dy / dist) * step
+      actor.seatIndex = -1
       actor.anim = "walk"
       if (Math.abs(dx) >= Math.abs(dy)) actor.facing = dx > 0 ? "right" : "left"
       else actor.facing = dy > 0 ? "down" : "up"
+    }
+  }
+
+  /** Mantém o visual remoto idêntico ao do próprio jogador quando está numa cadeira. */
+  private applySeatAnimation(actor: Actor): void {
+    const seat = this.map.seats[actor.seatIndex]
+    if (!seat) {
+      actor.anim = "idle"
+      return
+    }
+    actor.facing = seat.facing
+    actor.anim = seat.kind === "view" ? "lean" : seat.kind === "lounge" || seat.kind === "poker" ? "idle" : "sit"
+  }
+
+  /** Ponto onde o sprite é desenhado. Sentado, ele coincide com a cadeira,
+   * não com a posição lógica usada para interagir e sincronizar presença. */
+  private actorRenderPoint(actor: Actor): { x: number; y: number } {
+    const seat = actor.seatIndex >= 0 ? this.map.seats[actor.seatIndex] : null
+    return {
+      x: actor.x + (seat?.visualOffset?.x ?? 0),
+      y: actor.y + (seat?.visualOffset?.y ?? 0),
     }
   }
 
@@ -696,17 +757,36 @@ export class OfficeEngine {
     const iso = this.toIso(x, y)
     this.focus = { x: iso.x, y: iso.y, zoom }
     this.applyScale()
+    this.reframeCamera()
   }
 
   clearFocus(): void {
     this.focus = null
     this.applyScale()
+    this.reframeCamera()
+  }
+
+  /** Recalcula a câmera sem interpolação após trocar escala/viewport. Sem
+   * isso, fechar o PC deixava por alguns frames o recorte do zoom fechado,
+   * expondo o fundo em uma posição errada. */
+  private reframeCamera(): void {
+    const mePoint = this.me ? this.actorRenderPoint(this.me) : null
+    const anchor = this.focus ?? (mePoint ? this.toIso(mePoint.x, mePoint.y) : null)
+    if (!anchor) return
+    const base = cameraTarget(anchor.x, anchor.y, this.viewW, this.viewH, this.ground.width, this.ground.height)
+    const target = offsetCamera(
+      base, this.viewOffset.dx, this.viewOffset.dy,
+      this.viewW, this.viewH, this.ground.width, this.ground.height,
+    )
+    this.camX = Math.round(target.x)
+    this.camY = Math.round(target.y)
   }
 
   private updateCamera(): void {
     // `focus` já chega projetado (ver `focusOn`); `me` é cartesiano e precisa
     // passar pela projeção iso antes de virar alvo de câmera.
-    const anchor = this.focus ?? (this.me ? this.toIso(this.me.x, this.me.y) : null)
+    const mePoint = this.me ? this.actorRenderPoint(this.me) : null
+    const anchor = this.focus ?? (mePoint ? this.toIso(mePoint.x, mePoint.y) : null)
     if (!anchor) return
     const groundW = this.ground.width
     const groundH = this.ground.height
@@ -794,6 +874,9 @@ export class OfficeEngine {
     type Drawable = { base: number; draw(): void }
     const queue: Drawable[] = []
 
+    // Fica sob os móveis e o avatar para parecer luz refletida no piso.
+    this.renderMyDeskGlow(camX, camY, s)
+
     for (const p of this.map.props) {
       const def = PROPS[p.kind]
       const sprite = this.props[p.kind]
@@ -815,20 +898,22 @@ export class OfficeEngine {
     }
 
     for (const actor of this.actors.values()) {
-      const isoA = this.toIso(actor.x, actor.y)
+      const point = this.actorRenderPoint(actor)
+      const isoA = this.toIso(point.x, point.y)
       const sx = Math.round(isoA.x - FW / 2 - camX) * s
       const sy = Math.round(isoA.y - FH - camY) * s
       if (sx > this.viewW * s || sy > this.viewH * s || sx + FW * s < 0 || sy + FH * s < 0) continue
       const key = `${actor.facing}_${actor.anim}`
       const frames = actor.frames[key] ?? actor.frames[`down_${actor.anim}`] ?? actor.frames["down_idle"]
       const fr = frames[actor.frame % frames.length]
-      // Sentado: corta a base do sprite (pernas/pés) e desenha mais embaixo —
-      // some atrás do encosto da cadeira, lendo como "sentado" de verdade em
-      // vez de "de pé do lado da cadeira". A cabeça/torso não mudam de lugar.
-      const sitCrop = actor.seatIndex >= 0 ? SIT_CROP : 0
-      const frameH = FH - sitCrop
-      const drawY = sy + sitCrop * s
+      // A pose `sit` não desenha pernas. Recortar no fim do torso preserva a
+      // silhueta de quem está digitando e impede corpo atravessando a cadeira.
+      const frameH = actor.anim === "sit" ? SEATED_TORSO_H : FH
       queue.push({
+        // O ponto visual do assento sobe para dentro da cadeira, mas não pode
+        // participar da profundidade: ele cairia "atrás" da baia e o painel
+        // ocultaria o avatar. A profundidade lógica mantém a pessoa sobre o
+        // assento, enquanto `point` decide onde o sprite aparece.
         base: actor.x + actor.y,
         draw: () => {
           // Sombra de contato antes do corpo.
@@ -839,13 +924,18 @@ export class OfficeEngine {
             this.shadow.w * s,
             this.shadow.h * s,
           )
-          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, frameH, sx, drawY, FW * s, frameH * s)
+          ctx.drawImage(actor.sheet, fr.x, fr.y, FW, frameH, sx, sy, FW * s, frameH * s)
         },
       })
     }
 
     queue.sort((a, b) => a.base - b.base)
     for (const item of queue) item.draw()
+
+    // O encosto da cadeira é a única peça que precisa passar na frente do
+    // avatar. A base já foi desenhada na fila isométrica; esta camada fecha a
+    // composição e faz a pessoa parecer sentada, não sobreposta à cadeira.
+    this.renderForegroundProps(camX, camY, s)
 
     // Partículas por cima do mundo, abaixo da luz.
     for (let i = 0; i < this.alive; i++) {
@@ -863,66 +953,52 @@ export class OfficeEngine {
     }
     ctx.globalAlpha = 1
 
-    this.renderMyDeskArrow(camX, camY, s)
-    this.renderDeskLabels(camX, camY, s)
     this.renderNameplates(camX, camY, s)
   }
 
-  /** Seta dourada balançando em cima da própria mesa — só um indicador
-   * visual, não afeta física nem quem senta onde. */
-  private renderMyDeskArrow(camX: number, camY: number, s: number): void {
+  private renderForegroundProps(camX: number, camY: number, s: number): void {
+    const ctx = this.ctx
+    for (const prop of this.map.props) {
+      const def = PROPS[prop.kind]
+      const sprite = this.props[prop.kind]
+      if (!def?.drawFront || !sprite?.front) continue
+      const iso = this.toIso(prop.x, prop.y)
+      const anchor = def.anchor ?? { x: 0, y: 0 }
+      const sx = (iso.x - camX) * s - anchor.x * s
+      const sy = (iso.y - camY) * s - anchor.y * s
+      ctx.drawImage(sprite.front, sx, sy, def.w * s, def.h * s)
+    }
+  }
+
+  /** Halo discreto no piso da própria cadeira; nunca é enviado a outras pessoas. */
+  private renderMyDeskGlow(camX: number, camY: number, s: number): void {
     if (!this.myDeskSeatId) return
     const seat = this.map.seats.find((st) => st.id === this.myDeskSeatId)
     if (!seat) return
-    const iso = this.toIso(seat.x, seat.y)
-    const bob = Math.sin(this.time * 3) * 3
+    // O ponto lógico fica ao sul para interação; o halo vai no centro físico
+    // da cadeira, onde a pessoa visualmente se senta.
+    const iso = this.toIso(seat.x, seat.kind === "pc" ? seat.y - 24 : seat.y)
     const sx = (iso.x - camX) * s
-    const sy = (iso.y - camY) * s - 34 * s + bob * s
-    if (sx < -40 || sy < -40 || sx > this.viewW * s + 40 || sy > this.viewH * s + 40) return
+    const sy = (iso.y - camY) * s
+    if (sx < -30 || sy < -20 || sx > this.viewW * s + 30 || sy > this.viewH * s + 20) return
 
     const ctx = this.ctx
     ctx.save()
+    ctx.globalAlpha = 0.16 + (Math.sin(this.time * 2.5) + 1) * 0.05
     ctx.fillStyle = "#f0c05a"
-    ctx.strokeStyle = "#2b1e1a"
+    ctx.strokeStyle = "#ffe1a0"
     ctx.lineWidth = 1
-    const w = 6 * s
-    const h = 8 * s
+    const w = 13 * s
+    const h = 6 * s
     ctx.beginPath()
-    ctx.moveTo(sx, sy + h) // ponta, apontando pra baixo
-    ctx.lineTo(sx - w, sy)
-    ctx.lineTo(sx - w / 2, sy)
-    ctx.lineTo(sx - w / 2, sy - h * 0.6)
-    ctx.lineTo(sx + w / 2, sy - h * 0.6)
-    ctx.lineTo(sx + w / 2, sy)
+    ctx.moveTo(sx, sy - h)
     ctx.lineTo(sx + w, sy)
+    ctx.lineTo(sx, sy + h)
+    ctx.lineTo(sx - w, sy)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
     ctx.restore()
-  }
-
-  /** Nome de quem senta em cada mesa atribuída — pequeno, acima da mesa,
-   * visível pra qualquer pessoa (não só a dona). */
-  private renderDeskLabels(camX: number, camY: number, s: number): void {
-    if (this.deskLabels.length === 0) return
-    const ctx = this.ctx
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
-    ctx.font = "600 9px -apple-system, system-ui, sans-serif"
-    for (const label of this.deskLabels) {
-      const seat = this.map.seats.find((st) => st.id === label.seatId)
-      if (!seat) continue
-      const iso = this.toIso(seat.x, seat.y)
-      const sx = (iso.x - camX) * s
-      const sy = (iso.y - camY) * s - 26 * s
-      if (sx < -60 || sy < -20 || sx > this.viewW * s + 60 || sy > this.viewH * s + 20) continue
-      const tw = ctx.measureText(label.name).width
-      const bw = tw + 10
-      ctx.fillStyle = "rgba(23,27,33,0.7)"
-      ctx.fillRect(sx - bw / 2, sy - 7, bw, 14)
-      ctx.fillStyle = "#ffffff"
-      ctx.fillText(label.name, sx, sy)
-    }
   }
 
   /** Nomes, status e balões — texto nítido, fora da grade de pixels. */
@@ -932,7 +1008,8 @@ export class OfficeEngine {
     ctx.textBaseline = "middle"
 
     for (const actor of this.actors.values()) {
-      const isoA = this.toIso(actor.x, actor.y)
+      const point = this.actorRenderPoint(actor)
+      const isoA = this.toIso(point.x, point.y)
       const sx = (isoA.x - camX) * s
       const sy = (isoA.y - FH - camY) * s
       if (sx < -80 || sy < -80 || sx > this.viewW * s + 80 || sy > this.viewH * s + 80) continue

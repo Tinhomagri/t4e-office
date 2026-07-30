@@ -15,10 +15,12 @@ from contexts.presence.application.active_card import get_active_card, update_wo
 from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.domain.status_resolver import VALID_STATUSES, resolve_status
 from contexts.presence.infrastructure.django.models import (
+    DeskAssignmentModel,
     PresenceModel,
     UserAvatarModel,
 )
 from contexts.presence.infrastructure.meeting import refresh_busy_until
+from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.interface.api.permissions import _assert_workspace
 from shared.domain.errors import PermissionDeniedError
 
@@ -106,17 +108,49 @@ class RoomView(APIView):
         now = datetime.now(UTC)
         cutoff = now - FRESH_WINDOW
         floor = _clamp_floor(request.query_params.get("floor", 1))
-        rows = (
+        live_rows = list(
             PresenceModel.objects.filter(
-                workspace_id=workspace_id, last_seen__gte=cutoff, floor=floor
+                workspace_id=workspace_id, last_seen__gte=cutoff
             )
             .select_related("user")
         )
+        rows = [row for row in live_rows if row.floor == floor]
+        live_user_ids = {row.user_id for row in live_rows}
+
+        # Trabalhar em um card fora do Escritório também é presença: se a
+        # pessoa tem mesa no andar e algum card em "doing", ela aparece
+        # sentada mesmo sem abrir o canvas. Uma presença viva sempre vence,
+        # assim quem entrou na sala e está andando não é teletransportado.
+        working_assignments = list(
+            DeskAssignmentModel.objects.filter(
+                workspace_id=workspace_id, floor=floor
+            ).select_related("user")
+        )
+        working_user_ids = {
+            assignment.user_id
+            for assignment in working_assignments
+            if assignment.user_id not in live_user_ids
+        }
+        active_user_ids = set(
+            CardModel.objects.filter(
+                project__workspace_id=workspace_id,
+                assignee_id__in=working_user_ids,
+                status="doing",
+            ).values_list("assignee_id", flat=True)
+        )
+        auto_rows = [
+            assignment
+            for assignment in working_assignments
+            if assignment.user_id in active_user_ids
+        ]
 
         avatars = {
             str(a.user_id): a.config
             for a in UserAvatarModel.objects.filter(
-                user_id__in=[r.user_id for r in rows]
+                user_id__in=[
+                    *[row.user_id for row in rows],
+                    *[assignment.user_id for assignment in auto_rows],
+                ]
             )
         }
 
@@ -133,6 +167,23 @@ class RoomView(APIView):
             }
             for r in rows
         ]
+        data.extend(
+            {
+                "user_id": str(assignment.user_id),
+                "name": assignment.user.full_name,
+                # O cliente resolve seat_id contra a planta local. x/y ficam
+                # no contrato por compatibilidade, mas não participam do
+                # desenho desta presença automática.
+                "x": 0.5,
+                "y": 0.5,
+                "facing": "up",
+                "floor": floor,
+                "status": "focus",
+                "seat_id": assignment.seat_id,
+                "avatar_config": avatars.get(str(assignment.user_id)),
+            }
+            for assignment in auto_rows
+        )
         return Response(data)
 
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildFloor1 } from "./floors/floor1"
+import { seatIndexAt } from "./map"
 
 const map = buildFloor1()
 
@@ -10,12 +11,15 @@ describe("assentos", () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it("id deriva do tile do assento, não do índice do array", () => {
-    // Primeira baia, coluna 8: assento da fileira de cima cai no tile (9,4),
-    // o da fileira de baixo em (10,10) — mesma orientação, corredor largo
-    // entre as duas.
+  it("preserva ids estáveis para atribuições de mesa", () => {
+    // A primeira fileira manteve seu id histórico mesmo após o alinhamento
+    // visual da cadeira com a fileira de baixo.
     expect(map.seats.some((s) => s.id === "ws-9-4")).toBe(true)
     expect(map.seats.some((s) => s.id === "ws-10-10")).toBe(true)
+  })
+
+  it("alinha as cadeiras das duas fileiras na mesma coluna visual", () => {
+    expect(map.seats[0]!.x).toBe(map.seats[1]!.x)
   })
 
   it("baias são kind 'pc' — 30 no total", () => {
@@ -36,6 +40,18 @@ describe("assentos", () => {
       expect(seat.x).toBeLessThan(map.width)
       expect(seat.y).toBeLessThan(map.height)
     }
+  })
+
+  it("reconhece um avatar encaixado na cadeira", () => {
+    const seat = map.seats[0]!
+    expect(seatIndexAt(map, seat.x, seat.y)).toBe(0)
+    expect(seatIndexAt(map, seat.x + 5, seat.y)).toBe(-1)
+  })
+
+  it("desenha a pessoa sentada dentro da cadeira, olhando para o monitor", () => {
+    const seat = map.seats[0]!
+    expect(seat.facing).toBe("up")
+    expect(seat.visualOffset).toEqual({ x: -5, y: -31 })
   })
 
   it("todo assento é alcançável a pé", () => {

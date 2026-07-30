@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { PROPS, type PropKind } from "./props"
+import { PROPS, buildPropSprites, type PropKind } from "./props"
 import { TILE } from "./tiles"
 import { makeCanvas } from "./pixels"
 
@@ -54,6 +54,13 @@ describe("baia", () => {
   it("as duas versões têm o mesmo tamanho, para encostarem de costas", () => {
     expect(PROPS.cubicleFlip.w).toBe(PROPS.cubicle.w)
     expect(PROPS.cubicleFlip.h).toBe(PROPS.cubicle.h)
+  })
+})
+
+describe("cadeira", () => {
+  it("separa o encosto na camada que fica na frente do avatar", () => {
+    expect(PROPS.chair.drawFront).toBeDefined()
+    expect(buildPropSprites().chair.front).toBeInstanceOf(HTMLCanvasElement)
   })
 })
 

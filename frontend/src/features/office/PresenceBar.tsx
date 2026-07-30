@@ -8,9 +8,11 @@ const MANUAL_OPTIONS: PresenceStatus[] = ["available", "focus", "away"]
 export function PresenceBar({
   workspaceId,
   onlineCount,
+  readOnly = false,
 }: {
   workspaceId: string
   onlineCount: number
+  readOnly?: boolean
 }) {
   const setStatus = useSetStatus(workspaceId)
 
@@ -31,8 +33,9 @@ export function PresenceBar({
         <span className="text-paper-500">Meu status</span>
         <Select
           defaultValue="auto"
-          disabled={setStatus.isPending}
+          disabled={readOnly || setStatus.isPending}
           onChange={(e) => {
+            if (readOnly) return
             const v = e.target.value
             setStatus.mutate(v === "auto" ? null : (v as PresenceStatus))
           }}

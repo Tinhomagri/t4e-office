@@ -54,6 +54,9 @@ export interface Seat {
   label: string
   /** "pc" tem computador; só nesses o desktop pode abrir. */
   kind: SeatKind
+  /** Ajuste apenas de desenho. Mantém a coordenada lógica estável para
+   * presença/colisão, mas encaixa o sprite dentro do móvel isométrico. */
+  visualOffset?: { x: number; y: number }
 }
 
 export interface OfficeMap {
@@ -88,4 +91,9 @@ export function isSolid(map: OfficeMap, x: number, y: number): boolean {
   const ty = Math.floor(y / TILE)
   if (tx < 0 || ty < 0 || tx >= map.cols || ty >= map.rows) return true
   return map.collision[ty * map.cols + tx] === 1
+}
+
+/** Índice do assento encostado ao ponto, ou -1 quando o avatar está de pé. */
+export function seatIndexAt(map: OfficeMap, x: number, y: number, snapRadius = 4): number {
+  return map.seats.findIndex((seat) => Math.hypot(seat.x - x, seat.y - y) <= snapRadius)
 }

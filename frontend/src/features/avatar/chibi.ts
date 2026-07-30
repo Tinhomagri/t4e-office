@@ -84,6 +84,7 @@ export function drawChibi(ctx: Ctx, raw: AvatarConfig, dir: Direction, pose: Pos
 
   const legBare = bottom === "Saia" || bottom === "Shorts" || top === "Vestido"
   const skirtLike = bottom === "Saia" || top === "Vestido"
+  const sitting = anim === "sit"
 
   const cx = 8
   const by = num(pose, "body") | 0
@@ -185,19 +186,21 @@ export function drawChibi(ctx: Ctx, raw: AvatarConfig, dir: Direction, pose: Pos
   const liftL = Math.max(0, num(pose, "legL"))
   const liftR = Math.max(0, num(pose, "legR"))
 
-  if (side) {
-    // Perna de trás primeiro (mais escura), depois a da frente por cima.
-    drawLegSide(-stride * face, liftR, true)
-    drawLegSide(stride * face, liftL, false)
-  } else {
-    drawLegFront(-1, liftL, footL)
-    drawLegFront(1, liftR, footR)
-  }
+  if (!sitting) {
+    if (side) {
+      // Perna de trás primeiro (mais escura), depois a da frente por cima.
+      drawLegSide(-stride * face, liftR, true)
+      drawLegSide(stride * face, liftL, false)
+    } else {
+      drawLegFront(-1, liftL, footL)
+      drawLegFront(1, liftR, footR)
+    }
 
-  if (skirtLike && top !== "Vestido") {
-    const w = side ? 7 : 10
-    rect(ctx, tx - Math.floor(w / 2), legTop, w, 3, pants)
-    rect(ctx, tx + Math.ceil(w / 2) - 2, legTop, 2, 3, pantsD)
+    if (skirtLike && top !== "Vestido") {
+      const w = side ? 7 : 10
+      rect(ctx, tx - Math.floor(w / 2), legTop, w, 3, pants)
+      rect(ctx, tx + Math.ceil(w / 2) - 2, legTop, 2, 3, pantsD)
+    }
   }
 
   // ── Tronco ────────────────────────────────────────────────────────────────
@@ -816,6 +819,14 @@ export function poseFor(anim: string, f: number): Pose {
     case "sleep": return { body: [0, 0, 1, 1][f % 4], face: "sleep", armL: 1, armR: 1, fx: "zzz" }
     case "celebrate": return [{ armL: -4, armR: -4, face: "happy" }, { body: -2, legL: 1, legR: 1, armL: -5, armR: -5, face: "happy", fx: "stars" }, { body: -3, legL: 2, legR: 2, armL: -5, armR: -5, face: "happy", fx: "stars" }, { body: -2, legL: 1, legR: 1, armL: -5, armR: -5, face: "happy" }, { armL: -4, armR: -4, face: "happy", fx: "stars" }, { body: -2, legL: 1, legR: 1, armL: -5, armR: -5, face: "happy" }][f % 6]
     case "type": return [{ armL: 2, armR: 1, lean: 1 }, { armL: 1, armR: 2, lean: 1 }, { armL: 2, armR: 2, lean: 1 }, { armL: 1, armR: 1, lean: 1 }][f % 4]
+    // Corpo mais baixo e pernas recolhidas (omitidas em drawChibi): é uma
+    // pose própria de cadeira, não um sprite de pé parcialmente cortado.
+    case "sit": return [
+      { body: 3, lean: 1, armL: 1, armR: 2 },
+      { body: 3, lean: 1, armL: 2, armR: 1 },
+      { body: 3, lean: 1, armL: 1, armR: 1 },
+      { body: 3, lean: 1, armL: 2, armR: 2 },
+    ][f % 4]
     case "present": return [{ armR: -3, armL: 1, face: "happy" }, { armR: -4, armL: 1, face: "happy" }, { body: 1, armR: -3, face: "happy" }, { armR: -4, armL: 1, face: "happy" }][f % 4]
     case "coffee": return [{ armR: 0 }, { armR: -2 }, { body: 1, armR: -3 }, { armR: -2 }][f % 4]
     case "punch": return [{ lean: 1, legL: 1, armL: 1, armR: 0 }, { lean: 3, legL: 2, armR: -6, face: "angry" }, { body: 1, lean: 4, legL: 1, armL: 1, armR: -7, face: "angry", fx: "impact" }, { lean: 2, armL: 1, armR: -2, face: "angry" }][f % 4]

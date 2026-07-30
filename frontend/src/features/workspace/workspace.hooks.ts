@@ -21,8 +21,8 @@ import type {
 } from "./workspace.types"
 
 // Carrega os workspaces do usuário e garante que haja um ativo selecionado.
-export function useWorkspaces() {
-  const query = useQuery({ queryKey: ["workspaces"], queryFn: wsApi.listWorkspaces })
+export function useWorkspaces(enabled = true) {
+  const query = useQuery({ queryKey: ["workspaces"], queryFn: wsApi.listWorkspaces, enabled })
   const { activeWorkspaceId: persistedId, setActiveWorkspace } = useWorkspaceStore()
 
   // O id persistido não é confiável até ser conferido contra os workspaces DESTE
