@@ -15,9 +15,9 @@ from contexts.identity.interface.api.views import (
 )
 from contexts.identity.interface.api.workspace_views import (
     AcceptInvitationView,
-    InvitationPreviewView,
     AuditLogView,
     InvitationListCreateView,
+    InvitationPreviewView,
     MemberDetailView,
     MembersView,
     RevokeInvitationView,

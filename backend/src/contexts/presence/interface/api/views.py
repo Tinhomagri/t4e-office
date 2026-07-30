@@ -11,13 +11,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.identity.infrastructure.django.models import MembershipModel
+from contexts.presence.application.active_card import get_active_card, update_working_note
+from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.domain.status_resolver import VALID_STATUSES, resolve_status
 from contexts.presence.infrastructure.django.models import (
     PresenceModel,
     UserAvatarModel,
 )
-from contexts.presence.application.active_card import get_active_card, update_working_note
-from contexts.presence.application.assign_desk import assign_desk, list_desk_assignments
 from contexts.presence.infrastructure.meeting import refresh_busy_until
 from contexts.projects.interface.api.permissions import _assert_workspace
 from shared.domain.errors import PermissionDeniedError
