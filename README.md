@@ -193,4 +193,23 @@ Credenciais de avaliação e dados de exemplo: ver [Seed de avaliação](#seed-d
 
 ## Screenshots
 
-> _(adicionar prints do board Kanban, dashboard "Meu Dia" e copiloto antes da entrega)_
+**Board Kanban** — colunas customizáveis, peso por coluna, scope por sprint, filtros rápidos
+e as demais visões do projeto (Backlog, Lista, Cronograma, Calendário, Metas,
+Desenvolvimento, Documentos, Automações).
+
+![Board Kanban do projeto DEMO](docs/img/board-kanban.png)
+
+**Meu Dia** — visão pessoal que atravessa todos os workspaces: KPIs do dia, burndown real da
+sprint, agenda do Google e follow-ups do comercial na mesma tela.
+
+![Dashboard Meu Dia](docs/img/meu-dia.png)
+
+**Planning Poker** — estimativa em tempo real, com fila de votação puxada dos cards do
+projeto e resultado gravado no peso do card.
+
+![Sala de Planning Poker](docs/img/planning-poker.png)
+
+**Escritório** — presença em tempo real numa planta isométrica: cada pessoa online aparece
+sentada, com status, e passar o mouse mostra o card em que ela está trabalhando agora.
+
+![Escritório isométrico](docs/img/escritorio.png)
