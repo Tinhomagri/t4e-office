@@ -107,25 +107,33 @@ O comando é **idempotente** — rodar de novo não duplica dados.
 
 Rodam no CI a cada push/PR (`.github/workflows/ci.yml`).
 
-**Backend** (pytest — 70 testes):
+**Backend** (pytest — **454 testes** em 42 arquivos):
 
 ```bash
 cd backend
 pytest -q                                    # unit + integração
-pytest --cov=src --cov-report=term-missing   # cobertura
+pytest --cov=src --cov-report=term-missing   # cobertura por arquivo
 ```
 
 Cobre use cases de identidade, permissões de projeto, ágil (Lexorank/épicos/sprints),
 notificações (RF-06), filtros salvos, documentos, copiloto, regras do Planning Poker
 e fluxo OAuth Google.
 
-**Frontend** (Vitest + Testing Library — 14 testes):
+**Frontend** (Vitest + Testing Library — **495 testes** em 54 arquivos):
 
 ```bash
 cd frontend
 npm test                       # unit (utils, stores, avatar) + componente
 npm run test:coverage
 ```
+
+13 desses arquivos renderizam componente de verdade com Testing Library (board, Meu Dia,
+escritório, Win98Desktop); o resto cobre regra pura — reducers, stores, projeção
+isométrica e formatação.
+
+**Cobertura:** o CI roda `pytest --cov=src --cov-report=term-missing` a cada push e PR, e o
+relatório por arquivo fica na saída do job *Backend (lint + tests)*. Para reproduzir local,
+é o mesmo comando — não há passo extra nem serviço externo.
 
 Atalho: `make test` roda os dois.
 
@@ -143,10 +151,13 @@ Detalhes e decisões em [`docs/adr/`](docs/adr/) e [`docs/`](docs/).
 
 ## Deploy
 
-Aplicação publicada em: **_(URL pública — preencher)_**
+Aplicação publicada em: **https://t4e-office.vercel.app**
 
-- Backend: container Django (Gunicorn) + Postgres gerenciado.
-- Frontend: build estático (`npm run build`) servido via CDN/Vercel.
+Backend e frontend saem do mesmo deploy na Vercel: o frontend é build estático
+(`npm run build`) e o Django roda como função serverless sob `/api/` (ver `vercel.json` e
+`api/`). Banco: Postgres gerenciado.
+
+Credenciais de avaliação e dados de exemplo: ver [Seed de avaliação](#seed-de-avaliação).
 
 ---
 
