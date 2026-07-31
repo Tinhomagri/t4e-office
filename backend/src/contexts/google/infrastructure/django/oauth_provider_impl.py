@@ -34,6 +34,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/chat.spaces",
     "https://www.googleapis.com/auth/chat.messages",
     "https://www.googleapis.com/auth/chat.memberships.readonly",
+    # spaces.members.list só devolve {name, type} do membro, nunca
+    # displayName/foto — sem este escopo toda mensagem/DM cai no fallback
+    # "Alguém" (confirmado em produção, ver chat_gateway_impl.py).
+    "https://www.googleapis.com/auth/people.readonly",
     "openid",
 ]
 

@@ -43,21 +43,70 @@ class GoogleChatGateway(ChatGateway):
             pass
         return ""
 
-    def _members_of(self, service, space_name: str) -> list[ChatMember]:
+    @staticmethod
+    def _resolve_names(access_token: str, user_ids: list[str]) -> dict[str, tuple[str, str]]:
+        """Resolve `users/{id}` -> (nome, foto) pela People API.
+
+        Existe porque `spaces.members.list()` do Chat devolve só `{name, type}`
+        do membro — confirmado em produção, nunca `displayName`/`avatarUrl`.
+        Best-effort: contas que conectaram o Google antes do escopo
+        `people.readonly` existir não têm esse escopo até reconectar; nesse
+        caso a chamada falha e quem chama mantém o fallback "Alguém".
+        """
+        if not user_ids:
+            return {}
+        creds = Credentials(token=access_token)
+        people_service = build("people", "v1", credentials=creds, cache_discovery=False)
+        resource_names = [uid.replace("users/", "people/", 1) for uid in user_ids]
+        try:
+            result = (
+                people_service.people()
+                .getBatchGet(resourceNames=resource_names, personFields="names,photos")
+                .execute()
+            )
+        except HttpError:
+            return {}
+
+        resolved: dict[str, tuple[str, str]] = {}
+        for r in result.get("responses", []):
+            person = r.get("person")
+            if not person:
+                continue
+            user_id = r.get("requestedResourceName", "").replace("people/", "users/", 1)
+            names = person.get("names", [])
+            photos = person.get("photos", [])
+            display_name = (names[0].get("displayName", "") if names else "").strip()
+            if display_name:
+                resolved[user_id] = (display_name, photos[0].get("url", "") if photos else "")
+        return resolved
+
+    def _members_of(self, access_token: str, service, space_name: str) -> list[ChatMember]:
         # Best-effort: um espaço sem permissão de listar membros não deve
         # derrubar a listagem inteira — só fica sem nome de exibição.
         try:
             result = service.spaces().members().list(parent=space_name, pageSize=25).execute()
         except HttpError:
             return []
+
+        raw = [m.get("member", {}) for m in result.get("memberships", [])]
+        missing_ids = [
+            u.get("name", "") for u in raw if not u.get("displayName") and u.get("name")
+        ]
+        resolved = self._resolve_names(access_token, missing_ids)
+
         members: list[ChatMember] = []
-        for m in result.get("memberships", []):
-            user = m.get("member", {})
+        for user in raw:
+            user_id = user.get("name", "")
+            display_name = user.get("displayName", "").strip()
+            avatar_url = user.get("avatarUrl", "")
+            if not display_name and user_id in resolved:
+                display_name, people_avatar = resolved[user_id]
+                avatar_url = avatar_url or people_avatar
             members.append(
                 ChatMember(
-                    member_id=user.get("name", ""),
-                    display_name=user.get("displayName", "").strip() or "Alguém",
-                    avatar_url=user.get("avatarUrl", ""),
+                    member_id=user_id,
+                    display_name=display_name or "Alguém",
+                    avatar_url=avatar_url,
                 )
             )
         return members
@@ -73,7 +122,7 @@ class GoogleChatGateway(ChatGateway):
         for item in result.get("spaces", []):
             space_type = item.get("spaceType", "")
             is_group = space_type != "DIRECT_MESSAGE"
-            members = self._members_of(service, item["name"])
+            members = self._members_of(access_token, service, item["name"])
             display_name = item.get("displayName", "").strip()
             if not display_name:
                 # DM sem nome — usa o nome do outro participante.
@@ -106,7 +155,7 @@ class GoogleChatGateway(ChatGateway):
         # `messages.list` só devolve o resource id do remetente (`users/123`),
         # nunca displayName/avatar — isso só vem por `members.list`. Sem este
         # mapa toda mensagem cai no fallback "Alguém".
-        members_by_id = {m.member_id: m for m in self._members_of(service, space_id)}
+        members_by_id = {m.member_id: m for m in self._members_of(access_token, service, space_id)}
 
         messages = []
         for item in result.get("messages", []):
@@ -176,7 +225,7 @@ class GoogleChatGateway(ChatGateway):
 
         space_name = item["name"]
         service = self._service(access_token)
-        members = self._members_of(service, space_name)
+        members = self._members_of(access_token, service, space_name)
         display_name = ", ".join(m.display_name for m in members) or member_email
         return ChatSpace(
             space_id=space_name,
