@@ -33,9 +33,30 @@ in-app e um copiloto de IA (Claude/OpenAI) integrado por workspace.
 | RF-05 | Dashboard por status/prazo/responsável | frontend "Meu Dia" + endpoints de métricas |
 | RF-06 | Notificação in-app ao atribuir/mencionar | `projects` (`NotificationModel`) |
 
-**Diferenciais implementados:** copiloto IA, integração GitHub (OAuth+webhook), integração
-Google (Calendar/Meet), busca/filtros salvos, sub-tarefas e dependências, upload de anexos,
-tags/componentes/versões, dark/light, responsivo.
+**Diferenciais implementados**
+
+| Da lista do challenge | Onde |
+|---|---|
+| Funcionalidade assistida por IA | Copiloto por workspace (`copilot`), sugestão de campos no card |
+| Busca global & filtros | Busca por JQL + filtros salvos (`SavedFilterModel`) |
+| Sub-tarefas & dependências | `parent_id`, épicos e `IssueLinkModel` |
+| Upload de arquivos | Anexos com versionamento (`AttachmentModel`) |
+| Tags customizáveis | Labels, componentes e versões |
+| Relatórios PDF/CSV | Proposta comercial em PDF (WeasyPrint) e import/export CSV de leads |
+| Integração externa | GitHub (OAuth + webhook), Google (Calendar/Meet/Chat), Chatwoot |
+| Dark/light | Tema completo em tokens do Atlassian Design System |
+| Responsividade mobile | Layout do board e do shell adaptativos |
+
+**Além da lista** — o que o produto tem de próprio, e é onde ele deixa de ser um clone:
+
+- **Escritório isométrico** com presença em tempo real: quem está online aparece sentado, e
+  passar o mouse mostra o card em que a pessoa está trabalhando agora.
+- **Planning Poker** com mesa, cartas e emotes — estimativa sem sair do produto.
+- **Meu Dia** que atravessa todos os workspaces da pessoa (`GET /api/me/work/`), em vez de
+  seguir o seletor de workspace.
+- **Automações** por projeto com log de execução.
+- **CRM comercial** (deals, propostas, metas) e **Marketing** (aprovação de peça, métricas)
+  como bounded contexts próprios, não como campo extra no card.
 
 ---
 
@@ -99,7 +120,9 @@ pelas colunas, além de notificações de exemplo. Usuários (senha `demo1234`):
 | `ana@t4e.dev` | member |
 | `bruno@t4e.dev` | member |
 
-O comando é **idempotente** — rodar de novo não duplica dados.
+O comando é **idempotente** — rodar de novo não duplica dados. Verificado em banco limpo:
+duas execuções seguidas deixam os mesmos 3 usuários, 1 projeto, 1 sprint, 8 cards e 6
+notificações, e as três credenciais autenticam.
 
 ---
 
