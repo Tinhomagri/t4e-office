@@ -1,4 +1,6 @@
 """Views finas do Google Chat — orquestram os casos de uso de chat.py."""
+import logging
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -28,6 +30,8 @@ from contexts.google.interface.api.serializers import (
     CreateChatDmSerializer,
     SendChatMessageSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _credentials_use_case() -> GetValidCredentials:
@@ -59,6 +63,12 @@ class ChatSpaceListView(APIView):
                 get_valid_credentials=_credentials_use_case(),
             ).execute(user_id=str(request.user.id))
         except ChatError:
+            return _chat_error_response()
+        except Exception:
+            # Sem isto, qualquer coisa que não seja HttpError (timeout de socket,
+            # httplib2 usado de outra thread) virava um 500 sem traceback nem
+            # corpo — na Vercel não dava pra saber sequer o que quebrou.
+            logger.exception("erro inesperado ao listar espaços do Chat")
             return _chat_error_response()
         return Response(ChatSpaceSerializer(spaces, many=True).data)
 

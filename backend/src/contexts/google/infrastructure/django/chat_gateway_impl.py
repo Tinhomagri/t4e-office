@@ -1,16 +1,19 @@
 """Implementação do ChatGateway usando a Google Chat API (auth de usuário)."""
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
 import httplib2
 import requests
-from google_auth_httplib2 import AuthorizedHttp
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from contexts.google.domain.entities.chat import ChatMember, ChatMessage, ChatSpace
 from contexts.google.domain.ports.chat_gateway import ChatError, ChatGateway
+
+logger = logging.getLogger(__name__)
 
 _USERINFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo"
 
@@ -55,8 +58,14 @@ class GoogleChatGateway(ChatGateway):
             pass
         return ""
 
+    @classmethod
+    def _people_service(cls, access_token: str):
+        return build("people", "v1", http=cls._http(access_token), cache_discovery=False)
+
     @staticmethod
-    def _resolve_names(access_token: str, user_ids: list[str]) -> dict[str, tuple[str, str]]:
+    def _resolve_names(
+        access_token: str, user_ids: list[str], people_service=None
+    ) -> dict[str, tuple[str, str]]:
         """Resolve `users/{id}` -> (nome, foto) pela People API.
 
         Existe porque `spaces.members.list()` do Chat devolve só `{name, type}`
@@ -67,15 +76,15 @@ class GoogleChatGateway(ChatGateway):
         """
         if not user_ids:
             return {}
-        people_service = build(
-            "people", "v1", http=GoogleChatGateway._http(access_token), cache_discovery=False
-        )
+        people_service = people_service or GoogleChatGateway._people_service(access_token)
         resource_names = [uid.replace("users/", "people/", 1) for uid in user_ids]
         try:
             result = (
                 people_service.people()
                 .getBatchGet(resourceNames=resource_names, personFields="names,photos")
-                .execute()
+                # `http` próprio: o objeto `httplib2.Http` de dentro do service não
+                # é thread-safe e este método roda em paralelo (ver list_spaces).
+                .execute(http=GoogleChatGateway._http(access_token))
             )
         except HttpError:
             return {}
@@ -93,11 +102,21 @@ class GoogleChatGateway(ChatGateway):
                 resolved[user_id] = (display_name, photos[0].get("url", "") if photos else "")
         return resolved
 
-    def _members_of(self, access_token: str, service, space_name: str) -> list[ChatMember]:
+    def _members_of(
+        self, access_token: str, service, space_name: str, people_service=None
+    ) -> list[ChatMember]:
         # Best-effort: um espaço sem permissão de listar membros não deve
         # derrubar a listagem inteira — só fica sem nome de exibição.
         try:
-            result = service.spaces().members().list(parent=space_name, pageSize=25).execute()
+            result = (
+                service.spaces()
+                .members()
+                .list(parent=space_name, pageSize=25)
+                # Um `http` por chamada porque este método roda em ThreadPool:
+                # `httplib2.Http` mantém a conexão aberta como estado interno e
+                # não é thread-safe — compartilhá-lo derrubava a rota com 500.
+                .execute(http=self._http(access_token))
+            )
         except HttpError:
             return []
 
@@ -105,7 +124,7 @@ class GoogleChatGateway(ChatGateway):
         missing_ids = [
             u.get("name", "") for u in raw if not u.get("displayName") and u.get("name")
         ]
-        resolved = self._resolve_names(access_token, missing_ids)
+        resolved = self._resolve_names(access_token, missing_ids, people_service)
 
         members: list[ChatMember] = []
         for user in raw:
@@ -139,13 +158,25 @@ class GoogleChatGateway(ChatGateway):
         needs_members = [i["name"] for i in items if not i.get("displayName", "").strip()]
         members_by_space: dict[str, list[ChatMember]] = {}
         if needs_members:
+            # Os dois `service` são montados aqui, fora do pool: `build()` baixa
+            # o discovery document do Google, então construir um por thread era
+            # uma ida à rede a mais por DM.
+            people_service = self._people_service(access_token)
             with ThreadPoolExecutor(max_workers=8) as pool:
                 futures = {
-                    pool.submit(self._members_of, access_token, service, name): name
+                    pool.submit(
+                        self._members_of, access_token, service, name, people_service
+                    ): name
                     for name in needs_members
                 }
                 for fut in as_completed(futures):
-                    members_by_space[futures[fut]] = fut.result()
+                    # Um DM que falha vira DM sem nome de exibição, não erro 500
+                    # na lista inteira. Antes qualquer exceção aqui subia direto.
+                    try:
+                        members_by_space[futures[fut]] = fut.result()
+                    except Exception:
+                        logger.exception("falha ao resolver membros de %s", futures[fut])
+                        members_by_space[futures[fut]] = []
 
         spaces: list[ChatSpace] = []
         for item in items:
