@@ -43,6 +43,7 @@ const SCREEN_OFF = "#2f3a44"
 const SCREEN_ON = "#7fb2d9"
 const CHAIR = "#4a5a6b"
 const CHAIR_D = shade(CHAIR, 0.72)
+const PODIUM_GEO = isoCanvasFor(42, 22, 28)
 
 // ── Peças reutilizadas ──────────────────────────────────────────────────────
 
@@ -179,6 +180,19 @@ function drawCubicleBody(ctx: Ctx, flip: boolean): void {
 // ── Definições ──────────────────────────────────────────────────────────────
 
 export const PROPS: Record<string, PropDef> = {
+  podium: {
+    w: PODIUM_GEO.cw, h: PODIUM_GEO.ch, solid: null,
+    baseline: 34, anchor: { x: PODIUM_GEO.ax, y: PODIUM_GEO.ay },
+    draw(ctx) {
+      const { ax, ay } = PODIUM_GEO
+      // Níveis seguem o eixo Y: costas junto ao vidro, frente aberta para o escritório.
+      isoBox(ctx, ax, ay, 22, 14, 12, { top: "#aab4bd", right: "#c9d1d7", left: "#717e89" })
+      const gold = pt(ax, ay, 0, 14)
+      isoBox(ctx, gold[0], gold[1], 22, 14, 22, { top: "#d8ae43", right: "#efcf72", left: "#9b7221" })
+      const bronze = pt(ax, ay, 0, 28)
+      isoBox(ctx, bronze[0], bronze[1], 22, 14, 9, { top: "#b8784f", right: "#d49a6d", left: "#7f4b32" })
+    },
+  },
   // Mesa de trabalho 2×1 tiles, com monitor, teclado e caneca.
   desk: {
     w: 32,

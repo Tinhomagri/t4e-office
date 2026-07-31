@@ -358,8 +358,8 @@ export function OfficeRoom({
     return () => window.clearTimeout(t)
   }, [toast])
 
-  // O PC manda no teclado e na câmera: com a tela ligada, o mapa não recebe
-  // tecla, e a câmera trava na mesa.
+  // Com a tela ligada, o teclado passa a ser do PC. O mapa continua no mesmo
+  // enquadramento: o desktop é só uma camada por cima do escritório.
   useEffect(() => {
     const engine = engineRef.current
     if (!engine) return
@@ -368,10 +368,7 @@ export function OfficeRoom({
       engine.clearFocus()
       return
     }
-    const seatId = usePcStore.getState().seatId
-    const seat = map.seats.find((s) => s.id === seatId)
     engine.setInputEnabled(false)
-    if (seat) engine.focusOn(seat.x, seat.y, 6)
   }, [pcState, map])
 
   // ESC: colapsa a janela expandida; se não houver, só desliga o PC. Quem

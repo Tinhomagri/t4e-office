@@ -478,7 +478,6 @@ export class OfficeEngine {
       return
     }
     if (me.seatIndex >= 0) return
-
     // Checagem de zona roda todo frame, parado ou andando — antes só rodava
     // dentro do bloco de movimento, então quem chegava a uma zona e ficava
     // parado sem antes se mexer (ex.: spawn dentro da própria zona) nunca
@@ -809,34 +808,32 @@ export class OfficeEngine {
     const camY = Math.round(this.camY)
     const s = this.scale
 
-    // Céu primeiro: o piso é blitado por cima com alfa, então vidro,
-    // guarda-corpo e o vazio fora do prédio revelam estas faixas.
+    // Fundo infinito: escuro no todo. Céu e nuvens entram só no semiplano
+    // superior, onde aparecem pelas vidraças sem contaminar a borda inferior
+    // da planta isométrica.
     const vw = this.viewW
     const vh = this.viewH
-    const blit = (layer: HTMLCanvasElement, factor: number, extraX = 0) => {
+    ctx.fillStyle = "#090b0e"
+    ctx.fillRect(0, 0, this.cssW, this.cssH)
+    const blitSky = (layer: HTMLCanvasElement, factor: number, extraX = 0) => {
       const r = layerRect(factor, camX + extraX, camY, vw, vh)
       ctx.drawImage(layer, r.sx, r.sy, r.sw, r.sh, 0, 0, vw * s, vh * s)
-      // Segunda passada quando o recorte cruza o fim da faixa — sem ela
-      // aparece uma coluna vazia a cada volta do loop.
       const over = r.sx + r.sw - layer.width
       if (over > 0) {
-        ctx.drawImage(
-          layer, 0, r.sy, over, r.sh,
-          (r.sw - over) * s, 0, over * s, vh * s,
-        )
+        ctx.drawImage(layer, 0, r.sy, over, r.sh, (r.sw - over) * s, 0, over * s, vh * s)
       }
     }
-
-    // Só céu + nuvens — a skyline (far/near) foi desenhada pra aparecer em
-    // fatias finas de vidro; com a parede de frente removida (ver
-    // isoBake.ts), sobra área aberta grande demais e a repetição da faixa
-    // de prédios ficava com costura visível ("bugando").
-    blit(this.sky.sky, 0)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, this.cssW, Math.round(this.cssH * 0.52))
+    ctx.clip()
+    blitSky(this.sky.sky, 0)
     ctx.drawImage(
       this.sky.clouds,
       cloudOffset(camX, this.time), 0, vw, vh,
       0, 0, vw * s, vh * s,
     )
+    ctx.restore()
 
     // Piso e paredes: um único blit da região visível.
     ctx.drawImage(

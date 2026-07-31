@@ -103,12 +103,6 @@ export function buildFloor1(): OfficeMap {
       add("cubicle", tx, topB)
     }
 
-    add("plant", 26, topA + 3)
-    add("lamp", 18, topA)
-    add("lamp", 18, topB)
-    lights.push({ x: 18 * TILE + 8, y: topA * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 })
-    lights.push({ x: 18 * TILE + 8, y: topB * TILE + 8, radius: 96, color: "#ffe6bd", flicker: 0 })
-
     for (const tx of CUBICLE_COLS) {
       // As duas fileiras usam a mesma baia e a mesma câmera. A antiga posição
       // `tx + 1` deixava as cadeiras das fileiras 1/3/5 um tile à esquerda das
