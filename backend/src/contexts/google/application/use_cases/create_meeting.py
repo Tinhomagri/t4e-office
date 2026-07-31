@@ -35,6 +35,7 @@ class CreateMeeting:
         attendees: list[str],
         description: str = "",
         card_id: str | None = None,
+        recurrence: list[str] | None = None,
     ) -> CreatedMeeting:
         access_token = self.get_valid_credentials.execute(user_id=user_id)
         created = self.calendar_gateway.create_event(
@@ -45,6 +46,7 @@ class CreateMeeting:
             attendees=attendees,
             description=description,
             with_meet=True,
+            recurrence=recurrence,
         )
         self.meeting_ref_repository.create(
             ref=MeetingRef(

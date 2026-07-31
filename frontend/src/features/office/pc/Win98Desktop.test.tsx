@@ -61,11 +61,13 @@ describe("<Win98Desktop />", () => {
     expect(screen.getByTestId("win98-titlebar")).toBeInTheDocument()
   })
 
-  it("app sem componente registrado mostra aviso em vez de tela branca", () => {
+  it("app fora do registry mostra aviso em vez de tela branca", () => {
+    // Todo app do desktop hoje tem página; o fallback existe para id que não
+    // está no registry (janela restaurada de um estado antigo, por exemplo).
     ligado()
-    usePcStore.getState().openApp("poker", { w: 600, h: 400 })
+    usePcStore.getState().openApp("app-que-nao-existe", { w: 600, h: 400 })
     render(<Win98Desktop />)
-    expect(screen.getByText(/Em breve/)).toBeInTheDocument()
+    expect(screen.getByText(/não aponta para nenhuma tela/)).toBeInTheDocument()
   })
 
   it("janela expandida vai para a camada de tela cheia, fora do painel", () => {

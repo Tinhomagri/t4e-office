@@ -44,6 +44,28 @@ export type AiAction =
   | "shorten"
   | "to_bullets"
   | "acceptance_criteria"
+  | "change_tone"
+  | "translate"
+
+// Ações que precisam de um alvo abrem um submenu em vez de rodar direto.
+// Os valores espelham os catálogos de `writing_skills.py` no backend.
+const AI_TARGETS: Record<string, { key: string; label: string }[]> = {
+  change_tone: [
+    { key: "professional", label: "Profissional" },
+    { key: "casual", label: "Casual" },
+    { key: "empathetic", label: "Empático" },
+    { key: "direct", label: "Direto" },
+    { key: "educational", label: "Didático" },
+  ],
+  translate: [
+    { key: "pt-BR", label: "Português (BR)" },
+    { key: "en", label: "Inglês" },
+    { key: "es", label: "Espanhol" },
+    { key: "fr", label: "Francês" },
+    { key: "de", label: "Alemão" },
+    { key: "it", label: "Italiano" },
+  ],
+}
 
 const AI_ACTIONS: { id: AiAction; label: string; hint: string }[] = [
   { id: "improve", label: "Melhorar escrita", hint: "Clareza e objetividade" },
@@ -57,6 +79,8 @@ const AI_ACTIONS: { id: AiAction; label: string; hint: string }[] = [
     label: "Gerar critérios de aceite",
     hint: "Formato Dado/Quando/Então",
   },
+  { id: "change_tone", label: "Alterar o tom", hint: "Mesmo conteúdo, outro registro" },
+  { id: "translate", label: "Traduzir", hint: "Preserva formatação e termos" },
 ]
 
 export function RichEditor({
@@ -68,8 +92,11 @@ export function RichEditor({
   value: string
   onChange: (html: string) => void
   placeholder?: string
-  /** Recebe o texto puro do editor e devolve o texto reescrito pela IA. */
-  onAiAssist?: (text: string, action: AiAction) => Promise<string>
+  /**
+   * Recebe o texto puro do editor e devolve o texto reescrito pela IA.
+   * `target` vem preenchido nas ações que pedem um alvo (tom, idioma).
+   */
+  onAiAssist?: (text: string, action: AiAction, target?: string) => Promise<string>
 }) {
   const editor = useEditor({
     extensions: [
@@ -285,11 +312,13 @@ function AiMenu({
   onAssist,
 }: {
   editor: Editor
-  onAssist: (text: string, action: AiAction) => Promise<string>
+  onAssist: (text: string, action: AiAction, target?: string) => Promise<string>
 }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<AiAction | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Ação aguardando escolha de alvo (tom/idioma). Null = menu raiz.
+  const [pendingTarget, setPendingTarget] = useState<AiAction | null>(null)
   // Guarda o HTML anterior para o "Desfazer IA" — a reescrita troca o documento
   // inteiro, e sem uma volta de um clique o usuário perde o texto original.
   const [previous, setPrevious] = useState<string | null>(null)
@@ -309,7 +338,7 @@ function AiMenu({
     }
   }, [open])
 
-  async function run(action: AiAction) {
+  async function run(action: AiAction, target?: string) {
     const text = editor.getText().trim()
     if (!text) {
       setError("Escreva algo antes de pedir ajuda à IA.")
@@ -318,11 +347,12 @@ function AiMenu({
     setBusy(action)
     setError(null)
     try {
-      const rewritten = await onAssist(text, action)
+      const rewritten = await onAssist(text, action, target)
       setPrevious(editor.getHTML())
       // A IA devolve texto puro: converte para HTML preservando as quebras.
       editor.chain().focus().setContent(toHtml(rewritten)).run()
       setOpen(false)
+      setPendingTarget(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "A IA não conseguiu responder.")
     } finally {
@@ -372,23 +402,57 @@ function AiMenu({
 
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-lg border border-paper-200 bg-white py-1 shadow-pop dark:border-ink-700 dark:bg-ink-800">
-          {AI_ACTIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              disabled={busy !== null}
-              onClick={() => run(item.id)}
-              className="flex w-full items-start justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-100 disabled:opacity-50 dark:hover:bg-ink-700"
-            >
-              <span className="min-w-0">
-                <span className="block text-xs text-ink dark:text-paper">{item.label}</span>
-                <span className="block text-[10px] text-paper-500">{item.hint}</span>
-              </span>
-              {busy === item.id && (
-                <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-brand-500" />
-              )}
-            </button>
-          ))}
+          {pendingTarget ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPendingTarget(null)}
+                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[11px] font-medium text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-700"
+              >
+                <ChevronDown className="size-3 rotate-90" />
+                {AI_ACTIONS.find((a) => a.id === pendingTarget)?.label}
+              </button>
+              <div className="my-1 border-t border-paper-200 dark:border-ink-700" />
+              {AI_TARGETS[pendingTarget].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => run(pendingTarget, t.key)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs text-ink transition-colors hover:bg-paper-100 disabled:opacity-50 dark:text-paper dark:hover:bg-ink-700"
+                >
+                  {t.label}
+                  {busy === pendingTarget && (
+                    <Loader2 className="size-3 shrink-0 animate-spin text-brand-500" />
+                  )}
+                </button>
+              ))}
+            </>
+          ) : (
+            AI_ACTIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={busy !== null}
+                onClick={() =>
+                  AI_TARGETS[item.id] ? setPendingTarget(item.id) : run(item.id)
+                }
+                className="flex w-full items-start justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-100 disabled:opacity-50 dark:hover:bg-ink-700"
+              >
+                <span className="min-w-0">
+                  <span className="block text-xs text-ink dark:text-paper">{item.label}</span>
+                  <span className="block text-[10px] text-paper-500">{item.hint}</span>
+                </span>
+                {AI_TARGETS[item.id] ? (
+                  <ChevronDown className="mt-0.5 size-3 shrink-0 -rotate-90 text-paper-400" />
+                ) : (
+                  busy === item.id && (
+                    <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-brand-500" />
+                  )
+                )}
+              </button>
+            ))
+          )}
           {error && (
             <p className="border-t border-paper-200 px-3 pb-1 pt-1.5 text-[11px] text-danger dark:border-ink-700">
               {error}

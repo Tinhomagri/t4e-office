@@ -1,4 +1,6 @@
 """Implementações Django dos repositórios do contexto projects."""
+from datetime import UTC, datetime
+
 from django.db.models import Max
 
 from contexts.identity.infrastructure.django.models import MembershipModel
@@ -6,7 +8,6 @@ from contexts.projects.domain.entities.card import (
     Card,
     CardPriority,
     CardResolution,
-    CardStatus,
     CardType,
 )
 from contexts.projects.domain.entities.comment import CardComment
@@ -55,7 +56,7 @@ def _card_to_entity(row: CardModel) -> Card:
         number=row.number,
         title=row.title,
         description=row.description,
-        status=CardStatus(row.status),
+        status=row.status,
         type=CardType(row.type),
         priority=CardPriority(row.priority),
         points=row.points,
@@ -150,7 +151,7 @@ class DjangoCardRepository(CardRepository):
             number=card.number,
             title=card.title,
             description=card.description,
-            status=card.status.value,
+            status=card.status,
             type=card.type.value,
             priority=card.priority.value,
             points=card.points,
@@ -190,9 +191,13 @@ class DjangoCardRepository(CardRepository):
 
     def update(self, *, card: Card) -> Card:
         CardModel.objects.filter(id=card.id).update(
+            # `QuerySet.update()` não dispara `auto_now`, então sem esta linha o
+            # `updated_at` ficava congelado na data de criação para sempre — e
+            # todo relatório de "atualizados no período" lia zero.
+            updated_at=datetime.now(UTC),
             title=card.title,
             description=card.description,
-            status=card.status.value,
+            status=card.status,
             type=card.type.value,
             priority=card.priority.value,
             points=card.points,

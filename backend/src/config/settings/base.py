@@ -32,6 +32,10 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
 INSTALLED_APPS = [
+    # Antes de staticfiles: é isso que faz o runserver subir em ASGI e
+    # atender WebSocket junto com o HTTP em dev.
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -54,6 +58,7 @@ INSTALLED_APPS = [
     "contexts.integrations",
     "contexts.sales",
     "contexts.chatwoot",
+    "contexts.meetings",
 ]
 
 MIDDLEWARE = [
@@ -158,6 +163,35 @@ OPENAI_MODEL = env("OPENAI_MODEL")
 # Chave Fernet p/ cifrar as API keys de IA por workspace no banco.
 # Reaproveita a GOOGLE_TOKEN_ENC_KEY se AI_CONFIG_ENC_KEY não for definida.
 AI_CONFIG_ENC_KEY = env("AI_CONFIG_ENC_KEY") or env("GOOGLE_TOKEN_ENC_KEY", default="")
+
+# Reuniões nativas: SFU LiveKit self-hosted. A chave/segredo são o par
+# compartilhado com o servidor de mídia (backend/livekit.yaml) — é com ele que
+# assinamos os tokens de entrada na sala. Os defaults são os de dev, para
+# `docker compose up` funcionar sem setup; em produção venham do ambiente.
+LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="devkey")
+LIVEKIT_API_SECRET = env(
+    "LIVEKIT_API_SECRET", default="devsecret_troque_em_producao_0123456789abcdef"
+)
+# URL que o NAVEGADOR usa para falar com o SFU (não a interna do compose).
+LIVEKIT_URL = env("LIVEKIT_URL", default="ws://localhost:7880")
+
+
+# Camada de canais para tempo real (presença, poker). O Redis é o que permite um processo
+# difundir para sockets abertos em OUTRO processo — com InMemory, cada worker
+# ficaria isolado e a mensagem só chegaria a quem calhasse de estar no mesmo.
+#
+# Layer pub/sub, não a `core`: a `core` guarda uma fila por canal e lê com
+# BRPOP bloqueante, que estoura `TimeoutError` sempre que a conversa fica
+# ociosa mais que o socket timeout — o cliente caía e reconectava a cada
+# silêncio. Nosso uso é difusão pura (group_send/group_add, sem fila a
+# persistir), que é justamente o caso para o qual a pub/sub existe.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
+        "CONFIG": {"hosts": [env("REDIS_URL", default="redis://redis:6379/0")]},
+    }
+}
+
 
 # Integração Google (OAuth + Calendar)
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")

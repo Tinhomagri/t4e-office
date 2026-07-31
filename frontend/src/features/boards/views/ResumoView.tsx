@@ -6,6 +6,7 @@ import { cx } from "@/shared/ui/primitives"
 import { useActivity } from "@/features/workspace/workspace.hooks"
 import { ColoredAvatar } from "../board.shared"
 import { ResumoDashboard } from "./ResumoDashboard"
+import { isDelivered } from "./resumo.metrics"
 import type { Card, CardPriority, CardStatus, CardType, Member, Sprint } from "@/features/workspace/workspace.types"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
@@ -94,8 +95,10 @@ export function ResumoView({
   const last7 = now - 7 * DAY_MS
   const next7 = now + 7 * DAY_MS
 
+  // Conclusão se mede por `resolved_at`, não por `updated_at`: um card entregue
+  // meses atrás que alguém só comentou hoje não foi "concluído nesta semana".
   const completedLast7 = cards.filter(
-    (c) => c.status === "done" && c.updated_at && new Date(c.updated_at).getTime() >= last7,
+    (c) => isDelivered(c) && c.resolved_at && new Date(c.resolved_at).getTime() >= last7,
   )
   const updatedLast7 = cards.filter((c) => c.updated_at && new Date(c.updated_at).getTime() >= last7)
   const createdLast7 = cards.filter((c) => c.created_at && new Date(c.created_at).getTime() >= last7)

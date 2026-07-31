@@ -28,6 +28,11 @@ const FIRST_Y = 32
 const MIN_W = 320
 const MIN_H = 240
 
+/** Folga entre a janela e a borda do painel, para a moldura respirar. */
+const MARGIN = 8
+/** Pedaço de titlebar que nunca sai do painel — é por onde se traz a janela de volta. */
+const GRAB = 72
+
 interface PcStore {
   state: PcState
   seatId: string | null
@@ -35,10 +40,13 @@ interface PcStore {
   focusedId: string | null
   expandedId: string | null
   openFolderId: string | null
+  /** Área útil do painel, medida pelo componente. 0 = ainda não medida. */
+  viewport: { w: number; h: number }
 
   boot: (seatId: string) => void
   ready: () => void
   shutdown: () => void
+  setViewport: (w: number, h: number) => void
 
   openApp: (appId: string, size: { w: number; h: number }) => void
   close: (id: string) => void
@@ -69,6 +77,33 @@ function cascadeSlot(windows: PcWindow[]): number {
   return windows.length % CASCADE_SLOTS
 }
 
+/**
+ * Encaixa a janela no painel: o tamanho pedido pelo app é uma preferência, não
+ * uma promessa. Sem isto uma janela de 900x600 num painel de 600px de altura
+ * nasce com o rodapé (e metade do conteúdo) fora da área visível — foi o que
+ * fez a página embutida parecer "cortada" e impossível de usar.
+ */
+function fit(
+  size: { w: number; h: number },
+  slot: number,
+  viewport: { w: number; h: number },
+): { x: number; y: number; w: number; h: number } {
+  const step = slot * CASCADE_STEP
+  // Viewport não medida ainda (SSR, teste, primeiro frame): usa o pedido cru.
+  if (viewport.w <= 0 || viewport.h <= 0) {
+    return { x: FIRST_X + step, y: FIRST_Y + step, w: size.w, h: size.h }
+  }
+  const maxW = Math.max(MIN_W, viewport.w - MARGIN * 2)
+  const maxH = Math.max(MIN_H, viewport.h - MARGIN * 2)
+  const w = Math.min(size.w, maxW)
+  const h = Math.min(size.h, maxH)
+  // A cascata cede antes da janela: melhor duas janelas alinhadas do que uma
+  // fora da tela.
+  const x = Math.max(MARGIN, Math.min(FIRST_X + step, viewport.w - w - MARGIN))
+  const y = Math.max(MARGIN, Math.min(FIRST_Y + step, viewport.h - h - MARGIN))
+  return { x, y, w, h }
+}
+
 /** Janela visível mais à frente: quem herda o foco. */
 function topVisibleId(windows: PcWindow[], skipId?: string): string | null {
   const candidates = windows.filter((w) => !w.minimized && w.id !== skipId)
@@ -83,10 +118,18 @@ export const usePcStore = create<PcStore>((set, get) => ({
   focusedId: null,
   expandedId: null,
   openFolderId: null,
+  viewport: { w: 0, h: 0 },
 
   boot: (seatId) => set({ state: "booting", seatId }),
 
   ready: () => set((s) => (s.state === "booting" ? { state: "desktop" } : s)),
+
+  setViewport: (w, h) =>
+    set((s) =>
+      // Sem o guarda, cada frame do ResizeObserver publicaria um objeto novo e
+      // acordaria todo assinante do store à toa.
+      s.viewport.w === w && s.viewport.h === h ? s : { viewport: { w, h } },
+    ),
 
   shutdown: () =>
     set({
@@ -106,17 +149,18 @@ export const usePcStore = create<PcStore>((set, get) => ({
       get().restore(appId)
       return
     }
-    const step = cascadeSlot(s.windows) * CASCADE_STEP
+    const box = fit(
+      { w: Math.max(MIN_W, size.w), h: Math.max(MIN_H, size.h) },
+      cascadeSlot(s.windows),
+      s.viewport,
+    )
     set({
       windows: [
         ...s.windows,
         {
           id: appId,
           appId,
-          x: FIRST_X + step,
-          y: FIRST_Y + step,
-          w: Math.max(MIN_W, size.w),
-          h: Math.max(MIN_H, size.h),
+          ...box,
           z: topZ(s.windows) + 1,
           minimized: false,
         },
@@ -165,9 +209,15 @@ export const usePcStore = create<PcStore>((set, get) => ({
   move: (id, x, y) =>
     set((s) => {
       if (!s.windows.some((w) => w.id === id)) return s
+      const { w: vw, h: vh } = s.viewport
+      // Sempre sobra titlebar agarrável dentro do painel: arrastar uma janela
+      // para fora da borda direita a deixava inalcançável, sem como trazer de
+      // volta a não ser fechando o PC.
+      const clampX = (v: number) => (vw > 0 ? Math.min(Math.max(0, v), vw - GRAB) : Math.max(0, v))
+      const clampY = (v: number) => (vh > 0 ? Math.min(Math.max(0, v), vh - GRAB) : Math.max(0, v))
       return {
         windows: s.windows.map((w) =>
-          w.id === id ? { ...w, x: Math.max(0, x), y: Math.max(0, y) } : w,
+          w.id === id ? { ...w, x: clampX(x), y: clampY(y) } : w,
         ),
       }
     }),

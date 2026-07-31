@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   Loader2,
+  MapPin,
   Paperclip,
   Send,
   Sparkles,
@@ -17,6 +18,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 
 import { cx } from "@/shared/ui/primitives"
+import {
+  useActiveCopilotContext,
+  useCopilotContextStore,
+} from "@/features/copilot/copilot.context.store"
 import { useSpaceStore } from "@/features/shell/space.store"
 import type { SpaceId } from "@/features/shell/spaces"
 import { useWorkspaces } from "@/features/workspace/workspace.hooks"
@@ -55,6 +60,7 @@ const ACTION_LABEL: Record<PendingAction["action"], string> = {
   update_card: "Editar card",
   create_sprint: "Criar sprint",
   update_sprint: "Editar sprint",
+  save_document_to_project: "Salvar na aba Documentos",
   create_deal: "Criar negócio",
   update_deal: "Editar negócio",
   move_deal_stage: "Mover negócio de estágio",
@@ -69,6 +75,7 @@ const ACTION_LABEL: Record<PendingAction["action"], string> = {
 function actionTarget(a: PendingAction): string {
   return (
     a.title ??
+    a.document_title ??
     a.sprint_name ??
     a.deal_title ??
     a.customer_name ??
@@ -126,6 +133,11 @@ export function CopilotChatWidget() {
   // começar pelo domínio que o usuário está olhando.
   const activeSpace = useSpaceStore((s) => s.activeSpace)
   const suggestions = SUGGESTIONS_BY_SPACE[activeSpace] ?? SUGGESTIONS_BY_SPACE.boards
+  // Contexto publicado pela tela aberta (card, projeto). Vira o chip acima do
+  // input e uma dica anexada à pergunta.
+  const screenContext = useActiveCopilotContext()
+  const contextEnabled = useCopilotContextStore((s) => s.enabled)
+  const setContextEnabled = useCopilotContextStore((s) => s.setEnabled)
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatItem[]>([])
@@ -194,6 +206,12 @@ export function CopilotChatWidget() {
           `${content || "Leia o documento que acabei de anexar e me ajude."}` +
           `\n\n[Documento anexado agora: "${doc.title}" — use a ferramenta ` +
           `read_document com document_id="${doc.id}" para ler o conteúdo.]`
+      }
+
+      // Contexto da tela: vai só na última mensagem, como dica invisível. Nas
+      // anteriores seria ruído — a tela pode ter mudado desde então.
+      if (screenContext && contextEnabled) {
+        wireContent = `${wireContent}\n\n[${screenContext.hint}]`
       }
 
       const next: ChatItem[] = [...messages, userItem]
@@ -279,17 +297,17 @@ export function CopilotChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-24 right-6 z-50 flex h-[560px] max-h-[calc(100vh-8rem)] w-[380px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl border border-paper-200 bg-paper shadow-2xl dark:border-ink-700 dark:bg-ink-900"
+            className="fixed bottom-24 right-6 z-50 flex h-[620px] max-h-[calc(100vh-8rem)] w-[420px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl border border-paper-200 bg-paper shadow-2xl dark:border-transparent dark:bg-ink-750 dark:shadow-overlay"
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 text-white">
+            <div className="flex items-center justify-between gap-2 border-b border-paper-200 px-4 py-3 text-ink dark:border-ink-700 dark:text-ink-200">
               <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-lg bg-white/15">
+                <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white">
                   <Sparkles className="size-4" />
                 </span>
                 <div>
                   <p className="text-sm font-semibold leading-none">Copiloto IA</p>
-                  <p className="mt-0.5 text-[11px] text-white/70">
+                  <p className="mt-0.5 text-[11px] text-paper-500 dark:text-ink-400">
                     {ready ? `${aiConfig?.provider === "openai" ? "OpenAI" : "Claude"} · ${aiConfig?.model}` : "Assistente do Pulse"}
                   </p>
                 </div>
@@ -301,13 +319,13 @@ export function CopilotChatWidget() {
                       setMessages([])
                       setError(null)
                     }}
-                    className="rounded-lg p-1 hover:bg-white/15"
+                    className="rounded-lg p-1 text-paper-500 transition-colors hover:bg-paper-100 hover:text-ink dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-200"
                     title="Limpar conversa"
                   >
                     <Trash2 className="size-4" />
                   </button>
                 )}
-                <button onClick={() => setOpen(false)} className="rounded-lg p-1 hover:bg-white/15" title="Fechar">
+                <button onClick={() => setOpen(false)} className="rounded-lg p-1 text-paper-500 transition-colors hover:bg-paper-100 hover:text-ink dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-200" title="Fechar">
                   <X className="size-4" />
                 </button>
               </div>
@@ -350,7 +368,20 @@ export function CopilotChatWidget() {
                 </div>
               ) : (
                 messages.map((m, i) => (
-                  <div key={i} className="space-y-2">
+                  <motion.div
+                    key={i}
+                    layout="position"
+                    initial={
+                      // Só a última mensagem anima: ao reabrir o painel, o
+                      // histórico inteiro entrando em cascata seria ruído.
+                      i === messages.length - 1
+                        ? { opacity: 0, y: 8, scale: 0.98 }
+                        : false
+                    }
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                    className="space-y-2"
+                  >
                     <Bubble msg={m} />
                     {m.role === "assistant" && !!m.actions?.length && (
                       <ActionPreview
@@ -386,21 +417,42 @@ export function CopilotChatWidget() {
                         </button>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 ))
               )}
 
-              {busy && (
-                <div className="flex items-center gap-2 text-xs text-paper-400">
-                  <Loader2 className="size-3.5 animate-spin" /> Pensando…
-                </div>
-              )}
+              <AnimatePresence>{busy && <Thinking />}</AnimatePresence>
               {error && <p className="text-xs text-red-600">{error}</p>}
             </div>
 
             {/* Input */}
             {ready && (
               <div className="border-t border-paper-200 p-3 dark:border-ink-700">
+                {screenContext && contextEnabled && (
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-brand-50 px-2 py-1 text-xs dark:bg-brand-500/10">
+                    <span className="flex min-w-0 items-center gap-1.5 text-brand-700 dark:text-brand-300">
+                      <MapPin className="size-3 shrink-0" />
+                      <span className="shrink-0 text-paper-500">Contexto:</span>
+                      <span className="truncate font-medium">{screenContext.label}</span>
+                    </span>
+                    <button
+                      onClick={() => setContextEnabled(false)}
+                      title="Não usar o contexto desta tela"
+                      className="rounded p-0.5 text-paper-400 hover:text-red-600"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
+                {screenContext && !contextEnabled && (
+                  <button
+                    onClick={() => setContextEnabled(true)}
+                    className="mb-2 flex items-center gap-1 text-[11px] font-medium text-paper-500 hover:text-brand-600"
+                  >
+                    <MapPin className="size-3" />
+                    Usar o contexto desta tela
+                  </button>
+                )}
                 {attachment && (
                   <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-paper-100 px-2 py-1 text-xs dark:bg-ink-800">
                     <span className="flex min-w-0 items-center gap-1.5 text-paper-600 dark:text-paper-300">
@@ -563,16 +615,52 @@ function ActionPreview({
   )
 }
 
+// Três pontos pulsando enquanto a IA pensa. Substitui o spinner + "Pensando…":
+// a resposta pode levar dezenas de segundos (o agente chama ferramentas antes
+// de escrever), e um ritmo visível segura melhor a espera do que um texto fixo.
+function Thinking() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.2 }}
+      className="flex items-center gap-2"
+    >
+      <span className="grid size-6 shrink-0 place-items-center rounded-md bg-gradient-to-br from-violet-500 to-indigo-600 text-white">
+        <Sparkles className="size-3" />
+      </span>
+      <span className="flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="size-1.5 rounded-full bg-paper-400 dark:bg-ink-400"
+            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+            transition={{
+              duration: 1.1,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.15,
+            }}
+          />
+        ))}
+      </span>
+    </motion.div>
+  )
+}
+
 function Bubble({ msg }: { msg: ChatItem }) {
   const isUser = msg.role === "user"
   return (
     <div className={cx("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cx(
-          "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
+          "text-sm leading-relaxed",
           isUser
-            ? "whitespace-pre-wrap rounded-br-sm bg-brand-500 text-white"
-            : "rounded-bl-sm bg-paper-100 text-ink dark:bg-ink-800 dark:text-paper",
+            ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-500 px-3 py-2 text-white"
+            // Sem caixa: a resposta costuma ser longa e cheia de listas, e um
+            // balão estreito quebra a leitura do markdown.
+            : "w-full text-ink dark:text-ink-200",
         )}
       >
         {msg.attachment && (

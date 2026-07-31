@@ -44,7 +44,10 @@ class CreateCardSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=200)
     description = serializers.CharField(required=False, allow_blank=True, default="")
-    status = serializers.ChoiceField(choices=_STATUS, default="todo")
+    # Slug livre, não ChoiceField: colunas criadas no projeto (WorkflowStatus)
+    # têm slugs fora da lista padrão. Quem valida se a coluna existe é o
+    # caso de uso, que conhece o workflow do projeto.
+    status = serializers.CharField(max_length=40, default="todo")
     type = serializers.ChoiceField(choices=_TYPE, default="feature")
     priority = serializers.ChoiceField(choices=_PRIORITY, default="medium")
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
@@ -68,7 +71,7 @@ class UpdateCardSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=200, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.ChoiceField(choices=_STATUS, required=False)
+    status = serializers.CharField(max_length=40, required=False)
     type = serializers.ChoiceField(choices=_TYPE, required=False)
     priority = serializers.ChoiceField(choices=_PRIORITY, required=False)
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)

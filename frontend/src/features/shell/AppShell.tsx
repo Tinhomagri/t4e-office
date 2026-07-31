@@ -15,6 +15,7 @@ import {
   Plus,
   Search,
   Settings,
+  Spade,
   SquareKanban,
   Star,
   Sun,
@@ -149,7 +150,12 @@ export function AppShell() {
     // Estrutura do Jira: a top bar atravessa a tela inteira e a sidebar começa
     // ABAIXO dela. Antes a sidebar subia até o topo e o header só cobria o
     // conteúdo — é o que fazia os dois blocos parecerem apps diferentes.
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas text-ink dark:bg-ink-950 dark:text-paper">
+    // h-full/w-full (não h-screen/w-screen): o shell preenche o CONTEINER.
+    // Na rota normal o contêiner é o #root, que já ocupa a viewport inteira —
+    // mesmo resultado de antes. Dentro da janela do PC do escritório, o
+    // contêiner é a janela, e é isso que permite rodar o sistema inteiro lá
+    // dentro sem o shell vazar para fora da moldura.
+    <div className="flex h-full w-full flex-col overflow-hidden bg-canvas text-ink dark:bg-ink-950 dark:text-paper">
       {/* ---------------- Top bar global ---------------- */}
       {/* h-12 = 48px, a altura real do top-nav do Jira (medida em docs/jira-ui-spec.md). */}
       <header className="relative z-50 flex h-12 shrink-0 items-center gap-1 border-b border-paper-200 bg-paper px-2 dark:border-ink-800 dark:bg-ink-900 sm:gap-2 sm:px-3 [padding-top:env(safe-area-inset-top)]">
@@ -191,14 +197,8 @@ export function AppShell() {
         </div>
 
         {/* Criar mora na top bar (Jira 2024+), não na sidebar: é ação global,
-            não navegação. */}
-        <button
-          onClick={() => navigate(space.home)}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-brand-500 px-3 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-brand-600 active:bg-brand-600 focus-ring"
-        >
-          <Plus className="size-4" strokeWidth={2.4} />
-          <span className="hidden sm:inline">Criar</span>
-        </button>
+            não navegação. Dropdown com os atalhos de criação mais usados. */}
+        <CreateMenu navigate={navigate} location={location} />
 
         <div className="flex shrink-0 items-center gap-0.5">
           <button
@@ -284,9 +284,11 @@ export function AppShell() {
                 que nós escolhemos para ele. */}
             <FavoritesBlock collapsed={collapsed} />
 
-            {/* Os grupos do space (Funil/Carteira/Resultado no Comercial) vêm
-                antes de "Para você" — é o que a pessoa veio fazer ao entrar no
-                space; "Para você" é contexto comum, não específico deste. */}
+            {/* "Para você" primeiro: Meu Dia é a rota raiz (/app) e o índice
+                do MyDayPage — precisa ser o primeiro item pra bater com o que
+                a pessoa vê ao entrar. Os grupos do space vêm depois. */}
+            <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
+
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={spaceId}
@@ -301,8 +303,6 @@ export function AppShell() {
                 ))}
               </motion.div>
             </AnimatePresence>
-
-            <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
 
             <RecentsBlock collapsed={collapsed} />
           </nav>
@@ -344,6 +344,81 @@ export function AppShell() {
 
 // Ícone da top bar. Quadrado de 32px, sem moldura — a borda só apareceria para
 // separar itens que já estão separados por espaço.
+// Dropdown do botão "Criar" na top bar — atalhos pros fluxos de criação mais
+// usados, sem obrigar a pessoa a navegar até o space certo primeiro.
+function CreateMenu({
+  navigate,
+  location,
+}: {
+  navigate: ReturnType<typeof useNavigate>
+  location: ReturnType<typeof useLocation>
+}) {
+  const [open, setOpen] = useState(false)
+  const reduce = useReducedMotion()
+
+  const goTo = (to: string, event?: string) => {
+    setOpen(false)
+    navigate(to)
+    if (event) requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(event)))
+  }
+
+  const items = [
+    {
+      label: "Card",
+      icon: SquareKanban,
+      onClick: () =>
+        location.pathname.startsWith("/app/boards")
+          ? (setOpen(false), window.dispatchEvent(new CustomEvent("app:create-card")))
+          : goTo("/app/boards", "app:create-card"),
+    },
+    { label: "Planning Poker", icon: Spade, onClick: () => goTo("/app/poker") },
+    { label: "Reunião", icon: CalendarClock, onClick: () => goTo("/app/integrations") },
+  ]
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-brand-500 px-3 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-brand-600 active:bg-brand-600 focus-ring"
+      >
+        <Plus className="size-4" strokeWidth={2.4} />
+        <span className="hidden sm:inline">Criar</span>
+        <ChevronDown className="size-3.5" strokeWidth={2.4} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              role="menu"
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+              transition={{ duration: 0.16, ease: EASE }}
+              className="absolute left-0 top-9 z-20 w-52 origin-top-left rounded-lg border border-paper-200 bg-paper p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800"
+            >
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  role="menuitem"
+                  onClick={item.onClick}
+                  className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-ink transition-colors duration-150 hover:bg-paper-100 dark:text-paper-200 dark:hover:bg-white/5"
+                >
+                  <item.icon className="size-4 text-paper-500" strokeWidth={1.9} />
+                  {item.label}
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function TopIcon({
   label,
   active,

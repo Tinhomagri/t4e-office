@@ -82,8 +82,8 @@ class UpdateSprint:
                 project_id=updated.project_id
             )
             for card in cards:
-                if card.sprint_id == updated.id and card.status != CardStatus.DONE:
+                if card.sprint_id == updated.id and card.status != CardStatus.DONE.value:
                     card.sprint_id = None
-                    card.status = CardStatus.BACKLOG
+                    card.status = CardStatus.BACKLOG.value
                     self.card_repository.update(card=card)
         return updated

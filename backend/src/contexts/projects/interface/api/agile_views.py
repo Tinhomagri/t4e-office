@@ -2,6 +2,8 @@
 
 Seguem o padrão pragmático de extra_views: ORM direto + guards de capacidade.
 """
+from datetime import timedelta
+
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -126,6 +128,12 @@ class SprintStartView(APIView):
             sprint.end_date = request.data["end_date"]
         if "goal" in request.data:
             sprint.goal = request.data.get("goal") or ""
+        # Sprint sem janela definida não rende burndown nem "dias restantes".
+        # Assume o padrão do time (começa hoje, 2 semanas) em vez de ficar nula.
+        if not sprint.start_date:
+            sprint.start_date = timezone.localdate()
+        if not sprint.end_date:
+            sprint.end_date = sprint.start_date + timedelta(days=14)
         sprint.save()
 
         # Cards da sprint ainda em backlog sobem para "todo" (como no Jira).

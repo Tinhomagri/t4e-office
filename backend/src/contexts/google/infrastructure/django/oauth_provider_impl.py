@@ -24,6 +24,16 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
+    # Nome de exibição: o login com Google usa `tokens.name` para criar a
+    # conta, e sem este escopo ele volta vazio.
+    "https://www.googleapis.com/auth/userinfo.profile",
+    # Google Chat — autenticação de usuário (não bot): ler espaços/mensagens,
+    # enviar mensagem e criar DM em nome de quem conectou. Escopo restrito —
+    # exige tela de consentimento "Interno" (workspace) pra não passar por
+    # verificação do Google.
+    "https://www.googleapis.com/auth/chat.spaces",
+    "https://www.googleapis.com/auth/chat.messages",
+    "https://www.googleapis.com/auth/chat.memberships.readonly",
     "openid",
 ]
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
 
+import type { RouteObject } from "react-router-dom"
+
+import { appRoutes } from "@/app/router"
 import { APPS, APP_GROUPS, appById, appsOfGroup, isEnabled } from "./apps.registry"
 
 describe("registry de apps", () => {
@@ -9,8 +12,10 @@ describe("registry de apps", () => {
     ])
   })
 
-  it("cobre as 16 rotas do produto", () => {
-    expect(APPS).toHaveLength(16)
+  it("cobre as rotas do produto que o PC expõe", () => {
+    // Um piso, não um número exato: registrar um app novo não deve quebrar
+    // teste, esvaziar o desktop deve.
+    expect(APPS.length).toBeGreaterThanOrEqual(16)
   })
 
   it("todo app tem id único", () => {
@@ -23,15 +28,21 @@ describe("registry de apps", () => {
     for (const app of APPS) expect(grupos.has(app.group)).toBe(true)
   })
 
-  it("nesta fatia só Boards, Comercial, Mesas e Meu Card estão habilitados", () => {
-    const habilitados = APPS.filter(isEnabled).map((a) => a.id)
-    expect(habilitados.sort()).toEqual(["boards", "comercial", "desks", "my-card"])
+  it("todo app do desktop abre uma página de verdade", () => {
+    // O PC não tem tela própria: se um app está no desktop, ele abre a mesma
+    // página que a rota abre. Ícone que só diz "Em breve" é o que fazia o
+    // computador do escritório parecer cenário em vez de ferramenta.
+    const semPagina = APPS.filter((a) => !isEnabled(a)).map((a) => a.id)
+    expect(semPagina).toEqual([])
   })
 
-  it("app desabilitado não tem componente", () => {
-    for (const app of APPS.filter((a) => !isEnabled(a))) {
-      expect(app.component).toBeNull()
-    }
+  it("todo app tem ícone próprio — a grade só é legível assim", () => {
+    // Ícone lucide é forwardRef (objeto), não function — daí o teste de
+    // existência ser por truthiness, e o que importa de verdade ser a
+    // unicidade: 20 ícones iguais não distinguem app nenhum.
+    for (const app of APPS) expect(app.icon).toBeTruthy()
+    const icones = new Set(APPS.map((a) => a.icon))
+    expect(icones.size).toBe(APPS.length)
   })
 
   it("todo app pede um tamanho utilizável", () => {
@@ -54,5 +65,24 @@ describe("registry de apps", () => {
   it("appById encontra e devolve undefined para id desconhecido", () => {
     expect(appById("boards")?.label).toBe("Boards")
     expect(appById("naoexiste")).toBeUndefined()
+  })
+})
+
+describe("rotas dos apps", () => {
+  /** Caminhos absolutos que o `/app` realmente resolve, incluindo aninhados. */
+  function absPaths(routes: RouteObject[], base = "/app"): string[] {
+    return routes.flatMap((r) => {
+      if (r.index) return [base]
+      const self = `${base}/${r.path}`
+      return r.children ? [self, ...absPaths(r.children, self)] : [self]
+    })
+  }
+
+  it("todo atalho do desktop aponta para uma rota que existe", () => {
+    // Um id sem rota correspondente abre uma janela em branco, sem erro no
+    // console — foi assim que "Meu Card" passou despercebido.
+    const validas = new Set(absPaths(appRoutes))
+    const quebrados = APPS.filter((a) => !validas.has(a.route)).map((a) => `${a.id} → ${a.route}`)
+    expect(quebrados).toEqual([])
   })
 })

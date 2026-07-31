@@ -98,8 +98,11 @@ export function Win98Window({
           onClick={() => close(win.id)}>✕</button>
       </div>
 
-      {/* O conteúdo rola dentro da janela; a página embutida não sabe que está numa. */}
-      <div className="win98-sunken m-0.5 flex-1 overflow-auto bg-white">{children}</div>
+      {/* O conteúdo rola dentro da janela; a página embutida não sabe que está
+          numa. `win98-app` corta a herança do chrome 98 (fonte pixel, 12px,
+          preto) e devolve a tipografia e o tema do produto — é a mesma página
+          da rota, tem que parecer a mesma página. */}
+      <div className="win98-sunken win98-app m-0.5 flex-1 overflow-auto">{children}</div>
 
       {/* Expandida ocupa a camada toda: não há o que redimensionar. */}
       {!fullscreen && (

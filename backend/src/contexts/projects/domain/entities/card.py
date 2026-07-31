@@ -81,7 +81,10 @@ class Card:
     number: int
     title: str
     description: str = ""
-    status: CardStatus = CardStatus.TODO
+    # String livre, não o enum: colunas custom (WorkflowStatus) usam slugs fora
+    # do fluxo padrão, e a entidade não valida contra a lista de colunas do
+    # projeto — quem sabe o slug é válido é o repositório de WorkflowStatus.
+    status: str = CardStatus.TODO.value
     type: CardType = CardType.FEATURE
     priority: CardPriority = CardPriority.MEDIUM
     points: int | None = None

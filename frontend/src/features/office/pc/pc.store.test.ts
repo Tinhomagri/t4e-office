@@ -287,6 +287,53 @@ describe("expandir e colapsar", () => {
   })
 })
 
+describe("encaixe no painel", () => {
+  beforeEach(() => {
+    get().boot("ws-26-9")
+    get().ready()
+  })
+
+  it("sem viewport medida, respeita o tamanho pedido", () => {
+    get().openApp("boards", SIZE)
+    expect(win("boards")).toMatchObject({ w: 900, h: 600 })
+  })
+
+  it("janela maior que o painel encolhe para caber, com folga nas bordas", () => {
+    get().setViewport(700, 480)
+    get().openApp("boards", SIZE)
+    const w = win("boards")!
+    expect(w.w).toBeLessThanOrEqual(700)
+    expect(w.h).toBeLessThanOrEqual(480)
+    // O que importa: nasce inteira dentro do painel, sem rodapé cortado.
+    expect(w.x + w.w).toBeLessThanOrEqual(700)
+    expect(w.y + w.h).toBeLessThanOrEqual(480)
+    expect(w.x).toBeGreaterThan(0)
+    expect(w.y).toBeGreaterThan(0)
+  })
+
+  it("janela que já cabe não é encolhida à toa", () => {
+    get().setViewport(1600, 1000)
+    get().openApp("boards", SIZE)
+    expect(win("boards")).toMatchObject({ w: 900, h: 600 })
+  })
+
+  it("arrastar para fora da borda direita deixa titlebar agarrável", () => {
+    get().setViewport(800, 600)
+    get().openApp("boards", SIZE)
+    get().move("boards", 5000, 5000)
+    const w = win("boards")!
+    expect(w.x).toBeLessThan(800)
+    expect(w.y).toBeLessThan(600)
+  })
+
+  it("setViewport com o mesmo tamanho não troca a referência do estado", () => {
+    get().setViewport(800, 600)
+    const antes = get().viewport
+    get().setViewport(800, 600)
+    expect(get().viewport).toBe(antes)
+  })
+})
+
 describe("pastas do desktop", () => {
   it("openFolder abre e fecha com null", () => {
     get().boot("ws-26-9")

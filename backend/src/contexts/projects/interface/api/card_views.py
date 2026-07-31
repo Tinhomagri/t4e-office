@@ -51,7 +51,7 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "number": card.number,
         "title": card.title,
         "description": card.description,
-        "status": card.status.value,
+        "status": card.status,
         "type": card.type.value,
         "priority": card.priority.value,
         "points": card.points,
@@ -115,6 +115,48 @@ def _counts_map(project_id: str) -> dict[str, dict]:
     }
 
 
+def card_row(cm, project_key: str, extra: dict | None = None) -> dict:
+    """Serializa um CardModel no formato que o board consome.
+
+    Existe para que a listagem por projeto, a busca por JQL e a visão pessoal
+    (`/api/me/work/`) devolvam exatamente os mesmos campos. Quando isto era
+    montado à mão em cada lugar, campos como `resolution` ficavam de fora numa
+    das rotas e o card aparecia como não resolvido só naquela tela.
+    """
+    return {
+        **(extra or {}),
+        "id": str(cm.id),
+        "ref": f"{project_key}-{cm.number}",
+        "project_id": str(cm.project_id),
+        "number": cm.number,
+        "title": cm.title,
+        "description": cm.description or "",
+        "status": cm.status,
+        "type": cm.type,
+        "priority": cm.priority,
+        "points": cm.points,
+        "assignee_id": str(cm.assignee_id) if cm.assignee_id else None,
+        "reporter_id": str(cm.reporter_id) if cm.reporter_id else None,
+        "sprint_id": str(cm.sprint_id) if cm.sprint_id else None,
+        "start_date": cm.start_date,
+        "due_date": cm.due_date,
+        "order": cm.order,
+        "rank": cm.rank,
+        "parent_id": str(cm.parent_id) if cm.parent_id else None,
+        "epic_id": str(cm.epic_id) if cm.epic_id else None,
+        "epic_color": cm.epic_color,
+        "labels": cm.labels or [],
+        "channel": cm.channel,
+        "publish_date": cm.publish_date,
+        "resolution": cm.resolution or None,
+        "resolved_at": cm.resolved_at,
+        "original_estimate_seconds": cm.original_estimate_seconds,
+        "remaining_estimate_seconds": cm.remaining_estimate_seconds,
+        "archived": cm.archived_at is not None,
+        "archived_at": cm.archived_at,
+    }
+
+
 class CardListCreateView(APIView):
     """Lista e cria cards de um projeto: /api/projects/<project_id>/cards/."""
 
@@ -138,42 +180,7 @@ class CardListCreateView(APIView):
             )
             project = projects.get(project_id=project_id)
             counts = _counts_map(str(project_id))
-            rows = []
-            for cm in qs:
-                rows.append({
-                    **counts.get(str(cm.id), {}),
-                    "id": str(cm.id),
-                    "ref": f"{project.key}-{cm.number}",
-                    "project_id": str(cm.project_id),
-                    "number": cm.number,
-                    "title": cm.title,
-                    "description": cm.description or "",
-                    "status": cm.status,
-                    "type": cm.type,
-                    "priority": cm.priority,
-                    "points": cm.points,
-                    "assignee_id": str(cm.assignee_id) if cm.assignee_id else None,
-                    "reporter_id": str(cm.reporter_id) if cm.reporter_id else None,
-                    "sprint_id": str(cm.sprint_id) if cm.sprint_id else None,
-                    "start_date": cm.start_date,
-                    "due_date": cm.due_date,
-                    "order": cm.order,
-                    "rank": cm.rank,
-                    "parent_id": str(cm.parent_id) if cm.parent_id else None,
-                    "epic_id": str(cm.epic_id) if cm.epic_id else None,
-                    "epic_color": cm.epic_color,
-                    "labels": cm.labels or [],
-                    "channel": cm.channel,
-                    "publish_date": cm.publish_date,
-                    # Sem estes o card vindo por JQL cairia nos defaults do
-                    # serializer e apareceria como não resolvido no board.
-                    "resolution": cm.resolution or None,
-                    "resolved_at": cm.resolved_at,
-                    "original_estimate_seconds": cm.original_estimate_seconds,
-                    "remaining_estimate_seconds": cm.remaining_estimate_seconds,
-                    "archived": cm.archived_at is not None,
-                    "archived_at": cm.archived_at,
-                })
+            rows = [card_row(cm, project.key, counts.get(str(cm.id))) for cm in qs]
             return Response(CardSerializer(rows, many=True).data)
 
         use_case = ListCards(projects, cards, access)
