@@ -1,7 +1,10 @@
 """Implementação do ChatGateway usando a Google Chat API (auth de usuário)."""
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
+import httplib2
 import requests
+from google_auth_httplib2 import AuthorizedHttp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -25,9 +28,18 @@ class GoogleChatGateway(ChatGateway):
     """Operações no Google Chat via google-api-python-client."""
 
     @staticmethod
-    def _service(access_token: str):
-        creds = Credentials(token=access_token)
-        return build("chat", "v1", credentials=creds, cache_discovery=False)
+    def _http(access_token: str):
+        """Cliente HTTP com timeout.
+
+        `build()` sem `http` usa um httplib2 sem timeout: uma chamada que o
+        Google não responde fica pendurada para sempre, e na Vercel isso vira
+        request travado sem erro e sem log.
+        """
+        return AuthorizedHttp(Credentials(token=access_token), http=httplib2.Http(timeout=10))
+
+    @classmethod
+    def _service(cls, access_token: str):
+        return build("chat", "v1", http=cls._http(access_token), cache_discovery=False)
 
     @staticmethod
     def _whoami(access_token: str) -> str:
@@ -55,8 +67,9 @@ class GoogleChatGateway(ChatGateway):
         """
         if not user_ids:
             return {}
-        creds = Credentials(token=access_token)
-        people_service = build("people", "v1", credentials=creds, cache_discovery=False)
+        people_service = build(
+            "people", "v1", http=GoogleChatGateway._http(access_token), cache_discovery=False
+        )
         resource_names = [uid.replace("users/", "people/", 1) for uid in user_ids]
         try:
             result = (
@@ -118,20 +131,33 @@ class GoogleChatGateway(ChatGateway):
         except HttpError as exc:
             raise ChatError(f"Erro ao listar espaços do Chat: {exc}") from exc
 
+        items = result.get("spaces", [])
+        # Só DM precisa dos membros: o nome dela é o do outro participante.
+        # Grupo já vem com displayName, e buscar membros de todo espaço custava
+        # 2 chamadas externas por linha da lista. As que sobram vão em paralelo
+        # — em série, 10 DMs viravam 20 idas ao Google uma após a outra.
+        needs_members = [i["name"] for i in items if not i.get("displayName", "").strip()]
+        members_by_space: dict[str, list[ChatMember]] = {}
+        if needs_members:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {
+                    pool.submit(self._members_of, access_token, service, name): name
+                    for name in needs_members
+                }
+                for fut in as_completed(futures):
+                    members_by_space[futures[fut]] = fut.result()
+
         spaces: list[ChatSpace] = []
-        for item in result.get("spaces", []):
-            space_type = item.get("spaceType", "")
-            is_group = space_type != "DIRECT_MESSAGE"
-            members = self._members_of(access_token, service, item["name"])
+        for item in items:
             display_name = item.get("displayName", "").strip()
+            members = members_by_space.get(item["name"], [])
             if not display_name:
-                # DM sem nome — usa o nome do outro participante.
                 display_name = ", ".join(m.display_name for m in members) or "Conversa"
             spaces.append(
                 ChatSpace(
                     space_id=item["name"],
                     display_name=display_name,
-                    is_group=is_group,
+                    is_group=item.get("spaceType", "") != "DIRECT_MESSAGE",
                     members=members,
                 )
             )
