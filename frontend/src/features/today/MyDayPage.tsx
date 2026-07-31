@@ -37,12 +37,13 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { useDayEvents, useGoogleStatus } from "@/features/integrations/integrations.hooks"
 import type { CalendarEvent } from "@/features/integrations/integrations.types"
 import {
+  useMyWork,
   useNotifications,
-  useWorkspaceCards,
-  useWorkspaceSprints,
+  useProjectReports,
   useWorkspaces,
   type BoardCard,
 } from "@/features/workspace/workspace.hooks"
+import type { ProjectReports } from "@/features/workspace/workspace.api"
 import type {
   CardPriority,
   CardStatus,
@@ -95,6 +96,51 @@ const MONTH_NAMES = [
   "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ]
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * O card foi ENTREGUE?
+ *
+ * Espelha `CardResolution.counts_as_delivered` do backend. Estar na coluna
+ * "Concluído" não é entrega: um card marcado como "não será feito" ou
+ * "duplicado" também sai por ali. Contar por status inflava "concluídos" com
+ * trabalho que ninguém fez — o mesmo erro que já corrigimos no Resumo.
+ * Cards antigos sem `resolution` caem no status (o backfill da migration 0023
+ * cobre o histórico, mas nem todo card passa pelo fluxo normal).
+ */
+export function isDelivered(c: BoardCard): boolean {
+  if (c.resolution) return c.resolution === "done"
+  return c.status === "done"
+}
+
+/** Já saiu do fluxo — está na coluna Concluído, entregue ou não. */
+export function isClosed(c: BoardCard): boolean {
+  return c.status === "done"
+}
+
+/**
+ * Fatia os cards do workspace nas listas que a tela usa.
+ *
+ * Pura e exportada de propósito: é aqui que moram as definições de "atrasado",
+ * "vence hoje" e "entregue", e é aqui que os erros de contagem apareciam.
+ */
+export function sliceMyDay(cards: BoardCard[], userId: string | undefined, today: string) {
+  const mine = cards.filter((c) => c.assignee_id === userId)
+  const open = mine.filter((c) => !isClosed(c))
+  return {
+    mine,
+    active: mine.filter((c) => ACTIVE.includes(c.status)),
+    // Vence hoje só conta o que ainda está aberto: card entregue hoje não é
+    // pendência do dia — contá-lo inflava o KPI todo fim de sprint.
+    dueToday: open.filter((c) => c.due_date?.slice(0, 10) === today),
+    overdue: open.filter((c) => c.due_date != null && c.due_date.slice(0, 10) < today),
+    inProgress: mine.filter((c) => c.status === "doing"),
+    review: mine.filter((c) => c.status === "review"),
+    todo: mine.filter((c) => c.status === "todo"),
+    delivered: mine.filter(isDelivered),
+  }
+}
+
 function formatDateHeader() {
   const now = new Date()
   return `${DAY_NAMES[now.getDay()].toUpperCase()} · ${now.getDate()} ${MONTH_NAMES[now.getMonth()].toUpperCase()}`
@@ -131,6 +177,8 @@ function relativeDayLabel(iso: string): string {
   const delta = diffDays(todayISO(), iso)
   if (delta === 0) return "Hoje"
   if (delta === 1) return "Amanhã"
+  if (delta === -1) return "Ontem"
+  if (delta < 0) return `${-delta}d atrás`
   const d = new Date(iso + "T00:00:00")
   return `${DAY_NAMES[d.getDay()].slice(0, 3)} · ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
 }
@@ -140,20 +188,19 @@ function fmtHour(iso: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
 }
 
+function fmtAxisDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00")
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
+}
+
 const listVariants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
+  show: { transition: { staggerChildren: 0.05 } },
 }
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-function fmtAxisDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00")
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
 }
 
 // Escolhe, entre todas as sprints ativas do workspace, a que tem mais cards
@@ -175,7 +222,7 @@ function pickRelevantSprint(sprints: Sprint[], myCards: BoardCard[]): Sprint | n
 
 /**
  * Janela da sprint. Sprints antigas foram iniciadas sem start/end — em vez de
- * esconder o burndown, deriva de started_at e assume 2 semanas (padrão do time).
+ * esconder os prazos, deriva de started_at e assume 2 semanas (padrão do time).
  */
 function sprintWindow(sprint: Sprint | null): { start: string; end: string } | null {
   if (!sprint) return null
@@ -187,8 +234,11 @@ function sprintWindow(sprint: Sprint | null): { start: string; end: string } | n
 export function MyDayPage() {
   const user = useAuthStore((s) => s.user)
   const { activeWorkspaceId } = useWorkspaces()
-  const { cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
-  const { sprints, isLoading: sprintsLoading } = useWorkspaceSprints(activeWorkspaceId)
+  // Cards e sprints vêm de /api/me/work/, que agrega TODOS os workspaces da
+  // pessoa. O workspace ativo abaixo só serve ao comercial, cujo endpoint de
+  // atividades ainda é por workspace.
+  const { cards, sprints, isLoading } = useMyWork()
+  const sprintsLoading = isLoading
 
   // Follow-ups do comercial: tarefas de negócio atribuídas a mim e ainda abertas.
   // O "Meu Dia" reúne o trabalho de todas as frentes, não só o dos boards.
@@ -206,25 +256,26 @@ export function MyDayPage() {
   const { data: notifications } = useNotifications()
 
   const today = todayISO()
-  const mine = cards.filter((c) => c.assignee_id === user?.id)
-  const myActive = mine.filter((c) => ACTIVE.includes(c.status))
-  const vencem = mine.filter((c) => c.due_date?.slice(0, 10) === today)
-  // Atrasado = tem prazo no passado e ainda não foi concluído.
-  const overdue = mine.filter(
-    (c) => c.due_date != null && c.due_date.slice(0, 10) < today && c.status !== "done",
-  )
-  const inProgress = mine.filter((c) => c.status === "doing")
-  const review = mine.filter((c) => c.status === "review")
-  const done = mine.filter((c) => c.status === "done")
-  const points = myActive.reduce((s, c) => s + (c.points ?? 0), 0)
+  const userId = user?.id
 
-  // Próximos 7 dias (exclui hoje, que já tem card próprio) agrupado por data.
+  // Uma passada só sobre os cards, memoizada pela identidade de `cards` (que o
+  // react-query mantém estável entre renders). Antes cada `filter` rodava a cada
+  // render e os `useMemo` abaixo dependiam de arrays recém-criados — ou seja,
+  // memo nenhum.
+  const my = useMemo(() => sliceMyDay(cards, userId, today), [cards, userId, today])
+
+  const points = useMemo(
+    () => my.active.reduce((s, c) => s + (c.points ?? 0), 0),
+    [my.active],
+  )
+
+  // Próximos 7 dias (exclui hoje, que já tem KPI próprio) agrupado por data.
   const upcoming = useMemo(() => {
     const limit = addDaysISO(today, 7)
-    const rows = mine
+    const rows = my.mine
       .filter((c) => {
         const due = c.due_date?.slice(0, 10)
-        return !!due && due > today && due <= limit && c.status !== "done"
+        return !!due && due > today && due <= limit && !isClosed(c)
       })
       .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))
     const groups = new Map<string, BoardCard[]>()
@@ -235,236 +286,229 @@ export function MyDayPage() {
       else groups.set(key, [c])
     }
     return [...groups.entries()]
-  }, [mine, today])
+  }, [my.mine, today])
 
-  // Burndown real: escala o eixo X pelas datas de verdade da sprint ativa
-  // (não mais um "D0..D10" arbitrário) e some quando não há sprint ativa —
-  // em vez de desenhar um gráfico com dados inventados.
-  const activeSprint = useMemo(() => pickRelevantSprint(sprints, mine), [sprints, mine])
+  const activeSprint = useMemo(
+    () => pickRelevantSprint(sprints, my.mine),
+    [sprints, my.mine],
+  )
   const sprintRange = useMemo(() => sprintWindow(activeSprint), [activeSprint])
 
-  const sprintCards = activeSprint ? mine.filter((c) => c.sprint_id === activeSprint.id) : []
-  const sprintDoneCards = sprintCards.filter((c) => c.status === "done")
-  const sprintTotalPoints = sprintCards.reduce((s, c) => s + (c.points ?? 0), 0)
-  const sprintDonePoints = sprintDoneCards.reduce((s, c) => s + (c.points ?? 0), 0)
+  // Burndown REAL, do endpoint de relatórios do projeto da sprint. Antes esta
+  // tela desenhava a curva "restante" interpolando uma reta do total até hoje —
+  // uma linha bonita e inventada. O backend já calcula a entrega dia-a-dia por
+  // `resolved_at` e por desfecho; usar isso é a diferença entre gráfico e enfeite.
+  const { data: reports, isLoading: reportsLoading } = useProjectReports(
+    activeSprint?.project_id ?? null,
+  )
+  const burndown = useMemo(() => toBurndownSeries(reports, today), [reports, today])
 
-  const burndownData = useMemo(() => {
-    if (!sprintRange) return []
-    const start = new Date(sprintRange.start + "T00:00:00")
-    const end = new Date(sprintRange.end + "T00:00:00")
-    const totalDays = Math.max(Math.round((end.getTime() - start.getTime()) / DAY_MS), 1)
-    const todayIdx = Math.min(
-      Math.max(Math.round((Date.now() - start.getTime()) / DAY_MS), 0),
-      totalDays,
-    )
-    const remainingToday = Math.max(sprintTotalPoints - sprintDonePoints, 0)
-
-    return Array.from({ length: totalDays + 1 }, (_, i) => {
-      const date = new Date(start.getTime() + i * DAY_MS)
-      const ideal = Math.max(sprintTotalPoints - (sprintTotalPoints / totalDays) * i, 0)
-      // Sem histórico dia-a-dia real ainda: interpola uma reta do total (dia 0)
-      // até o restante de hoje, só até o índice de hoje — não inventa depois disso.
-      const real =
-        i <= todayIdx
-          ? remainingToday + ((sprintTotalPoints - remainingToday) * (todayIdx - i)) / Math.max(todayIdx, 1)
-          : null
-      return {
-        date: date.toISOString().slice(0, 10),
-        isToday: i === todayIdx,
-        ideal: Math.round(ideal),
-        real: real != null ? Math.round(real) : null,
-      }
-    })
-  }, [sprintRange, sprintTotalPoints, sprintDonePoints])
+  // Minha fatia da sprint — o burndown acima é do time inteiro.
+  const sprintMine = useMemo(() => {
+    if (!activeSprint) return { cards: [], done: 0, total: 0, donePoints: 0 }
+    const inSprint = my.mine.filter((c) => c.sprint_id === activeSprint.id)
+    return {
+      cards: inSprint,
+      done: inSprint.filter(isDelivered).length,
+      total: inSprint.reduce((s, c) => s + (c.points ?? 0), 0),
+      donePoints: inSprint.filter(isDelivered).reduce((s, c) => s + (c.points ?? 0), 0),
+    }
+  }, [activeSprint, my.mine])
 
   const firstName = user?.full_name?.split(/\s+/)[0] ?? "você"
-  // Atrasado primeiro: é o que muda a ordem do dia. Depois em progresso/revisão.
-  const focusCards = [
-    ...overdue,
-    ...inProgress.filter((c) => !overdue.includes(c)),
-    ...review.filter((c) => !overdue.includes(c)),
-    ...mine.filter((c) => c.status === "todo" && !overdue.includes(c)),
-  ].slice(0, 6)
+  // Atrasado primeiro: é o que muda a ordem do dia. Depois em andamento, revisão
+  // e por fim a fila. Um Set evita repetir um card atrasado nas listas seguintes.
+  const focusCards = useMemo(() => {
+    const seen = new Set(my.overdue.map((c) => c.id))
+    const rest = [...my.inProgress, ...my.review, ...my.todo].filter((c) => {
+      if (seen.has(c.id)) return false
+      seen.add(c.id)
+      return true
+    })
+    return [...my.overdue, ...rest].slice(0, 6)
+  }, [my.overdue, my.inProgress, my.review, my.todo])
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* Date header */}
-      <p className="text-xs font-semibold tracking-[0.18em] text-paper-400 dark:text-ink-500">
-        {formatDateHeader()}
-      </p>
-
-      {/* Greeting */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-ink dark:text-paper">
+    <div className="mx-auto w-full max-w-[1600px] pb-10">
+      {/* Cabeçalho: data, saudação e o resumo do dia em uma frase. */}
+      <header className="mb-6">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-paper-400 dark:text-ink-500">
+          {formatDateHeader()}
+        </p>
+        <h1 className="mt-1.5 text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
           {greetingFor(new Date().getHours())},{" "}
           <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
             {firstName}
           </span>
         </h1>
-        {myActive.length > 0 ? (
+        {my.active.length > 0 ? (
           <p className="mt-1.5 text-sm text-paper-500 dark:text-ink-400">
             Você tem{" "}
-            <span className="font-semibold text-ink dark:text-paper-300">{myActive.length} cards ativos</span>{" "}
-            e{" "}
-            <span className="font-semibold text-ink dark:text-paper-300">{points} de peso</span>{" "}
+            <span className="font-semibold text-ink dark:text-paper-300">
+              {my.active.length} card{my.active.length > 1 ? "s" : ""} ativo{my.active.length > 1 ? "s" : ""}
+            </span>{" "}
+            e <span className="font-semibold text-ink dark:text-paper-300">{points} de peso</span>{" "}
             em aberto
             {activeSprint ? ` em ${activeSprint.name}` : ""}
-            {overdue.length > 0 && (
+            {my.overdue.length > 0 && (
               <>
                 {" · "}
-                <span className="font-semibold text-danger">{overdue.length} atrasado{overdue.length > 1 ? "s" : ""}</span>
+                <span className="font-semibold text-danger">
+                  {my.overdue.length} atrasado{my.overdue.length > 1 ? "s" : ""}
+                </span>
               </>
             )}
             .
           </p>
         ) : (
           <p className="mt-1.5 text-sm text-paper-500 dark:text-ink-400">
-            Nenhum card atribuído a você ainda. Bom dia!
+            Nenhum card ativo atribuído a você. Dia livre.
           </p>
         )}
-      </div>
+      </header>
 
       {isLoading || sprintsLoading ? (
-        <div className="grid place-items-center py-20">
+        <div className="grid place-items-center py-24">
           <Loader2 className="size-6 animate-spin text-paper-400" />
         </div>
       ) : (
-        <motion.div
-          variants={listVariants}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 gap-4 xl:grid-cols-4"
-        >
-          {/* Stats */}
-          <motion.div variants={itemVariants} className="xl:col-span-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <Stat icon={AlertTriangle} label="Atrasados" value={overdue.length} accent={overdue.length > 0 ? "text-danger" : undefined} tint="bg-danger/10 text-danger" />
-              <Stat icon={CalendarClock} label="Vencem hoje" value={vencem.length} accent={vencem.length > 0 ? "text-warning" : undefined} tint="bg-warning/10 text-warning" />
-              <Stat icon={RefreshCw} label="Em andamento" value={inProgress.length} tint="bg-sky-500/10 text-sky-500" />
-              <Stat icon={Eye} label="Em revisão" value={review.length} accent="text-amber-500" tint="bg-amber-500/10 text-amber-500" />
-              <Stat icon={Zap} label="Peso ativo" value={points} accent="text-brand-500" tint="bg-brand-500/10 text-brand-500" />
-            </div>
-          </motion.div>
+        <motion.div variants={listVariants} initial="hidden" animate="show" className="space-y-4">
+          {/* KPIs do dia. 5 itens: 1 col no mobile, 3 no tablet (sem órfão de
+              meia largura como no 2-col antigo) e 5 na largura cheia. */}
+          <motion.section
+            variants={itemVariants}
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+          >
+            <Stat icon={AlertTriangle} label="Atrasados" value={my.overdue.length} accent={my.overdue.length > 0 ? "text-danger" : undefined} tint="bg-danger/10 text-danger" />
+            <Stat icon={CalendarClock} label="Vencem hoje" value={my.dueToday.length} accent={my.dueToday.length > 0 ? "text-warning" : undefined} tint="bg-warning/10 text-warning" />
+            <Stat icon={RefreshCw} label="Em andamento" value={my.inProgress.length} tint="bg-sky-500/10 text-sky-500" />
+            <Stat icon={Eye} label="Em revisão" value={my.review.length} tint="bg-amber-500/10 text-amber-500" />
+            <Stat icon={Zap} label="Peso ativo" value={points} tint="bg-brand-500/10 text-brand-500" />
+          </motion.section>
 
-          {/* Burndown */}
-          <motion.div variants={itemVariants} className="xl:col-span-3">
-            <BurndownCard
-              data={burndownData}
-              totalPoints={sprintTotalPoints}
-              donePoints={sprintDonePoints}
-              sprintName={activeSprint?.name ?? null}
-            />
-          </motion.div>
+          {/*
+            Duas colunas independentes, não uma grade de células.
+            A grade antiga (xl:grid-cols-4, cada painel com col-span) forçava
+            todos os painéis de uma linha à altura do mais alto: o burndown
+            esticava ~300px além do gráfico para acompanhar a coluna lateral, e
+            era isso que deixava a tela cheia de buracos brancos.
+            `items-start` + duas pilhas próprias resolvem na raiz: cada painel
+            tem a altura do seu conteúdo, e as colunas alinham no topo.
+            Também há breakpoint em lg (1024) — antes só em xl (1280), então
+            qualquer notebook via tudo empilhado em coluna única gigante.
+          */}
+          <div className="grid items-start gap-4 lg:grid-cols-12">
+            <div className="space-y-4 lg:col-span-8">
+              <motion.div variants={itemVariants}>
+                <BurndownCard
+                  data={burndown}
+                  sprintName={reports?.burndown.sprint?.name ?? activeSprint?.name ?? null}
+                  totalPoints={reports?.burndown.sprint?.total_points ?? 0}
+                  loading={!!activeSprint && reportsLoading}
+                  hasSprint={!!activeSprint}
+                />
+              </motion.div>
 
-          {/* Pulse Intelligence + Resumo */}
-          <motion.div variants={itemVariants} className="space-y-4 xl:col-span-1">
-            <PulseIntelligence
-              points={points}
-              inProgressCount={inProgress.length}
-              overdueCount={overdue.length}
-              meetingsCount={dayEvents?.length ?? 0}
-            />
+              <motion.div variants={itemVariants}>
+                <FocusPanel cards={focusCards} />
+              </motion.div>
 
-            <SprintPulse
-              sprint={activeSprint}
-              range={sprintRange}
-              cardCount={sprintCards.length}
-              doneCount={sprintDoneCards.length}
-              totalPoints={sprintTotalPoints}
-              donePoints={sprintDonePoints}
-            />
-
-            <div className="surface p-4 space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
-                Meus números
-              </h3>
-              <div className="flex flex-col gap-2.5">
-                <SprintRow label="Cards atribuídos" value={mine.length} />
-                <SprintRow label="Concluídos" value={done.length} highlight />
-                <SprintRow label="Em progresso" value={inProgress.length} />
-                <SprintRow label="Aguardando revisão" value={review.length} />
-                <SprintRow label="Peso em aberto" value={points} />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Seu foco agora */}
-          <motion.div variants={itemVariants} className="xl:col-span-3">
-            <div className="surface p-5 lift">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CircleDot className="size-4 text-brand-500" strokeWidth={2} />
-                  <h2 className="text-sm font-semibold text-ink dark:text-paper">Seu foco agora</h2>
-                </div>
-                <Link
-                  to="/app/boards"
-                  className="flex items-center gap-1 text-xs font-medium text-brand-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                >
-                  Ver no board
-                  <ExternalLink className="size-3" strokeWidth={2} />
-                </Link>
-              </div>
-
-              {focusCards.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-8 text-center text-sm text-paper-400">
-                  Nenhum card atribuído a você.
-                </p>
-              ) : (
-                <motion.div
-                  variants={listVariants}
-                  initial="hidden"
-                  animate="show"
-                  className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800"
-                >
-                  {focusCards.map((c) => (
-                    <FocusCard key={c.id} card={c} />
-                  ))}
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+                <motion.div variants={itemVariants}>
+                  <TodayAgenda
+                    events={dayEvents ?? []}
+                    connected={googleConnected}
+                    loading={eventsLoading}
+                  />
                 </motion.div>
-              )}
+                <motion.div variants={itemVariants}>
+                  <UpcomingWeek groups={upcoming} />
+                </motion.div>
+              </div>
+
+              <motion.div variants={itemVariants}>
+                <RecentActivity items={notifications ?? []} />
+              </motion.div>
             </div>
-          </motion.div>
 
-          {/* Minhas filas rápidas */}
-          <motion.div variants={itemVariants} className="xl:col-span-1">
-            <div className="flex flex-col gap-3">
-              <MiniPanel
-                title="A fazer"
-                icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
-                cards={mine.filter((c) => c.status === "todo")}
-                empty="Fila limpa."
-              />
-              <MiniPanel
-                title="Em revisão"
-                icon={<Sparkles className="size-4 text-warning" />}
-                cards={review}
-                empty="Nenhum card em revisão."
-              />
-              <SalesFollowUpsPanel tasks={salesTasks ?? []} />
-            </div>
-          </motion.div>
+            <aside className="space-y-4 lg:col-span-4">
+              <motion.div variants={itemVariants}>
+                <PulseIntelligence
+                  points={points}
+                  inProgressCount={my.inProgress.length}
+                  overdueCount={my.overdue.length}
+                  meetingsCount={dayEvents?.length ?? 0}
+                />
+              </motion.div>
 
-          {/* Agenda de hoje (Google Calendar) */}
-          <motion.div variants={itemVariants} className="xl:col-span-2">
-            <TodayAgenda
-              events={dayEvents ?? []}
-              connected={googleConnected}
-              loading={eventsLoading}
-            />
-          </motion.div>
+              <motion.div variants={itemVariants}>
+                <SprintPulse
+                  sprint={activeSprint}
+                  range={sprintRange}
+                  cardCount={sprintMine.cards.length}
+                  doneCount={sprintMine.done}
+                  totalPoints={sprintMine.total}
+                  donePoints={sprintMine.donePoints}
+                />
+              </motion.div>
 
-          {/* Próximos 7 dias */}
-          <motion.div variants={itemVariants} className="xl:col-span-2">
-            <UpcomingWeek groups={upcoming} />
-          </motion.div>
+              <motion.div variants={itemVariants}>
+                <MiniPanel
+                  title="A fazer"
+                  icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
+                  cards={my.todo}
+                  empty="Fila limpa."
+                />
+              </motion.div>
 
-          {/* Atividade recente */}
-          <motion.div variants={itemVariants} className="xl:col-span-4">
-            <RecentActivity items={notifications ?? []} />
-          </motion.div>
+              <motion.div variants={itemVariants}>
+                <MiniPanel
+                  title="Em revisão"
+                  icon={<Sparkles className="size-4 text-warning" />}
+                  cards={my.review}
+                  empty="Nenhum card em revisão."
+                />
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <SalesFollowUpsPanel tasks={salesTasks ?? []} />
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <MyTotals
+                  assigned={my.mine.length}
+                  delivered={my.delivered.length}
+                  points={points}
+                />
+              </motion.div>
+            </aside>
+          </div>
         </motion.div>
       )}
     </div>
   )
+}
+
+/**
+ * Série do burndown a partir do relatório do projeto.
+ *
+ * `ideal` cobre a sprint inteira; `actual` só vai até hoje. Casar por data (em
+ * vez de por índice) mantém a linha real parando no dia certo mesmo se o backend
+ * mudar a granularidade.
+ */
+export function toBurndownSeries(
+  reports: ProjectReports | undefined,
+  today: string,
+): { date: string; isToday: boolean; ideal: number; real: number | null }[] {
+  const b = reports?.burndown
+  if (!b?.sprint || b.ideal.length === 0) return []
+  const actual = new Map(b.actual.map((p) => [p.date, p.points]))
+  return b.ideal.map((p) => ({
+    date: p.date,
+    isToday: p.date === today,
+    ideal: p.points,
+    real: actual.get(p.date) ?? null,
+  }))
 }
 
 function CountUp({ value }: { value: number }) {
@@ -506,7 +550,7 @@ function Stat({
       <span className={cx("relative inline-flex size-9 items-center justify-center rounded-xl", tint)}>
         <Icon className="size-[18px]" strokeWidth={2} />
       </span>
-      <p className={cx("relative mt-2 text-2xl font-bold tabular leading-none", accent)}>
+      <p className={cx("relative mt-3 text-[26px] font-bold leading-none tabular", accent)}>
         <CountUp value={value} />
       </p>
       <p className="relative mt-1.5 text-[12px] font-medium text-paper-500 dark:text-ink-400">{label}</p>
@@ -514,42 +558,95 @@ function Stat({
   )
 }
 
+/** Cabeçalho padrão dos painéis — mesma altura e mesmo ritmo em todos. */
+function PanelHead({
+  icon: Icon,
+  title,
+  count,
+  action,
+}: {
+  icon: LucideIcon
+  title: string
+  count?: number
+  action?: { to: string; label: string }
+}) {
+  return (
+    <div className="mb-4 flex h-6 items-center gap-2">
+      <Icon className="size-4 shrink-0 text-brand-500" strokeWidth={2} />
+      <h2 className="text-sm font-semibold text-ink dark:text-paper">{title}</h2>
+      {count != null && count > 0 && (
+        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 px-1.5 text-[11px] font-medium text-paper-600 dark:bg-ink-800 dark:text-paper-400">
+          {count}
+        </span>
+      )}
+      {action && (
+        <Link
+          to={action.to}
+          className="ml-auto flex shrink-0 items-center gap-1 text-xs font-medium text-brand-500 transition-colors hover:text-brand-600 dark:hover:text-brand-400"
+        >
+          {action.label}
+          <ExternalLink className="size-3" strokeWidth={2} />
+        </Link>
+      )}
+    </div>
+  )
+}
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-xl border border-dashed border-paper-200 py-8 text-center text-sm text-paper-400 dark:border-ink-700">
+      {children}
+    </p>
+  )
+}
+
 function BurndownCard({
   data,
-  totalPoints,
-  donePoints,
   sprintName,
+  totalPoints,
+  loading,
+  hasSprint,
 }: {
   data: { date: string; isToday: boolean; ideal: number; real: number | null }[]
-  totalPoints: number
-  donePoints: number
   sprintName: string | null
+  totalPoints: number
+  loading: boolean
+  hasSprint: boolean
 }) {
-  const pct = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0
+  // Restante de hoje = último ponto real que o backend mandou.
+  const lastReal = [...data].reverse().find((d) => d.real != null)?.real ?? null
+  const donePoints = lastReal != null ? Math.max(totalPoints - lastReal, 0) : 0
+  const pct = totalPoints > 0 && lastReal != null ? Math.round((donePoints / totalPoints) * 100) : 0
   const todayIdx = data.findIndex((d) => d.isToday)
 
   return (
     <div className="surface p-5">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <TrendingDown className="size-4 text-brand-500" strokeWidth={2} />
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Burndown da sprint</h2>
-          </div>
-          {sprintName && <p className="mt-0.5 truncate text-xs text-paper-400">{sprintName}</p>}
-        </div>
+      <div className="mb-4 flex h-6 items-center gap-2">
+        <TrendingDown className="size-4 shrink-0 text-brand-500" strokeWidth={2} />
+        <h2 className="shrink-0 text-sm font-semibold text-ink dark:text-paper">Burndown da sprint</h2>
+        {sprintName && (
+          <span className="min-w-0 truncate text-xs text-paper-400">· {sprintName}</span>
+        )}
         {data.length > 0 && (
-          <span className="shrink-0 rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-            {pct}% concluído
+          <span className="ml-auto shrink-0 rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+            {pct}% entregue
           </span>
         )}
       </div>
 
-      {data.length === 0 ? (
-        <div className="flex h-64 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-paper-200 dark:border-ink-700 text-center">
+      {loading ? (
+        <div className="grid h-64 place-items-center">
+          <Loader2 className="size-5 animate-spin text-paper-400" />
+        </div>
+      ) : data.length === 0 ? (
+        <div className="flex h-64 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-paper-200 text-center dark:border-ink-700">
           <TrendingDown className="mb-1 size-6 text-paper-300" />
-          <p className="text-sm font-medium text-paper-500">Nenhuma sprint ativa com datas definidas</p>
-          <p className="text-xs text-paper-400">Inicie uma sprint com início/fim no board para ver o burndown aqui.</p>
+          <p className="text-sm font-medium text-paper-500">
+            {hasSprint ? "Sprint sem datas de início e fim" : "Nenhuma sprint ativa"}
+          </p>
+          <p className="text-xs text-paper-400">
+            Inicie uma sprint com início/fim no backlog para ver o burndown aqui.
+          </p>
         </div>
       ) : (
         <>
@@ -557,7 +654,7 @@ function BurndownCard({
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
-                {todayIdx >= 0 && (
+                {todayIdx > 0 && (
                   <ReferenceArea x1={data[0].date} x2={data[todayIdx].date} fill="#8270DB" fillOpacity={0.06} />
                 )}
                 <XAxis
@@ -611,7 +708,8 @@ function BurndownCard({
           </div>
           {donePoints === 0 && (
             <p className="mt-2 text-center text-[11px] text-paper-400">
-              Nenhum ponto concluído ainda nesta sprint — a linha de restante só começa a cair quando um card for marcado como feito.
+              Nenhum ponto entregue ainda nesta sprint — a linha de restante só cai quando um card é
+              concluído de fato.
             </p>
           )}
         </>
@@ -620,42 +718,96 @@ function BurndownCard({
   )
 }
 
-function FocusCard({ card }: { card: BoardCard }) {
-  const late = card.due_date != null && card.due_date.slice(0, 10) < todayISO() && card.status !== "done"
+function FocusPanel({ cards }: { cards: BoardCard[] }) {
   return (
-    <motion.div variants={itemVariants} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-      <span
-        className={cx(
-          "h-8 w-1 shrink-0 rounded-full",
-          PRIORITY_BAR[card.priority],
-        )}
+    <div className="surface lift p-5">
+      <PanelHead
+        icon={CircleDot}
+        title="Seu foco agora"
+        action={{ to: "/app/boards", label: "Ver no board" }}
       />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[11px] text-paper-400 tabular shrink-0">{card.ref}</span>
-          <p className="truncate text-sm text-ink dark:text-paper">{card.title}</p>
-        </div>
-        <p className="mt-0.5 text-[11px] text-paper-400 dark:text-ink-500">{card.projectName}</p>
-      </div>
-      {late && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-semibold text-danger">
-          <AlertTriangle className="size-3" strokeWidth={2.2} />
-          {relativeDayLabel(card.due_date!.slice(0, 10))}
-        </span>
+      {cards.length === 0 ? (
+        <EmptyNote>Nenhum card atribuído a você.</EmptyNote>
+      ) : (
+        <motion.div
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800"
+        >
+          {cards.map((c) => (
+            <FocusCard key={c.id} card={c} />
+          ))}
+        </motion.div>
       )}
-      <span
-        className={cx(
-          "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-          STATUS_TONE[card.status],
-        )}
-      >
-        {STATUS_LABEL[card.status]}
+    </div>
+  )
+}
+
+/**
+ * Linha do foco em GRADE, não em flex.
+ *
+ * Com flex, cada chip tinha a largura do próprio texto: "Em progresso" e
+ * "A fazer" começavam em x diferentes, o `peso` sumia quando o card não tinha
+ * pontos e a coluna inteira ficava serrilhada. Colunas fixas fazem ref, prazo,
+ * status e peso alinharem verticalmente linha a linha.
+ * No mobile a grade cai para 3 colunas (barra, título, status) — as células
+ * escondidas saem do fluxo, então a contagem continua batendo.
+ */
+function FocusCard({ card }: { card: BoardCard }) {
+  const due = card.due_date?.slice(0, 10) ?? null
+  const late = due != null && due < todayISO() && !isClosed(card)
+
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="grid grid-cols-[3px_minmax(0,1fr)_104px] items-center gap-x-3 py-2.5 first:pt-0 last:pb-0 sm:grid-cols-[3px_62px_minmax(0,1fr)_92px_104px_58px]"
+    >
+      <span className={cx("h-8 w-[3px] rounded-full", PRIORITY_BAR[card.priority])} />
+
+      <span className="hidden truncate font-mono text-[11px] tabular text-paper-400 sm:block">
+        {card.ref}
       </span>
-      {card.points != null && card.points > 0 && (
-        <span className="shrink-0 rounded-md bg-paper-100 dark:bg-ink-700 px-1.5 py-0.5 text-[11px] font-medium text-paper-500 dark:text-paper-400 tabular">
-          peso {card.points}
+
+      <div className="min-w-0">
+        <p className="truncate text-sm text-ink dark:text-paper">{card.title}</p>
+        <p className="mt-0.5 truncate text-[11px] text-paper-400 dark:text-ink-500">
+          {card.projectName}
+        </p>
+      </div>
+
+      <div className="hidden justify-end sm:flex">
+        {due && (
+          <span
+            className={cx(
+              "flex items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              late ? "bg-danger/10 text-danger" : "text-paper-400",
+            )}
+          >
+            {late && <AlertTriangle className="size-3 shrink-0" strokeWidth={2.2} />}
+            {relativeDayLabel(due)}
+          </span>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <span
+          className={cx(
+            "truncate rounded-full px-2 py-0.5 text-[11px] font-medium",
+            STATUS_TONE[card.status],
+          )}
+        >
+          {STATUS_LABEL[card.status]}
         </span>
-      )}
+      </div>
+
+      <div className="hidden justify-end sm:flex">
+        {card.points != null && card.points > 0 && (
+          <span className="rounded-md bg-paper-100 px-1.5 py-0.5 text-[11px] font-medium tabular text-paper-500 dark:bg-ink-700 dark:text-paper-400">
+            {card.points} pt
+          </span>
+        )}
+      </div>
     </motion.div>
   )
 }
@@ -674,14 +826,8 @@ function SalesFollowUpsPanel({ tasks }: { tasks: DealActivity[] }) {
   )
 
   return (
-    <div className="surface flex flex-col p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Target className="size-4 text-brand-500" />
-        <h3 className="text-sm font-semibold text-ink dark:text-paper">Follow-ups comerciais</h3>
-        <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 text-[11px] font-medium text-paper-600 dark:text-paper-400">
-          {ordered.length}
-        </span>
-      </div>
+    <div className="surface p-4">
+      <PanelHead icon={Target} title="Follow-ups comerciais" count={ordered.length} />
       <div className="flex flex-col gap-1.5">
         {ordered.slice(0, 4).map((t) => {
           const state = closeDateState(t.due_date)
@@ -689,13 +835,11 @@ function SalesFollowUpsPanel({ tasks }: { tasks: DealActivity[] }) {
             <Link
               key={t.id}
               to="/app/comercial"
-              className="flex items-center gap-2 rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2 text-sm text-ink dark:text-paper-200 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800"
+              className="flex items-center gap-2 rounded-lg bg-paper-50 px-3 py-2 text-sm text-ink transition-colors hover:bg-paper-100 dark:bg-ink-800/60 dark:text-paper-200 dark:hover:bg-ink-800"
             >
               <span className="min-w-0 flex-1 truncate">
                 {t.content}
-                {t.deal_title && (
-                  <span className="text-paper-400"> · {t.deal_title}</span>
-                )}
+                {t.deal_title && <span className="text-paper-400"> · {t.deal_title}</span>}
               </span>
               {t.due_date && (
                 <span
@@ -719,12 +863,12 @@ function SalesFollowUpsPanel({ tasks }: { tasks: DealActivity[] }) {
           )
         })}
         {ordered.length === 0 && (
-          <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-5 text-center text-xs text-paper-400">
+          <p className="rounded-xl border border-dashed border-paper-200 py-5 text-center text-xs text-paper-400 dark:border-ink-700">
             Nenhum follow-up pendente.
           </p>
         )}
         {ordered.length > 4 && (
-          <p className="text-center text-xs text-paper-400">+{ordered.length - 4} mais</p>
+          <p className="pt-0.5 text-center text-xs text-paper-400">+{ordered.length - 4} mais</p>
         )}
       </div>
     </div>
@@ -743,11 +887,11 @@ function MiniPanel({
   empty: string
 }) {
   return (
-    <div className="surface flex flex-col p-4">
-      <div className="mb-3 flex items-center gap-2">
+    <div className="surface p-4">
+      <div className="mb-3 flex h-6 items-center gap-2">
         {icon}
         <h3 className="text-sm font-semibold text-ink dark:text-paper">{title}</h3>
-        <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 text-[11px] font-medium text-paper-600 dark:text-paper-400">
+        <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 px-1.5 text-[11px] font-medium text-paper-600 dark:bg-ink-800 dark:text-paper-400">
           {cards.length}
         </span>
       </div>
@@ -755,20 +899,60 @@ function MiniPanel({
         {cards.slice(0, 4).map((c) => (
           <div
             key={c.id}
-            className="truncate rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2 text-sm text-ink dark:text-paper-200 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800"
+            className="truncate rounded-lg bg-paper-50 px-3 py-2 text-sm text-ink transition-colors hover:bg-paper-100 dark:bg-ink-800/60 dark:text-paper-200 dark:hover:bg-ink-800"
           >
             {c.title}
           </div>
         ))}
         {cards.length === 0 && (
-          <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-5 text-center text-xs text-paper-400">
+          <p className="rounded-xl border border-dashed border-paper-200 py-5 text-center text-xs text-paper-400 dark:border-ink-700">
             {empty}
           </p>
         )}
         {cards.length > 4 && (
-          <p className="text-center text-xs text-paper-400">+{cards.length - 4} mais</p>
+          <p className="pt-0.5 text-center text-xs text-paper-400">+{cards.length - 4} mais</p>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Totais acumulados — o contraponto dos KPIs do topo, que são só de hoje.
+ *
+ * O painel antigo repetia "em progresso" e "em revisão", que já estavam nos
+ * KPIs a dois palmos de distância; ler o mesmo número duas vezes na mesma tela
+ * é o que mais fazia ela parecer desorganizada. Aqui só o que não está lá.
+ */
+function MyTotals({
+  assigned,
+  delivered,
+  points,
+}: {
+  assigned: number
+  delivered: number
+  points: number
+}) {
+  const pct = assigned > 0 ? Math.round((delivered / assigned) * 100) : 0
+  return (
+    <div className="surface space-y-3 p-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
+        Meus totais
+      </h3>
+      <div className="flex flex-col gap-2.5">
+        <StatRow label="Cards atribuídos" value={assigned} />
+        <StatRow label="Entregues" value={delivered} highlight />
+        <StatRow label="Peso em aberto" value={points} />
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
+        <motion.div
+          className="h-full rounded-full bg-green-500"
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </div>
+      <p className="text-[11px] text-paper-400">{pct}% do que é seu já foi entregue</p>
     </div>
   )
 }
@@ -801,23 +985,20 @@ function PulseIntelligence({
       <div className="absolute -right-4 -top-4 size-24 rounded-full bg-white/10 blur-xl" />
       <div className="absolute -bottom-6 -left-2 size-20 rounded-full bg-white/10 blur-xl" />
       <div className="relative">
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex h-6 items-center gap-2">
           <Zap className="size-4" strokeWidth={2.2} />
           <span className="text-sm font-semibold">Pulse Intelligence</span>
         </div>
-        <p className="text-[13px] leading-relaxed text-white/90">"{message}"</p>
-        <button className="mt-4 rounded-xl bg-white/20 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/30">
-          Ver sugestões
-        </button>
+        <p className="text-[13px] leading-relaxed text-white/90">{message}</p>
       </div>
     </div>
   )
 }
 
 /**
- * Saúde da sprint em números que cabem numa olhada: quanto falta, quanto tempo
- * resta e qual ritmo diário fecha a sprint. Usa só cards DA sprint — o painel
- * "Meus números" continua olhando todos os meus cards.
+ * Minha fatia da sprint em números que cabem numa olhada: quanto falta, quanto
+ * tempo resta e qual ritmo diário fecha o meu lote. O burndown ao lado é do time
+ * inteiro — aqui só entram cards atribuídos a mim.
  */
 function SprintPulse({
   sprint,
@@ -837,12 +1018,10 @@ function SprintPulse({
   if (!sprint) {
     return (
       <div className="surface p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
           Sprint
         </h3>
-        <p className="mt-3 text-sm text-paper-500 dark:text-ink-400">
-          Nenhuma sprint ativa.
-        </p>
+        <p className="mt-3 text-sm text-paper-500 dark:text-ink-400">Nenhuma sprint ativa.</p>
         <Link
           to="/app/boards"
           className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-500 hover:text-brand-600"
@@ -867,11 +1046,11 @@ function SprintPulse({
   const ahead = pct >= timePct
 
   return (
-    <div className="surface p-4 space-y-3">
+    <div className="surface space-y-3 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
-            Sprint ativa
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paper-400 dark:text-ink-500">
+            Minha carga na sprint
           </h3>
           <p className="truncate text-sm font-semibold text-ink dark:text-paper">{sprint.name}</p>
         </div>
@@ -898,7 +1077,7 @@ function SprintPulse({
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between text-[12px]">
           <span className="text-paper-500 dark:text-ink-400">
-            <span className="font-semibold text-ink dark:text-paper tabular">{donePoints}</span>
+            <span className="font-semibold tabular text-ink dark:text-paper">{donePoints}</span>
             <span className="text-paper-400"> / {totalPoints} pts</span>
           </span>
           <span className={cx("font-semibold tabular", ahead ? "text-green-500" : "text-warning")}>
@@ -907,10 +1086,7 @@ function SprintPulse({
         </div>
         <div className="relative h-2 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
           <motion.div
-            className={cx(
-              "h-full rounded-full",
-              ahead ? "bg-green-500" : "bg-brand-500",
-            )}
+            className={cx("h-full rounded-full", ahead ? "bg-green-500" : "bg-brand-500")}
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
@@ -925,15 +1101,18 @@ function SprintPulse({
       </div>
 
       <div className="flex flex-col gap-2.5 pt-1">
-        <SprintRow label="Cards na sprint" value={cardCount} />
-        <SprintRow label="Concluídos" value={doneCount} highlight />
-        <SprintRow label="Pontos restantes" value={remainingPoints} />
+        <StatRow label="Cards na sprint" value={cardCount} />
+        <StatRow label="Entregues" value={doneCount} highlight />
+        <StatRow label="Pontos restantes" value={remainingPoints} />
       </div>
 
       {remainingPoints > 0 && (
-        <p className="flex items-center gap-1.5 rounded-lg bg-paper-50 dark:bg-ink-800/60 px-2.5 py-2 text-[11px] text-paper-500 dark:text-ink-400">
+        <p className="flex items-center gap-1.5 rounded-lg bg-paper-50 px-2.5 py-2 text-[11px] text-paper-500 dark:bg-ink-800/60 dark:text-ink-400">
           <Flame className={cx("size-3.5 shrink-0", ahead ? "text-green-500" : "text-warning")} />
-          Ritmo necessário: <span className="font-semibold tabular text-ink dark:text-paper">{pace.toFixed(1)} pts/dia</span>
+          Ritmo necessário:{" "}
+          <span className="font-semibold tabular text-ink dark:text-paper">
+            {pace.toFixed(1)} pts/dia
+          </span>
         </p>
       )}
     </div>
@@ -951,37 +1130,25 @@ function TodayAgenda({
   loading: boolean
 }) {
   const now = Date.now()
-  const ordered = useMemo(
-    () => [...events].sort((a, b) => a.start.localeCompare(b.start)),
-    [events],
-  )
+  const ordered = useMemo(() => [...events].sort((a, b) => a.start.localeCompare(b.start)), [events])
   const next = ordered.find((e) => !e.all_day && new Date(e.end).getTime() > now)
 
   return (
-    <div className="surface p-5 lift">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="size-4 text-brand-500" strokeWidth={2} />
-          <h2 className="text-sm font-semibold text-ink dark:text-paper">Agenda de hoje</h2>
-          {connected && ordered.length > 0 && (
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 text-[11px] font-medium text-paper-600 dark:text-paper-400">
-              {ordered.length}
-            </span>
-          )}
-        </div>
-        <Link
-          to="/app/integrations"
-          className="flex items-center gap-1 text-xs font-medium text-brand-500 transition-colors hover:text-brand-600 dark:hover:text-brand-400"
-        >
-          Calendário
-          <ExternalLink className="size-3" strokeWidth={2} />
-        </Link>
-      </div>
+    <div className="surface lift p-5">
+      <PanelHead
+        icon={CalendarDays}
+        title="Agenda de hoje"
+        count={connected ? ordered.length : undefined}
+        action={{ to: "/app/integrations", label: "Calendário" }}
+      />
 
       {!connected ? (
-        <div className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-8 text-center">
+        <div className="rounded-xl border border-dashed border-paper-200 py-8 text-center dark:border-ink-700">
           <p className="text-sm text-paper-500">Google Agenda não conectado</p>
-          <Link to="/app/integrations" className="mt-1 inline-block text-xs font-medium text-brand-500 hover:text-brand-600">
+          <Link
+            to="/app/integrations"
+            className="mt-1 inline-block text-xs font-medium text-brand-500 hover:text-brand-600"
+          >
             Conectar para ver suas reuniões aqui
           </Link>
         </div>
@@ -990,9 +1157,7 @@ function TodayAgenda({
           <Loader2 className="size-5 animate-spin text-paper-400" />
         </div>
       ) : ordered.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-8 text-center text-sm text-paper-400">
-          Nenhuma reunião hoje. Dia livre para executar.
-        </p>
+        <EmptyNote>Nenhuma reunião hoje. Dia livre para executar.</EmptyNote>
       ) : (
         <div className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
           {ordered.slice(0, 5).map((e) => {
@@ -1001,40 +1166,41 @@ function TodayAgenda({
             return (
               <div
                 key={e.event_id}
-                className={cx("flex items-center gap-3 py-2.5 first:pt-0 last:pb-0", past && "opacity-50")}
+                className={cx(
+                  "grid grid-cols-[78px_3px_minmax(0,1fr)_auto] items-center gap-x-3 py-2.5 first:pt-0 last:pb-0",
+                  past && "opacity-50",
+                )}
               >
-                <span className="w-[74px] shrink-0 font-mono text-[11px] tabular text-paper-500 dark:text-ink-400">
+                <span className="font-mono text-[11px] tabular text-paper-500 dark:text-ink-400">
                   {e.all_day ? "dia todo" : `${fmtHour(e.start)}–${fmtHour(e.end)}`}
                 </span>
                 <span
                   className={cx(
-                    "h-7 w-1 shrink-0 rounded-full",
+                    "h-7 w-[3px] rounded-full",
                     isNext ? "bg-brand-500" : "bg-paper-200 dark:bg-ink-700",
                   )}
                 />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0">
                   <p className="truncate text-sm text-ink dark:text-paper">{e.title}</p>
-                  {e.attendees.length > 0 && (
-                    <p className="mt-0.5 truncate text-[11px] text-paper-400">
-                      {e.attendees.length} participante{e.attendees.length > 1 ? "s" : ""}
-                    </p>
-                  )}
+                  <p className="mt-0.5 truncate text-[11px] text-paper-400">
+                    {isNext && <span className="font-semibold text-brand-500">Próxima · </span>}
+                    {e.attendees.length > 0
+                      ? `${e.attendees.length} participante${e.attendees.length > 1 ? "s" : ""}`
+                      : "Sem convidados"}
+                  </p>
                 </div>
-                {isNext && (
-                  <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-                    Próxima
-                  </span>
-                )}
-                {e.meet_link && (
+                {e.meet_link ? (
                   <a
                     href={e.meet_link}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex shrink-0 items-center gap-1 rounded-lg bg-paper-50 dark:bg-ink-800 px-2 py-1 text-[11px] font-medium text-brand-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-700"
+                    className="flex items-center gap-1 rounded-lg bg-paper-50 px-2 py-1 text-[11px] font-medium text-brand-500 transition-colors hover:bg-paper-100 dark:bg-ink-800 dark:hover:bg-ink-700"
                   >
                     <Video className="size-3" strokeWidth={2} />
                     Entrar
                   </a>
+                ) : (
+                  <span />
                 )}
               </div>
             )
@@ -1050,20 +1216,13 @@ function TodayAgenda({
 
 /** Prazos dos próximos 7 dias, agrupados por dia — a "prévia" da semana. */
 function UpcomingWeek({ groups }: { groups: [string, BoardCard[]][] }) {
+  const total = groups.reduce((s, [, cs]) => s + cs.length, 0)
   return (
-    <div className="surface p-5 lift">
-      <div className="mb-4 flex items-center gap-2">
-        <CalendarCheck className="size-4 text-brand-500" strokeWidth={2} />
-        <h2 className="text-sm font-semibold text-ink dark:text-paper">Próximos 7 dias</h2>
-        <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 dark:bg-ink-800 px-1.5 text-[11px] font-medium text-paper-600 dark:text-paper-400">
-          {groups.reduce((s, [, cs]) => s + cs.length, 0)}
-        </span>
-      </div>
+    <div className="surface lift p-5">
+      <PanelHead icon={CalendarCheck} title="Próximos 7 dias" count={total} />
 
       {groups.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-8 text-center text-sm text-paper-400">
-          Nenhum prazo na próxima semana.
-        </p>
+        <EmptyNote>Nenhum prazo na próxima semana.</EmptyNote>
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map(([day, dayCards]) => (
@@ -1075,20 +1234,22 @@ function UpcomingWeek({ groups }: { groups: [string, BoardCard[]][] }) {
                 {dayCards.slice(0, 3).map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center gap-2 rounded-lg bg-paper-50 dark:bg-ink-800/60 px-3 py-2"
+                    className="grid grid-cols-[3px_minmax(0,1fr)_92px] items-center gap-x-2 rounded-lg bg-paper-50 px-3 py-2 dark:bg-ink-800/60 sm:grid-cols-[3px_58px_minmax(0,1fr)_92px]"
                   >
-                    <span className={cx("h-5 w-1 shrink-0 rounded-full", PRIORITY_BAR[c.priority])} />
-                    <span className="font-mono text-[11px] tabular text-paper-400 shrink-0">{c.ref}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink dark:text-paper-200">
-                      {c.title}
+                    <span className={cx("h-5 w-[3px] rounded-full", PRIORITY_BAR[c.priority])} />
+                    <span className="hidden truncate font-mono text-[11px] tabular text-paper-400 sm:block">
+                      {c.ref}
                     </span>
-                    <span
-                      className={cx(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        STATUS_TONE[c.status],
-                      )}
-                    >
-                      {STATUS_LABEL[c.status]}
+                    <span className="truncate text-sm text-ink dark:text-paper-200">{c.title}</span>
+                    <span className="flex justify-end">
+                      <span
+                        className={cx(
+                          "truncate rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          STATUS_TONE[c.status],
+                        )}
+                      >
+                        {STATUS_LABEL[c.status]}
+                      </span>
                     </span>
                   </div>
                 ))}
@@ -1122,9 +1283,9 @@ function RecentActivity({ items }: { items: Notification[] }) {
   const unread = items.filter((n) => !n.read).length
 
   return (
-    <div className="surface p-5 lift">
-      <div className="mb-4 flex items-center gap-2">
-        <Activity className="size-4 text-brand-500" strokeWidth={2} />
+    <div className="surface lift p-5">
+      <div className="mb-4 flex h-6 items-center gap-2">
+        <Activity className="size-4 shrink-0 text-brand-500" strokeWidth={2} />
         <h2 className="text-sm font-semibold text-ink dark:text-paper">Atividade recente</h2>
         {unread > 0 && (
           <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand-500 px-1.5 text-[11px] font-semibold text-white">
@@ -1134,11 +1295,9 @@ function RecentActivity({ items }: { items: Notification[] }) {
       </div>
 
       {ordered.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-paper-200 dark:border-ink-700 py-8 text-center text-sm text-paper-400">
-          Nada novo por aqui.
-        </p>
+        <EmptyNote>Nada novo por aqui.</EmptyNote>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2">
           {ordered.map((n) => (
             <Link
               key={n.id}
@@ -1153,7 +1312,8 @@ function RecentActivity({ items }: { items: Notification[] }) {
               <span
                 className={cx(
                   "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
-                  NOTIF_ICON_TONE[n.type] ?? "bg-paper-200/60 text-paper-500 dark:bg-ink-700 dark:text-paper-400",
+                  NOTIF_ICON_TONE[n.type] ??
+                    "bg-paper-200/60 text-paper-500 dark:bg-ink-700 dark:text-paper-400",
                 )}
               >
                 <Bell className="size-3.5" strokeWidth={2} />
@@ -1185,7 +1345,7 @@ function relativeTime(iso: string): string {
   return `${Math.round(h / 24)}d`
 }
 
-function SprintRow({
+function StatRow({
   label,
   value,
   highlight,

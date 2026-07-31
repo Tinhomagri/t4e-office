@@ -135,6 +135,10 @@ class CardSerializer(serializers.Serializer):
     remaining_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
     archived = serializers.BooleanField(default=False)
     archived_at = serializers.DateTimeField(allow_null=True, default=None)
+    # Só as telas que misturam projetos (Meu Dia) preenchem isto; nas listagens
+    # por projeto o front já sabe de que projeto o card é.
+    project_key = serializers.CharField(allow_blank=True, default="")
+    project_name = serializers.CharField(allow_blank=True, default="")
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

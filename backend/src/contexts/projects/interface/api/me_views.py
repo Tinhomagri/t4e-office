@@ -60,7 +60,17 @@ class MyWorkView(APIView):
             .select_related("project")
             .order_by("due_date", "created_at")
         )
-        card_rows = [card_row(cm, cm.project.key) for cm in cards]
+        # `project_key`/`project_name` vão junto porque esta tela mistura
+        # projetos de workspaces diferentes: sem eles o card não tem como dizer
+        # de onde veio.
+        card_rows = [
+            card_row(
+                cm,
+                cm.project.key,
+                {"project_key": cm.project.key, "project_name": cm.project.name},
+            )
+            for cm in cards
+        ]
 
         # Sprints ativas dos projetos onde a pessoa tem card, mais qualquer
         # sprint referenciada pelos cards dela. A segunda metade importa: um
