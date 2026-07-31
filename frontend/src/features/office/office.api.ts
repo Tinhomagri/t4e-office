@@ -2,7 +2,7 @@ import { api } from "@/shared/api/client"
 import type { AvatarConfig } from "@/features/avatar/avatar.types"
 import type { PresenceStatus } from "@/features/workspace/workspace.types"
 
-import type { HeartbeatInput, OfficeMember } from "./office.types"
+import type { DeliveryChampion, HeartbeatInput, OfficeMember } from "./office.types"
 
 export async function heartbeat(input: HeartbeatInput): Promise<{ status: PresenceStatus }> {
   const { data } = await api.post<{ status: PresenceStatus }>(
@@ -15,6 +15,13 @@ export async function heartbeat(input: HeartbeatInput): Promise<{ status: Presen
 export async function getRoom(workspaceId: string, floor: number): Promise<OfficeMember[]> {
   const { data } = await api.get<OfficeMember[]>("/presence/room/", {
     params: { workspace_id: workspaceId, floor },
+  })
+  return data
+}
+
+export async function getDeliveryChampion(workspaceId: string): Promise<DeliveryChampion | null> {
+  const { data } = await api.get<DeliveryChampion | null>("/presence/delivery-champion/", {
+    params: { workspace_id: workspaceId },
   })
   return data
 }

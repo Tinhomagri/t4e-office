@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { MOCK_DESK_ASSIGNMENTS, MOCK_MEMBERS, getMockActiveCard, getMockRoom } from "./office.mock"
+import {
+  MOCK_DELIVERY_CHAMPION,
+  MOCK_DESK_ASSIGNMENTS,
+  MOCK_MEMBERS,
+  getMockActiveCard,
+  getMockRoom,
+} from "./office.mock"
 import { buildFloor } from "./world/floors"
 
 describe("mock do escritório", () => {
@@ -22,5 +28,10 @@ describe("mock do escritório", () => {
     for (const member of MOCK_MEMBERS) {
       expect(getMockActiveCard(member.user_id)?.active).toBe(true)
     }
+  })
+
+  it("expõe um campeão de entregas com avatar para o dirigível", () => {
+    expect(MOCK_DELIVERY_CHAMPION.deliveries).toBeGreaterThan(0)
+    expect(MOCK_DELIVERY_CHAMPION.avatar_config).not.toBeNull()
   })
 })

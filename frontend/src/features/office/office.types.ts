@@ -21,3 +21,10 @@ export interface HeartbeatInput {
   facing: Direction
   floor: number
 }
+
+export interface DeliveryChampion {
+  user_id: string
+  name: string
+  deliveries: number
+  avatar_config: AvatarConfig | null
+}

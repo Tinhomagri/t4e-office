@@ -6,6 +6,7 @@ from contexts.presence.interface.api.views import (
     AssignDeskView,
     AvatarView,
     DeskAssignmentsView,
+    DeliveryChampionView,
     HeartbeatView,
     RoomView,
     StatusView,
@@ -14,6 +15,7 @@ from contexts.presence.interface.api.views import (
 urlpatterns = [
     path("heartbeat/", HeartbeatView.as_view(), name="presence-heartbeat"),
     path("room/", RoomView.as_view(), name="presence-room"),
+    path("delivery-champion/", DeliveryChampionView.as_view(), name="presence-delivery-champion"),
     path("status/", StatusView.as_view(), name="presence-status"),
     path("avatar/", AvatarView.as_view(), name="presence-avatar"),
     path("desks/", DeskAssignmentsView.as_view(), name="presence-desks"),

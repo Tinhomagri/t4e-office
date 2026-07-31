@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -185,6 +186,50 @@ class RoomView(APIView):
             for assignment in auto_rows
         )
         return Response(data)
+
+
+class DeliveryChampionView(APIView):
+    """GET /api/presence/delivery-champion/ — maior entregador do workspace."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        if not workspace_id:
+            return Response({"error": "workspace_id obrigatório"}, status=400)
+        _assert_member(workspace_id, str(request.user.id))
+
+        # O painel celebra quem entregou nesta semana (segunda a domingo),
+        # portanto troca naturalmente na virada semanal. `resolution=done` é
+        # a fonte de verdade; cards antigos sem desfecho caem no status done.
+        now = datetime.now(UTC)
+        week_start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        delivered = Q(resolution="done") | Q(resolution="", status="done")
+        delivered_this_week = Q(resolved_at__gte=week_start) | Q(
+            resolved_at__isnull=True, updated_at__gte=week_start
+        )
+        winner = (
+            CardModel.objects.filter(project__workspace_id=workspace_id, assignee__isnull=False)
+            .filter(delivered, delivered_this_week)
+            .values("assignee_id", "assignee__full_name")
+            .annotate(deliveries=Count("id"))
+            .order_by("-deliveries", "assignee__full_name")
+            .first()
+        )
+        if winner is None:
+            return Response(None)
+
+        avatar = UserAvatarModel.objects.filter(user_id=winner["assignee_id"]).first()
+        return Response(
+            {
+                "user_id": str(winner["assignee_id"]),
+                "name": winner["assignee__full_name"],
+                "deliveries": winner["deliveries"],
+                "avatar_config": avatar.config if avatar else None,
+            }
+        )
 
 
 class StatusView(APIView):

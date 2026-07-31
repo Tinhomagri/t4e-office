@@ -60,6 +60,13 @@ export const MOCK_DESK_ASSIGNMENTS: DeskAssignment[] = MOCK_MEMBERS.map((member,
   user_name: member.name,
 }))
 
+export const MOCK_DELIVERY_CHAMPION = {
+  user_id: MOCK_MEMBERS[12]!.user_id,
+  name: MOCK_MEMBERS[12]!.name,
+  deliveries: 18,
+  avatar_config: MOCK_MEMBERS[12]!.avatar_config,
+}
+
 const MOCK_ACTIVE_CARDS = new Map<string, ActiveCard>(
   MOCK_MEMBERS.map((member, index) => [
     member.user_id,

@@ -16,7 +16,7 @@ import { Kbd, cx } from "@/shared/ui/primitives"
 import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
-import { useHeartbeat, useRoom } from "./office.hooks"
+import { useDeliveryChampion, useHeartbeat, useRoom } from "./office.hooks"
 import { useActiveCard } from "./pc/activeCard.hooks"
 import { isMyDesk } from "./pc/desk"
 import type { DeskAssignment } from "./pc/desks.api"
@@ -32,7 +32,7 @@ import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
-import { getMockActiveCard, getMockRoom, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
+import { getMockActiveCard, getMockRoom, MOCK_DELIVERY_CHAMPION, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -78,6 +78,7 @@ export function OfficeRoom({
   const floor = useWorldStore((s) => s.floor)
   const queryWorkspaceId = mock ? null : workspaceId
   const room = useRoom(queryWorkspaceId, floor)
+  const deliveryChampionQuery = useDeliveryChampion(queryWorkspaceId)
   const heartbeat = useHeartbeat()
   const reduce = useReducedMotion()
 
@@ -108,6 +109,7 @@ export function OfficeRoom({
   const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks && !mock)
   const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, !mock)
   const roomMembers = mock ? getMockRoom(floor) : room.data
+  const deliveryChampion = mock ? MOCK_DELIVERY_CHAMPION : deliveryChampionQuery.data
   const currentDeskAssignments = useMemo(
     () => (mock && floor === 1 ? MOCK_DESK_ASSIGNMENTS : (deskAssignments.data ?? [])),
     [mock, floor, deskAssignments.data],
@@ -296,6 +298,17 @@ export function OfficeRoom({
     if (!engine || !roomMembers) return
     engine.syncRemote(roomMembers)
   }, [roomMembers, engineEpoch])
+
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    const config = deliveryChampion?.avatar_config
+    engine.setAirshipChampion(
+      deliveryChampion && config
+        ? { name: deliveryChampion.name, deliveries: deliveryChampion.deliveries, config }
+        : null,
+    )
+  }, [deliveryChampion, engineEpoch])
 
   // Reflete o estado da sessão de poker ativa nas plaquinhas acima da
   // cabeça — sem sessão ativa, zera tudo (ninguém com plaquinha visível).

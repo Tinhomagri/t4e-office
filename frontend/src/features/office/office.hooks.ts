@@ -29,6 +29,16 @@ export function useRoom(workspaceId: string | null, floor: number) {
   })
 }
 
+export function useDeliveryChampion(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["office-delivery-champion", workspaceId],
+    queryFn: () => officeApi.getDeliveryChampion(workspaceId!),
+    enabled: !!workspaceId,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+}
+
 export function useHeartbeat() {
   // Best-effort: falhas de heartbeat não devem virar toast/erro.
   return useMutation({

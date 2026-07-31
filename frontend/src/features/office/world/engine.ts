@@ -65,6 +65,12 @@ export interface Actor {
   targetSeatIndex: number
 }
 
+export interface AirshipChampion {
+  name: string
+  deliveries: number
+  config: AvatarConfig
+}
+
 interface Particle {
   x: number
   y: number
@@ -97,6 +103,10 @@ export class OfficeEngine {
   private props: Record<string, PropSprite>
   private shadow: PropSprite
   private sky: SkyLayers
+  private airshipChampion: (AirshipChampion & {
+    sheet: HTMLCanvasElement
+    frames: Record<string, { x: number; y: number }[]>
+  }) | null = null
   /** Offset ativo da câmera (apoiado no guarda-corpo). */
   private viewOffset = { dx: 0, dy: 0 }
 
@@ -279,6 +289,16 @@ export class OfficeEngine {
     this.me.frames = sheet.frames
     this.me.sheetKey = key
     this.me.config = config
+  }
+
+  /** Destaque do céu: passa pelo escritório sem participar da física do mapa. */
+  setAirshipChampion(champion: AirshipChampion | null): void {
+    if (!champion) {
+      this.airshipChampion = null
+      return
+    }
+    const avatar = buildAvatarSheet(champion.config)
+    this.airshipChampion = { ...champion, sheet: avatar.canvas, frames: avatar.frames }
   }
 
   say(text: string): void {
@@ -833,6 +853,7 @@ export class OfficeEngine {
       cloudOffset(camX, this.time), 0, vw, vh,
       0, 0, vw * s, vh * s,
     )
+    this.renderChampionAirship(ctx)
     ctx.restore()
 
     // Piso e paredes: um único blit da região visível.
@@ -951,6 +972,82 @@ export class OfficeEngine {
     ctx.globalAlpha = 1
 
     this.renderNameplates(camX, camY, s)
+  }
+
+  private renderChampionAirship(ctx: CanvasRenderingContext2D): void {
+    const champion = this.airshipChampion
+    if (!champion) return
+
+    const w = 560
+    const h = 150
+    const travel = this.cssW + w
+    // Em 25s percorre a viewport inteira e reaparece pelo lado oposto.
+    const speed = this.reduceMotion ? 0 : 20
+    // Começa com a proa encostada na direita da viewport, portanto já entra
+    // na primeira passagem em vez de passar vários segundos fora da tela.
+    const x = speed === 0 ? this.cssW * 0.58 : this.cssW - (this.time * speed) % travel
+    const y = Math.max(8, Math.min(this.cssH * 0.02, this.cssH * 0.52 - h - 4))
+
+    // Casco pixelado, com o telão embutido nele (não pendurado abaixo).
+    ctx.fillStyle = "#47191f"
+    ctx.fillRect(Math.round(x + 52), Math.round(y + 8), 390, 126)
+    ctx.fillRect(Math.round(x + 24), Math.round(y + 26), 470, 90)
+    ctx.fillRect(Math.round(x + 4), Math.round(y + 48), 528, 46)
+    ctx.fillStyle = "#b92e39"
+    ctx.fillRect(Math.round(x + 57), Math.round(y + 14), 378, 112)
+    ctx.fillRect(Math.round(x + 29), Math.round(y + 32), 456, 78)
+    ctx.fillRect(Math.round(x + 10), Math.round(y + 53), 512, 36)
+    ctx.fillStyle = "#e45a5d"
+    ctx.fillRect(Math.round(x + 72), Math.round(y + 20), 188, 7)
+    ctx.fillRect(Math.round(x + 37), Math.round(y + 37), 236, 5)
+    ctx.fillStyle = "#691f29"
+    ctx.fillRect(Math.round(x + 499), Math.round(y + 48), 46, 20)
+    ctx.fillRect(Math.round(x + 533), Math.round(y + 36), 13, 44)
+    ctx.fillStyle = "#d5a947"
+    ctx.fillRect(Math.round(x + 30), Math.round(y + 60), 8, 8)
+    ctx.fillRect(Math.round(x + 486), Math.round(y + 60), 8, 8)
+
+    // A tela ocupa o centro do casco, com moldura grossa para leitura à distância.
+    ctx.fillStyle = "#32171b"
+    ctx.fillRect(Math.round(x + 78), Math.round(y + 29), 410, 88)
+    ctx.fillStyle = "#fff7df"
+    ctx.fillRect(Math.round(x + 85), Math.round(y + 36), 396, 74)
+    // Bloco exclusivo do retrato: a faixa escura e a divisória impedem que o
+    // texto avance para a imagem quando o nome for mais comprido.
+    ctx.fillStyle = "#f1dcb8"
+    ctx.fillRect(Math.round(x + 94), Math.round(y + 42), 92, 62)
+    ctx.fillStyle = "#4d1d25"
+    ctx.fillRect(Math.round(x + 194), Math.round(y + 42), 6, 62)
+    ctx.fillStyle = "#f1dcb8"
+    ctx.fillRect(Math.round(x + 242), Math.round(y + 42), 230, 62)
+    const waveFrames = champion.frames.down_wave ?? []
+    const frame = waveFrames.length
+      ? waveFrames[Math.floor(this.time * ANIM_FPS.wave) % waveFrames.length]
+      : undefined
+    if (frame) {
+      ctx.drawImage(champion.sheet, frame.x, frame.y, FW, FH, Math.round(x + 121), Math.round(y + 45), 38, 57)
+    }
+    // Toda a tipografia é recortada pela coluna direita. Não é apenas um
+    // espaçamento visual: nada pode atravessar o divisor e encobrir o avatar.
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(Math.round(x + 242), Math.round(y + 42), 230, 62)
+    ctx.clip()
+    // Nameplates usam alinhamento central. Aqui cada linha nasce na margem
+    // esquerda do bloco de texto, à direita do retrato.
+    ctx.textAlign = "left"
+    ctx.fillStyle = "#8e2631"
+    ctx.font = "bold 13px monospace"
+    ctx.textBaseline = "top"
+    ctx.fillText("DESTAQUE DA SEMANA", Math.round(x + 252), Math.round(y + 47))
+    const name = champion.name.length > 13 ? `${champion.name.slice(0, 12)}.` : champion.name
+    ctx.fillStyle = "#35171c"
+    ctx.font = "bold 20px monospace"
+    ctx.fillText(name, Math.round(x + 252), Math.round(y + 64))
+    ctx.fillStyle = "#a6323b"
+    ctx.font = "bold 14px monospace"
+    ctx.fillText(`${champion.deliveries} CARDS ENTREGUES`, Math.round(x + 252), Math.round(y + 88))
+    ctx.restore()
   }
 
   private renderForegroundProps(camX: number, camY: number, s: number): void {

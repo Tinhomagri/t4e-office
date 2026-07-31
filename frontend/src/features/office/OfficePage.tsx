@@ -120,7 +120,7 @@ function OfficeInner({ workspaceId, mock = false }: { workspaceId: string; mock?
       <OfficeRoom workspaceId={workspaceId} myConfig={activeConfig} mock={mock} />
 
       {/* Presença e legenda viram overlay: em tela cheia não há onde empilhar. */}
-      <div className="pointer-events-none absolute left-3 top-3 flex max-w-[min(92vw,44rem)] flex-col gap-2">
+      <div className="pointer-events-none absolute bottom-3 right-3 flex max-w-[min(92vw,44rem)] flex-col gap-2">
         <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
           <PresenceBar workspaceId={workspaceId} onlineCount={onlineCount} readOnly={mock} />
         </div>
