@@ -1,4 +1,5 @@
 """Implementação do ChatGateway usando a Google Chat API (auth de usuário)."""
+import logging
 from datetime import UTC, datetime
 
 import requests
@@ -10,6 +11,8 @@ from contexts.google.domain.entities.chat import ChatMember, ChatMessage, ChatSp
 from contexts.google.domain.ports.chat_gateway import ChatError, ChatGateway
 
 _USERINFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_dt(value: str | None) -> datetime:
@@ -53,6 +56,16 @@ class GoogleChatGateway(ChatGateway):
         members: list[ChatMember] = []
         for m in result.get("memberships", []):
             user = m.get("member", {})
+            # TEMP-DEBUG: diagnosticar por que DMs caem no fallback "Alguém".
+            # Loga só as chaves e o tipo do membro — nunca token, nunca e-mail
+            # completo. Remover assim que resolvido.
+            logger.warning(
+                "chat member raw keys=%s type=%s hasDisplayName=%s membershipType=%s",
+                sorted(user.keys()),
+                user.get("type"),
+                bool(user.get("displayName")),
+                m.get("state"),
+            )
             members.append(
                 ChatMember(
                     member_id=user.get("name", ""),
