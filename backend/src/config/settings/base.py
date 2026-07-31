@@ -60,8 +60,8 @@ INSTALLED_APPS = [
 # Em ambientes serverless (ex.: Vercel), daphne/channels podem não existir
 # porque a função roda WSGI e não precisa de ASGI/WebSocket no processo web.
 try:
-    import daphne  # noqa: F401
     import channels  # noqa: F401
+    import daphne  # noqa: F401
 except ModuleNotFoundError:
     pass
 else:
