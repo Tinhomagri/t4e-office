@@ -154,9 +154,26 @@ npm run test:coverage
 escritório, Win98Desktop); o resto cobre regra pura — reducers, stores, projeção
 isométrica e formatação.
 
-**Cobertura:** o CI roda `pytest --cov=src --cov-report=term-missing` a cada push e PR, e o
-relatório por arquivo fica na saída do job *Backend (lint + tests)*. Para reproduzir local,
-é o mesmo comando — não há passo extra nem serviço externo.
+**Cobertura**
+
+| | Linhas | Branches | Como reproduzir |
+|---|---|---|---|
+| Backend | **75%** (17.300 linhas) | — | `cd backend && pytest --cov=src --cov-report=term-missing` |
+| Frontend | 15,8% | **80,7%** | `cd frontend && npm run test:coverage` |
+
+O CI roda a versão do backend a cada push e PR; o relatório por arquivo fica na saída do job
+*Backend (lint + tests)*.
+
+Os dois números do frontend medem coisas diferentes e o baixo é o menos informativo: o
+denominador de linhas inclui todo `.tsx` de apresentação (SVG do escritório, editor rico,
+menus), enquanto o que a suíte cobre é regra — stores, reducers de board, projeção
+isométrica, formatação de data e permissão. Daí 15,8% de linhas com 80,7% dos ramos de
+decisão cobertos.
+
+A suíte do backend roda com `config.settings.test`, que fixa SQLite em memória. Não é
+detalhe: com `dev`, `DATABASE_URL` vinha do `.env.local` e o pytest tentava criar o banco de
+teste **no Postgres de produção** — a suíte levava mais de 15 minutos presa em rede em vez
+dos ~6 segundos atuais.
 
 Atalho: `make test` roda os dois.
 

@@ -75,7 +75,9 @@ mypy_path = "src"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings.dev"
+# `test`, não `dev`: dev lê DATABASE_URL do ambiente e a suíte acabava
+# conectando no Postgres de produção. Ver src/config/settings/test.py.
+DJANGO_SETTINGS_MODULE = "config.settings.test"
 pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--tb=short"
