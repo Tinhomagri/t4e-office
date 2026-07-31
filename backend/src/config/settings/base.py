@@ -32,10 +32,6 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
 INSTALLED_APPS = [
-    # Antes de staticfiles: é isso que faz o runserver subir em ASGI e
-    # atender WebSocket junto com o HTTP em dev.
-    "daphne",
-    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -60,6 +56,16 @@ INSTALLED_APPS = [
     "contexts.chatwoot",
     "contexts.meetings",
 ]
+
+# Em ambientes serverless (ex.: Vercel), daphne/channels podem não existir
+# porque a função roda WSGI e não precisa de ASGI/WebSocket no processo web.
+try:
+    import daphne  # noqa: F401
+    import channels  # noqa: F401
+except ModuleNotFoundError:
+    pass
+else:
+    INSTALLED_APPS = ["daphne", "channels", *INSTALLED_APPS]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
