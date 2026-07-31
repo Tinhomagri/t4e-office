@@ -103,20 +103,32 @@ class GoogleChatGateway(ChatGateway):
             raise ChatError(f"Erro ao listar mensagens: {exc}") from exc
 
         me = f"users/{self._whoami(access_token)}"
-        messages = [
-            ChatMessage(
-                message_id=item["name"],
-                space_id=space_id,
-                sender_id=item.get("sender", {}).get("name", ""),
-                sender_name=item.get("sender", {}).get("displayName", "").strip() or "Alguém",
-                sender_avatar_url=item.get("sender", {}).get("avatarUrl", ""),
-                text=item.get("text", ""),
-                created_at=_parse_dt(item.get("createTime")),
-                is_own=item.get("sender", {}).get("name", "") == me,
+        # `messages.list` só devolve o resource id do remetente (`users/123`),
+        # nunca displayName/avatar — isso só vem por `members.list`. Sem este
+        # mapa toda mensagem cai no fallback "Alguém".
+        members_by_id = {m.member_id: m for m in self._members_of(service, space_id)}
+
+        messages = []
+        for item in result.get("messages", []):
+            if not item.get("text"):
+                continue
+            sender = item.get("sender", {})
+            sender_id = sender.get("name", "")
+            member = members_by_id.get(sender_id)
+            messages.append(
+                ChatMessage(
+                    message_id=item["name"],
+                    space_id=space_id,
+                    sender_id=sender_id,
+                    sender_name=sender.get("displayName", "").strip()
+                    or (member.display_name if member else "Alguém"),
+                    sender_avatar_url=sender.get("avatarUrl", "")
+                    or (member.avatar_url if member else ""),
+                    text=item.get("text", ""),
+                    created_at=_parse_dt(item.get("createTime")),
+                    is_own=sender_id == me,
+                )
             )
-            for item in result.get("messages", [])
-            if item.get("text")
-        ]
         # A API devolve mais recente primeiro; a UI de chat quer cronológico.
         messages.reverse()
         return messages
