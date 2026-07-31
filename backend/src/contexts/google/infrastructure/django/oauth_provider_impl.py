@@ -37,7 +37,10 @@ SCOPES = [
     # spaces.members.list só devolve {name, type} do membro, nunca
     # displayName/foto — sem este escopo toda mensagem/DM cai no fallback
     # "Alguém" (confirmado em produção, ver chat_gateway_impl.py).
-    "https://www.googleapis.com/auth/people.readonly",
+    # "people.readonly" NÃO é um escopo real do Google (confirmado: o console
+    # rejeita como inválido) — o certo pra resolver colega do mesmo Workspace
+    # via people.getBatchGet é directory.readonly.
+    "https://www.googleapis.com/auth/directory.readonly",
     "openid",
 ]
 
