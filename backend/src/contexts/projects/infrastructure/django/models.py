@@ -52,6 +52,34 @@ class ProjectModel(models.Model):
         return f"{self.key} — {self.name}"
 
 
+class AnonymousReportModel(models.Model):
+    """Denúncia enviada pelo canal público, sem vínculo com quem a enviou.
+
+    Deliberadamente não há usuário, workspace, IP, sessão, user-agent nem
+    timestamp neste registro. O identificador técnico não é devolvido pela API.
+    """
+
+    CATEGORY_CHOICES = [
+        ("conduct", "Conduta inadequada"),
+        ("harassment", "Assédio ou discriminação"),
+        ("security", "Segurança ou saúde"),
+        ("fraud", "Fraude ou irregularidade"),
+        ("other", "Outro"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    description = models.TextField()
+
+    class Meta:
+        db_table = "projects_anonymous_report"
+        verbose_name = "Denúncia anônima"
+        verbose_name_plural = "Denúncias anônimas"
+
+    def __str__(self) -> str:
+        return f"Denúncia anônima: {self.category}"
+
+
 class SprintModel(models.Model):
     """Sprint (ciclo de trabalho) pertencente a um projeto."""
 

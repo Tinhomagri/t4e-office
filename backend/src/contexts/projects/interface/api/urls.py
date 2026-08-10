@@ -8,6 +8,7 @@ from contexts.projects.interface.api.agile_views import (
     SprintCompleteView,
     SprintStartView,
 )
+from contexts.projects.interface.api.anonymous_report_views import AnonymousReportCreateView
 from contexts.projects.interface.api.automation_views import (
     AutomationRuleDetailView,
     AutomationRuleListCreateView,
@@ -77,6 +78,7 @@ from contexts.projects.interface.api.sprint_views import (
 from contexts.projects.interface.api.views import ProjectListCreateView
 
 urlpatterns = [
+    path("anonymous-reports/", AnonymousReportCreateView.as_view(), name="anonymous-report-create"),
     path("projects/", ProjectListCreateView.as_view(), name="project-list-create"),
     # Configuração de quadro/projeto (aba Geral + swimlanes/layout/cores)
     path("projects/<uuid:project_id>/", ProjectDetailView.as_view(), name="project-detail"),
