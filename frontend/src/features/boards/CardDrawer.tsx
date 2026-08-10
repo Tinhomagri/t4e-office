@@ -15,6 +15,7 @@ import {
   Plus,
   Send,
   Share2,
+  Sparkles,
   Square,
   Tag,
   Trash2,
@@ -30,6 +31,12 @@ import { GithubDevPanel } from "@/features/github/GithubDevPanel"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import * as copilotApi from "@/features/copilot/copilot.api"
+import { useCopilotContextStore } from "@/features/copilot/copilot.context.store"
+import {
+  ReplySuggestions,
+  SimilarSuggestions,
+  SubtaskSuggestions,
+} from "@/features/boards/CardAiSuggestions"
 import { RepurposeDialog } from "./RepurposeDialog"
 import { errMsg } from "./board.shared"
 import {
@@ -187,6 +194,22 @@ export function CardDrawer({
 
   useEffect(() => setDraft(card), [card])
 
+  // Publica o card aberto como contexto do Copiloto — é o que faz "resuma
+  // este card" funcionar sem a pessoa repetir o código do card por escrito.
+  const setCopilotContext = useCopilotContextStore((s) => s.setContext)
+  const clearCopilotContext = useCopilotContextStore((s) => s.clearContext)
+  useEffect(() => {
+    if (!card) return
+    setCopilotContext("card", {
+      label: `${card.ref} · ${card.title}`,
+      hint:
+        `O usuário está com o card ${card.ref} aberto ("${card.title}", ` +
+        `card_id="${card.id}", projeto project_id="${projectId}"). Quando ele ` +
+        `disser "este card" ou "esta tarefa", é deste que se trata.`,
+    })
+    return () => clearCopilotContext("card")
+  }, [card, projectId, setCopilotContext, clearCopilotContext])
+
   if (!card || !draft) return null
 
   const set = <K extends keyof Card>(k: K, v: Card[K]) => setDraft({ ...draft, [k]: v })
@@ -233,11 +256,14 @@ export function CardDrawer({
         exit={{ opacity: 0, x: 48, scale: 0.985 }}
         transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.9 }}
         className={cx(
-          "relative z-10 flex h-full w-full flex-col overflow-hidden rounded-none border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 text-ink dark:text-paper sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border shadow-xl will-change-transform",
+          // No dark o modal usa a superfície `overlay` (ink-750) e a sombra
+          // com anel de 1px — é ela que separa o painel do fundo, já que a
+          // borda sólida some contra a página escura.
+          "relative z-10 flex h-full w-full flex-col overflow-hidden rounded-none border-paper-200 bg-white text-ink shadow-xl dark:border-transparent dark:bg-ink-750 dark:text-ink-200 dark:shadow-overlay sm:h-auto sm:max-h-[92vh] sm:rounded-[12px] sm:border will-change-transform",
           expanded ? "max-w-[1400px]" : "max-w-5xl",
         )}>
         {/* Cabeçalho: trilha pai/filho à esquerda, ferramentas à direita */}
-        <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2 bg-white dark:bg-ink-900">
+        <div className="flex items-center justify-between gap-3 border-b border-paper-200 dark:border-ink-700 px-4 py-2 bg-white dark:bg-ink-750">
             <nav aria-label="Trilha" className="flex min-w-0 items-center gap-1.5 text-xs">
               {parent ? (
                 <>
@@ -283,14 +309,14 @@ export function CardDrawer({
         </div>
 
         {/* Corpo: 2 colunas */}
-        <div className="grid flex-1 grid-cols-1 overflow-y-auto scrollbar-slim lg:grid-cols-[1fr_300px]">
+        <div className="grid flex-1 grid-cols-1 overflow-y-auto scrollbar-slim lg:grid-cols-[1fr_340px]">
           {/* Coluna principal */}
           <div className="min-w-0 space-y-6 p-5">
             <input
               value={draft.title}
               onChange={(e) => set("title", e.target.value)}
               onBlur={() => draft.title !== card.title && persist({ title: draft.title })}
-              className="-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent text-2xl font-semibold leading-snug text-ink dark:text-paper outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
+              className="-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent text-[28px] font-semibold leading-8 text-ink dark:text-ink-200 outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
             />
 
             <Section title="Descrição">
@@ -302,7 +328,8 @@ export function CardDrawer({
                 // o menu de IA nem aparece.
                 onAiAssist={
                   workspaceId
-                    ? (text, action) => copilotApi.writeAssist(workspaceId, text, action)
+                    ? (text, action, target) =>
+                        copilotApi.writeAssist(workspaceId, text, action, "", target)
                     : undefined
                 }
               />
@@ -344,7 +371,10 @@ export function CardDrawer({
           </div>
 
           {/* Painel lateral de detalhes */}
-          <aside className="space-y-2.5 border-t border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-950/50 p-3 lg:border-l lg:border-t-0">
+          {/* No dark a coluna não muda de cor: o que a separa são os painéis
+              com borda dentro dela, como no Jira. Um tom diferente aqui criaria
+              uma faixa vertical que o original não tem. */}
+          <aside className="space-y-2.5 border-t border-paper-200 bg-paper-50 p-3 dark:border-ink-700 dark:bg-transparent lg:border-l lg:border-t-0">
             {/* Ação primária: status sólido, como no Jira */}
             <div className="flex flex-wrap items-center gap-2">
               <StatusDropdown
@@ -430,7 +460,7 @@ export function CardDrawer({
                 onChange={(e) => set("points", e.target.value === "" ? null : Number(e.target.value))}
                 onBlur={() => draft.points !== card.points && persist({ points: draft.points })}
                 placeholder="—"
-                className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2.5 py-1.5 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+                className={cx(FIELD_INLINE, "h-8")}
               />
             </DetailRow>
 
@@ -504,7 +534,7 @@ export function CardDrawer({
             </SidePanel>
 
             {(createdAgo || updatedAgo) && (
-              <div className="px-1 pt-1 text-[11px] leading-relaxed text-paper-400">
+              <div className="px-1 pt-1 text-xs leading-relaxed text-paper-400 dark:text-ink-400">
                 {createdAgo && <p>Criado {createdAgo}</p>}
                 {updatedAgo && <p>Atualizado {updatedAgo}</p>}
               </div>
@@ -781,6 +811,7 @@ function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: stri
   const updateCard = useUpdateCard(projectId)
   const [title, setTitle] = useState("")
   const [adding, setAdding] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
 
   const children = (cards ?? []).filter((c) => c.parent_id === parentCard.id)
   const doneN = children.filter((c) => c.status === "done").length
@@ -814,7 +845,7 @@ function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: stri
       )}
       <ul className="space-y-1">
         {children.map((c) => (
-          <li key={c.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+          <li key={c.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
             <button onClick={() => toggle(c)} className="text-paper-400 hover:text-success">
               {c.status === "done" ? (
                 <CheckSquare className="size-4 text-success" />
@@ -837,18 +868,46 @@ function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: stri
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false) }}
             placeholder="Título da subtarefa"
-            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2.5 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
           />
           <Button size="sm" onClick={add} loading={createCard.isPending} disabled={!title.trim()}>Adicionar</Button>
           <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancelar</Button>
         </div>
       ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-        >
-          <Plus className="size-4" /> Adicionar subtarefa
-        </button>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+          >
+            <Plus className="size-4" /> Adicionar subtarefa
+          </button>
+          {!suggesting && (
+            <button
+              onClick={() => setSuggesting(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              <Sparkles className="size-3.5" /> Sugerir com IA
+            </button>
+          )}
+        </div>
+      )}
+      {suggesting && (
+        <SubtaskSuggestions
+          card={parentCard}
+          onDismiss={() => setSuggesting(false)}
+          // Cria em série: o backend numera o card por projeto, e disparar
+          // tudo em paralelo faria duas subtarefas brigarem pelo mesmo número.
+          onCreate={async (titles) => {
+            for (const t of titles) {
+              await createCard.mutateAsync({
+                title: t,
+                type: "chore",
+                parent_id: parentCard.id,
+                sprint_id: parentCard.sprint_id,
+              })
+            }
+          }}
+        />
       )}
     </Section>
   )
@@ -869,6 +928,7 @@ function Links({ card, projectId }: { card: Card; projectId: string }) {
   const createLink = useCreateCardLink(card.id)
   const deleteLink = useDeleteCardLink(card.id)
   const [adding, setAdding] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [type, setType] = useState<LinkType>("relates")
   const [targetId, setTargetId] = useState("")
 
@@ -901,7 +961,7 @@ function Links({ card, projectId }: { card: Card; projectId: string }) {
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-paper-400">{label}</p>
             <ul className="space-y-1">
               {items.map((l) => (
-                <li key={l.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+                <li key={l.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
                   <Link2 className="size-3.5 shrink-0 text-paper-400" />
                   <span className="font-mono text-[11px] text-paper-400">{l.other_card?.ref}</span>
                   <span className="flex-1 truncate text-sm text-ink dark:text-paper">{l.other_card?.title ?? "—"}</span>
@@ -923,7 +983,7 @@ function Links({ card, projectId }: { card: Card; projectId: string }) {
           <select
             value={type}
             onChange={(e) => setType(e.target.value as LinkType)}
-            className="rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            className="rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
           >
             <option value="relates">Relacionado a</option>
             <option value="blocks">Bloqueia</option>
@@ -932,7 +992,7 @@ function Links({ card, projectId }: { card: Card; projectId: string }) {
           <select
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
-            className="min-w-[160px] flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            className="min-w-[160px] flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
           >
             <option value="">Selecione o card…</option>
             {candidates.map((c) => (
@@ -943,12 +1003,31 @@ function Links({ card, projectId }: { card: Card; projectId: string }) {
           <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancelar</Button>
         </div>
       ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-        >
-          <Plus className="size-4" /> Adicionar vínculo
-        </button>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+          >
+            <Plus className="size-4" /> Adicionar vínculo
+          </button>
+          {!suggesting && (
+            <button
+              onClick={() => setSuggesting(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              <Sparkles className="size-3.5" /> Buscar semelhantes
+            </button>
+          )}
+        </div>
+      )}
+      {suggesting && (
+        <SimilarSuggestions
+          card={card}
+          onDismiss={() => setSuggesting(false)}
+          onLink={async (rows) => {
+            for (const r of rows) await createLink.mutateAsync(r)
+          }}
+        />
       )}
     </Section>
   )
@@ -982,7 +1061,7 @@ function Versions({ cardId, projectId }: { cardId: string; projectId: string }) 
         {(cardVersions ?? []).map((v: Version) => (
           <span
             key={v.id}
-            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
+            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-800 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
           >
             {v.name}
             {v.released && <span className="ml-0.5 text-[9px] text-success-600 font-bold">✓</span>}
@@ -1000,7 +1079,7 @@ function Versions({ cardId, projectId }: { cardId: string; projectId: string }) 
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
           >
             <option value="">Selecione versão…</option>
             {available.map((v) => (
@@ -1044,7 +1123,7 @@ function Components({ cardId, projectId }: { cardId: string; projectId: string }
         {(cardComponents ?? []).map((c: Component) => (
           <span
             key={c.id}
-            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-900 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
+            className="flex items-center gap-1 rounded-full border border-paper-300 bg-paper dark:bg-ink-800 px-2.5 py-0.5 text-[11px] font-medium text-ink dark:text-paper"
           >
             {c.name}
             <button
@@ -1061,7 +1140,7 @@ function Components({ cardId, projectId }: { cardId: string; projectId: string }
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+            className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
           >
             <option value="">Selecione componente…</option>
             {available.map((c) => (
@@ -1098,7 +1177,7 @@ function FieldInput({
           value={str}
           onChange={(e) => onChange(e.target.value)}
           onBlur={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
         />
       )
     case "number":
@@ -1107,7 +1186,7 @@ function FieldInput({
           type="number"
           value={str}
           onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
         />
       )
     case "date":
@@ -1116,7 +1195,7 @@ function FieldInput({
           type="date"
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
         />
       )
     case "checkbox":
@@ -1133,7 +1212,7 @@ function FieldInput({
         <select
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+          className="w-full rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
         >
           <option value="">—</option>
           {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -1153,7 +1232,7 @@ function FieldInput({
                   "rounded-full px-2 py-0.5 text-[11px] font-medium border transition-colors",
                   active
                     ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-paper-300 bg-paper dark:bg-ink-900 text-paper-500 hover:border-paper-400",
+                    : "border-paper-300 bg-paper dark:bg-ink-800 text-paper-500 hover:border-paper-400",
                 )}
               >
                 {o}
@@ -1239,7 +1318,7 @@ function Attachments({ cardId }: { cardId: string }) {
       )}
       <ul className="mb-2 space-y-1.5">
         {(attachments ?? []).map((a: Attachment) => (
-          <li key={a.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+          <li key={a.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
             {fileIcon(a.mime_type)}
             <div className="min-w-0 flex-1">
               {a.url ? (
@@ -1291,7 +1370,7 @@ function Attachments({ cardId }: { cardId: string }) {
           </li>
         ))}
         {upload.isPending && (
-          <li className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5 text-sm text-paper-400">
+          <li className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5 text-sm text-paper-400">
             <Loader2 className="size-4 animate-spin" /> Enviando…
           </li>
         )}
@@ -1366,7 +1445,7 @@ function WorklogSection({ cardId }: { cardId: string }) {
       {(worklogs ?? []).length > 0 && (
         <ul className="mb-2 space-y-1.5">
           {(worklogs ?? []).map((w: Worklog) => (
-            <li key={w.id} className="flex items-start gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2.5 py-1.5">
+            <li key={w.id} className="flex items-start gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
               <Avatar initials={initials(w.author_name)} size="sm" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -1396,13 +1475,13 @@ function WorklogSection({ cardId }: { cardId: string }) {
               value={timeInput}
               onChange={(e) => setTimeInput(e.target.value)}
               placeholder="ex: 1h30m, 45m, 2h"
-              className="w-32 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+              className="w-32 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
             />
             <input
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="Comentário (opcional)"
-              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-900 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
+              className="flex-1 rounded-lg border border-paper-300 bg-paper dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
             />
           </div>
           <div className="flex gap-2">
@@ -1630,6 +1709,11 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
               </Button>
               <span className="text-[11px] text-paper-400">⌘/Ctrl + Enter</span>
             </div>
+            {/* Respostas sugeridas: só fazem sentido quando há conversa para
+                responder, e some assim que a pessoa começa a escrever. */}
+            {(comments?.length ?? 0) > 0 && !body.trim() && (
+              <ReplySuggestions cardId={cardId} onPick={setBody} />
+            )}
           </div>
         </div>
 
@@ -1680,7 +1764,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
               <li className="flex justify-center">
                 <button
                   onClick={() => setVisible((v) => v + PAGE)}
-                  className="rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-1 text-[12px] font-medium text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
+                  className="rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-1 text-[12px] font-medium text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper"
                 >
                   Ver mais antigas ({hidden})
                 </button>
@@ -1690,7 +1774,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
               item.kind === "comment" ? (
                 <li key={`c-${item.data.id}`} className="flex gap-2.5">
                   <Avatar initials={initials(item.data.author_name)} size="sm" />
-                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2">
+                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-2">
                     <div className="mb-0.5 flex items-center gap-2">
                       <Badge tone="outline" className="rounded-full px-2 py-0.5 text-[10px]">
                         Comentário
@@ -1708,7 +1792,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
                   <div className="pt-0.5">
                     <Avatar initials={initials(item.data.author_name)} size="sm" />
                   </div>
-                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2">
+                  <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-2">
                     <div className="mb-0.5 flex items-center gap-2">
                       <Badge tone="outline" className="rounded-full px-2 py-0.5 text-[10px]">
                         Alteração
@@ -1779,7 +1863,7 @@ function StatusDropdown({
                   }}
                   className={cx(
                     "flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-paper-100 dark:hover:bg-ink-700",
-                    s === value && "bg-paper-50 dark:bg-ink-900",
+                    s === value && "bg-paper-50 dark:bg-ink-800",
                   )}
                 >
                   <StatusLozenge status={s} />
@@ -1875,7 +1959,7 @@ function Section({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="-ml-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-sm font-semibold text-ink dark:text-paper transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 focus-ring"
+          className="-ml-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-base font-semibold text-ink dark:text-ink-200 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 focus-ring"
         >
           <Chevron open={open} />
           {title}
@@ -1901,13 +1985,15 @@ function SidePanel({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900">
+    // No dark o painel é a mesma cor do modal: quem o desenha é a borda de
+    // 1px translúcida (`--ds-border`), não uma superfície mais clara.
+    <section className="rounded-lg border border-paper-200 bg-white dark:border-ink-700 dark:bg-transparent">
       <div className="flex items-center gap-1.5 px-3 py-2">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex flex-1 items-center gap-1.5 rounded text-left text-sm font-semibold text-ink dark:text-paper focus-ring"
+          className="flex flex-1 items-center gap-1.5 rounded text-left text-base font-semibold text-ink dark:text-ink-200 focus-ring"
         >
           <Chevron open={open} />
           {title}
@@ -1968,18 +2054,18 @@ function EpicSelect({
 
   return (
     <DetailRow label="Epic">
-      <div className="relative">
+      <div className="group relative">
         <select
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value || null)}
-          className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-2.5 pr-7 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+          className={cx(FIELD_INLINE, "h-8 pr-6")}
         >
           <option value="">Sem épico</option>
           {(epics ?? []).map((e) => (
             <option key={e.id} value={e.id}>{e.ref} · {e.title}</option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-paper-400" />
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-paper-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" />
       </div>
       {selected && (
         <span
@@ -1995,8 +2081,8 @@ function EpicSelect({
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[90px_1fr] items-start gap-2 py-1">
-      <span className="pt-1.5 text-xs font-medium text-paper-500 leading-tight">{label}</span>
+    <div className="grid grid-cols-[112px_1fr] items-start gap-2 py-1">
+      <span className="pt-1.5 text-sm font-medium leading-tight text-paper-500 dark:text-ink-300">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
   )
@@ -2025,6 +2111,16 @@ function ToolbarButton({
   )
 }
 
+// Campo do painel lateral no padrão do Jira: o valor é texto plano, sem caixa.
+// A borda de 2px é transparente em repouso e só aparece no hover/foco — é ela
+// que faz o campo parecer "somente leitura até você tocar", em vez de um
+// formulário permanente de selects. Medidas lidas do Jira: altura 32px,
+// padding 0 6px, raio 6px.
+const FIELD_INLINE =
+  "w-full cursor-pointer appearance-none rounded-md border-2 border-transparent bg-transparent px-1.5 text-sm text-ink outline-none transition-colors " +
+  "hover:bg-paper-100 focus:border-brand-500 focus:bg-white " +
+  "dark:text-ink-200 dark:hover:bg-ink-800 dark:focus:border-brand-300 dark:focus:bg-ink-800"
+
 function DetailSelect({
   label,
   value,
@@ -2044,7 +2140,7 @@ function DetailSelect({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-2.5 pr-7 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+          className={cx(FIELD_INLINE, "h-8", renderValue ? "pl-7" : "")}
         >
           {options.map((o) => (
             <option key={o.value} value={o.value} className="text-ink dark:text-paper">
@@ -2090,7 +2186,7 @@ function PersonSelect({
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="w-full cursor-pointer rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-colors"
+        className={cx(FIELD_INLINE, "h-8")}
       >
         <option value="">Ninguém</option>
         {members.map((m) => (
@@ -2108,7 +2204,7 @@ function DateInput({ value, onChange }: { value: string | null; onChange: (v: st
 
   return (
     <div className="relative flex items-center group date-input-wrapper">
-      <Calendar className="pointer-events-none absolute left-3 z-10 size-4 text-paper-400 transition-colors group-hover:text-paper-500 group-focus-within:text-brand-400" />
+      <Calendar className="pointer-events-none absolute left-1.5 z-10 size-3.5 text-paper-400 transition-colors group-hover:text-paper-500 group-focus-within:text-brand-400" />
       <DatePicker
         selected={selected}
         onChange={(date: Date | null) => onChange(date ? date.toISOString().slice(0, 10) : null)}
@@ -2117,7 +2213,7 @@ function DateInput({ value, onChange }: { value: string | null; onChange: (v: st
         placeholderText="dd/mm/aaaa"
         popperPlacement="bottom-start"
         withPortal={false}
-        className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-800 py-1.5 pl-9 pr-3 text-sm text-ink dark:text-paper outline-none transition-colors hover:border-paper-300 dark:hover:border-ink-600 focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20"
+        className={cx(FIELD_INLINE, "h-8 pl-7")}
         isClearable
         clearButtonTitle="Limpar"
         wrapperClassName="w-full"

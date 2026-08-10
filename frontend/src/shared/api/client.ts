@@ -8,6 +8,9 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 })
 
+const GENERIC_API_ERROR = "Não foi possível concluir. Tente novamente."
+const GENERIC_UNEXPECTED_ERROR = "Erro inesperado. Tente novamente."
+
 // Anexa o access token (quando houver) a cada requisição
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
@@ -76,14 +79,49 @@ api.interceptors.response.use(
 )
 
 // Extrai mensagem de erro padronizada da API (campo "error" ou "detail")
+function toErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const text = value.trim()
+    return text.length > 0 ? text : null
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = toErrorMessage(item)
+      if (message) return message
+    }
+    return null
+  }
+
+  if (!value || typeof value !== "object") return null
+
+  const record = value as Record<string, unknown>
+  const priorityKeys = ["error", "detail", "message", "non_field_errors"]
+  for (const key of priorityKeys) {
+    const message = toErrorMessage(record[key])
+    if (message) return message
+  }
+
+  const ignoredKeys = new Set(["code", "status", "type"])
+  for (const [key, nested] of Object.entries(record)) {
+    if (ignoredKeys.has(key)) continue
+    const message = toErrorMessage(nested)
+    if (message) return message
+  }
+
+  return null
+}
+
 export function extractApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as
-      | { error?: string; detail?: string }
-      | undefined
-    return (
-      data?.error ?? data?.detail ?? "Não foi possível concluir. Tente novamente."
-    )
+    const payloadMessage = toErrorMessage(error.response?.data)
+    if (payloadMessage) return payloadMessage
+    return error.message || GENERIC_API_ERROR
   }
-  return "Erro inesperado. Tente novamente."
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return GENERIC_UNEXPECTED_ERROR
 }

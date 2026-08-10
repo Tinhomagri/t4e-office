@@ -19,6 +19,7 @@ from contexts.projects.application.use_cases.update_card import UpdateCard
 from contexts.projects.application.use_cases.update_sprint import UpdateSprint
 from contexts.projects.domain.entities.card import Card
 from contexts.projects.domain.entities.sprint import Sprint
+from contexts.projects.infrastructure.django.models import DocumentModel
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoCardRepository,
     DjangoHistoryRepository,
@@ -43,6 +44,23 @@ ENUM_CHANNEL = [
     "instagram", "facebook", "linkedin", "tiktok",
     "youtube", "blog", "email", "site",
 ]
+
+
+def _text_to_html(text: str) -> str:
+    """Texto puro do acervo → HTML da aba Documentos.
+
+    O editor da aba guarda HTML; jogar o texto cru lá dentro perderia os
+    parágrafos e abriria espaço para o conteúdo do documento ser interpretado
+    como marcação, então escapamos e quebramos por linha.
+    """
+    escaped = (
+        (text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    lines = [ln.strip() for ln in escaped.split("\n")]
+    return "".join(f"<p>{ln}</p>" for ln in lines if ln) or "<p></p>"
 
 
 class ProjectsProvider:
@@ -261,6 +279,13 @@ class ProjectsProvider:
             "update_card": "Altera um card existente (status, pontos, sprint…).",
             "create_sprint": "Cria uma sprint no projeto.",
             "update_sprint": "Altera nome, meta, status ou datas de uma sprint.",
+            "save_document_to_project": (
+                "Salva na aba Documentos de um projeto o texto de um documento "
+                "importado (transcrição, ata, anexo do chat). Use quando o "
+                "usuário pedir para 'salvar/guardar o documento no projeto' — o "
+                "que a IA lê em list_documents fica no acervo do workspace, que "
+                "é um lugar diferente da aba Documentos do board."
+            ),
         }
 
     def write_schema(self) -> dict:
@@ -288,6 +313,16 @@ class ProjectsProvider:
             "publish_date": {
                 "type": "string",
                 "description": "Data de publicação YYYY-MM-DD (calendário editorial).",
+            },
+            "document_id": {
+                "type": "string",
+                "description": "Id do documento importado (de list_documents), "
+                "a ser salvo na aba Documentos do projeto.",
+            },
+            "document_title": {
+                "type": "string",
+                "description": "Título do documento no projeto. Sem isto, usa o "
+                "título do documento de origem.",
             },
             "sprint_name": {"type": "string"},
             "goal": {"type": "string"},
@@ -334,6 +369,34 @@ class ProjectsProvider:
             "ref": ref,
             "title": card.title,
             "status": status,
+        }
+
+    def _write_save_document_to_project(self, a: dict) -> dict:
+        """Copia um documento do acervo do workspace para a aba Documentos.
+
+        São dois repositórios distintos: o acervo do copiloto guarda o texto
+        extraído para a IA ler, e a aba Documentos guarda um documento
+        colaborativo do projeto. Salvar aqui é uma cópia consciente — o
+        original continua no acervo, disponível para novas leituras.
+        """
+        project = self.project_or_raise(a["project_id"])
+        doc = self._docs.get(document_id=a["document_id"])
+        if doc is None or doc.workspace_id != self.workspace_id:
+            raise ValidationError("Documento não encontrado neste workspace.")
+
+        title = (a.get("document_title") or doc.title or "Sem título")[:200]
+        row = DocumentModel.objects.create(
+            project_id=project.id,
+            title=title,
+            content=_text_to_html(doc.text),
+            created_by=self.actor_id,
+            updated_by=self.actor_id,
+        )
+        return {
+            "action": "save_document_to_project",
+            "id": str(row.id),
+            "title": row.title,
+            "project": project.key,
         }
 
     def resolve_card_id(self, ref: str) -> str:

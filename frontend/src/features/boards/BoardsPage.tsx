@@ -21,6 +21,7 @@ import {
 import { AnimatePresence } from "framer-motion"
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { useCopilotContextStore } from "@/features/copilot/copilot.context.store"
 
 import { ResumoView } from "./views/ResumoView"
 import { ListaView } from "./views/ListaView"
@@ -157,6 +158,23 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
   }, [projects, projectId])
 
   const activeProject = projects?.find((p) => p.id === projectId) ?? null
+
+  // Projeto aberto como contexto do Copiloto. O CardDrawer publica sob a chave
+  // "card" e sobrepõe este enquanto estiver aberto — quem está lendo um card
+  // pergunta sobre o card, não sobre o board inteiro.
+  const setCopilotContext = useCopilotContextStore((s) => s.setContext)
+  const clearCopilotContext = useCopilotContextStore((s) => s.clearContext)
+  useEffect(() => {
+    if (!activeProject) return
+    setCopilotContext("project", {
+      label: `${activeProject.key} · ${activeProject.name}`,
+      hint:
+        `O usuário está no board do projeto "${activeProject.name}" ` +
+        `(key ${activeProject.key}, project_id="${activeProject.id}"). Quando ` +
+        `ele disser "este projeto" ou "este board", é deste que se trata.`,
+    })
+    return () => clearCopilotContext("project")
+  }, [activeProject, setCopilotContext, clearCopilotContext])
 
   // Porta de entrada por tipo: projeto de marketing abre no dashboard/calendário
   // (aba "marketing"), software abre no quadro. Só decide ao TROCAR de projeto e
@@ -330,6 +348,14 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  // Botão "Criar" na top bar dispara este evento (AppShell) em vez de duplicar
+  // o modal — mesmo fluxo do atalho "c".
+  useEffect(() => {
+    const onCreate = () => setNewCardStatus("todo")
+    window.addEventListener("app:create-card", onCreate)
+    return () => window.removeEventListener("app:create-card", onCreate)
+  }, [])
+
   if (isLoading) return <BoardSkeleton />
 
   const allCards = cards ?? []
@@ -411,7 +437,7 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   } else if (view === "resumo") {
     inner = <ResumoView cards={allCards} sprints={sprints ?? []} members={members ?? []} projectId={projectId} />
   } else if (view === "lista") {
-    inner = <ListaView cards={allCards} members={members ?? []} sprints={sprints ?? []} onOpen={setOpenCard} />
+    inner = <ListaView cards={allCards} members={members ?? []} sprints={sprints ?? []} projectId={projectId} onOpen={setOpenCard} />
   } else if (view === "cronograma") {
     inner = <CronogramaView cards={allCards} sprints={sprints ?? []} members={members ?? []} onOpen={setOpenCard} />
   } else if (view === "calendario") {

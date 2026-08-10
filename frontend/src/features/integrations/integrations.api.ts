@@ -4,8 +4,10 @@ import type {
   CalendarEvent,
   CreateMeetingInput,
   GoogleStatus,
+  MeetingParticipationReport,
   MeetingResult,
   TimeSlot,
+  UpdateMeetingInput,
 } from "./integrations.types"
 
 // ---- Conexão Google (OAuth) ----
@@ -53,5 +55,24 @@ export async function suggestTimes(params: {
 
 export async function createMeeting(input: CreateMeetingInput): Promise<MeetingResult> {
   const { data } = await api.post<MeetingResult>("/google/meetings/", input)
+  return data
+}
+
+export async function updateMeeting(
+  eventId: string,
+  input: UpdateMeetingInput,
+): Promise<MeetingResult> {
+  const { data } = await api.patch<MeetingResult>(`/google/meetings/${eventId}/`, input)
+  return data
+}
+
+export async function cancelMeeting(eventId: string): Promise<void> {
+  await api.delete(`/google/meetings/${eventId}/`)
+}
+
+export async function getMeetingReport(days = 30): Promise<MeetingParticipationReport> {
+  const { data } = await api.get<MeetingParticipationReport>("/google/meetings/report/", {
+    params: { days },
+  })
   return data
 }

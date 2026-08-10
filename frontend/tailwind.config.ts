@@ -8,11 +8,13 @@ import type { Config } from "tailwindcss"
 // Nunca usar hex solto no JSX — sempre via token.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
-  // "class" simples deixaria o conteúdo embutido no PC Win98 herdar o dark
-  // mode do app (o <html class="dark">), enquanto a tela do PC é sempre clara
-  // (bg-white fixo em Win98Window). Exclui .win98-sunken da herança para que
-  // board e chrome do PC fiquem no mesmo tema.
-  darkMode: ["variant", "&:is(.dark *):not(.win98-sunken):not(.win98-sunken *)"],
+  // O PC do escritório embute as MESMAS páginas do produto: elas têm que
+  // seguir o tema do app dentro e fora da janela 98. Havia aqui um
+  // `:not(.win98-sunken)` que desligava o dark mode dentro do PC (a tela era
+  // `bg-white` fixo) — o efeito era a mesma página abrir com outro visual só
+  // por estar no PC. A moldura 98 não depende disto: ela é toda `.win98-*`
+  // com cor fixa, sem nenhuma variante `dark:`.
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -100,15 +102,22 @@ export default {
         // que o anterior: página → painel → elevado. Os valores antigos começavam
         // em #0A0B0D (quase preto) e a diferença entre página e painel era tão
         // pequena que as colunas do board não liam como superfície.
+        //
+        // Os hex abaixo foram lidos do Jira em execução (tokens `--ds-surface*`
+        // do Atlassian Design System, tema dark), não estimados: 950 = sunken,
+        // 900 = surface, 800 = raised, 750 = overlay (modais e menus).
         ink: {
-          DEFAULT: "#181A1F",
-          950: "#16181D", // página
-          900: "#1D2125", // painel/coluna
-          800: "#22272B", // elevado/card
-          700: "#2E3338", // borda
+          DEFAULT: "#18191A",
+          950: "#18191A", // sunken — fundo da página
+          900: "#1F1F21", // surface — painel/coluna
+          800: "#242528", // raised — card elevado, input
+          750: "#2B2C2F", // overlay — modal, popover, menu
+          700: "#3D3F43", // borda sólida
           600: "#4A525A",
-          500: "#646E77",
-          400: "#8A939D",
+          500: "#7E8188", // borda de input
+          400: "#96999E", // texto subtlest
+          300: "#A9ABAF", // texto subtle
+          200: "#CECFD2", // texto padrão
         },
         // paper: superfícies claras, bordas e texto suave.
         paper: {
@@ -196,6 +205,11 @@ export default {
         panel: "0 1px 1px rgb(9 30 66 / 0.10), 0 4px 8px -2px rgb(9 30 66 / 0.12)",
         pop: "0 8px 16px -4px rgb(9 30 66 / 0.20), 0 0 1px rgb(9 30 66 / 0.20)",
         "brand-glow": "0 1px 1px rgb(9 30 66 / 0.10), 0 0 1px rgb(9 30 66 / 0.10)",
+        // Sombra de modal do Jira dark (`--ds-shadow-overlay`): um anel claro de
+        // 1px desenha a borda do painel sobre o fundo escuro — sem ele o modal
+        // se funde com a página — e duas camadas escuras dão a profundidade.
+        overlay:
+          "0 0 0 1px rgb(189 189 189 / 0.12), 0 8px 12px rgb(1 4 4 / 0.36), 0 0 1px 1px rgb(1 4 4 / 0.5)",
       },
       keyframes: {
         "fade-up": {

@@ -35,10 +35,12 @@ describe("<StartMenu />", () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it("app desabilitado aparece bloqueado", async () => {
+  it("todo app do grupo está clicável — nenhum item morto no menu", async () => {
     render(<StartMenu onClose={() => {}} />)
     await userEvent.hover(screen.getByText("Sistema"))
-    expect(screen.getByRole("button", { name: "Integrações" })).toBeDisabled()
+    for (const label of ["Agenda", "Avatar", "Membros", "Mesas", "Copiloto"]) {
+      expect(screen.getByRole("button", { name: label })).toBeEnabled()
+    }
   })
 
   it("Levantar desliga o PC", async () => {

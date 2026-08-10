@@ -34,6 +34,11 @@ class CalendarEvent:
     html_link: str
     attendees: list[str] = field(default_factory=list)
     all_day: bool = False
+    description: str = ""
+    # Presente quando o evento é uma ocorrência de uma série recorrente —
+    # o app usa isso só para mostrar o selo "recorrente", não edita a série.
+    recurring_event_id: str | None = None
+    organizer_email: str = ""
 
 
 @dataclass

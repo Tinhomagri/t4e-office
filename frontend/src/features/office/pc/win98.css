@@ -1,6 +1,7 @@
 /* Visual do Windows 98 — tokens e chrome.
-   Escopado em .win98 para não vazar no resto do app. Nesta fatia estiliza só a
-   moldura; o conteúdo das páginas continua com o visual moderno (fatia 2). */
+   Escopado em .win98 para não vazar no resto do app: estiliza a MOLDURA, nunca
+   o conteúdo. A página embutida é a mesma do produto e tem que continuar com a
+   cara do produto — quem garante isso é `.win98-app` lá embaixo. */
 .win98 {
   --w98-face: #c0c0c0;
   --w98-light: #ffffff;
@@ -83,6 +84,26 @@
   cursor: nwse-resize;
   width: 14px;
   height: 14px;
+}
+
+/* Área de conteúdo da janela: sai do 98 e volta a ser o produto.
+   `.win98` define font-family pixel, font-size 12px, color preto e
+   font-smoothing none — tudo herdável. Sem cortar essa herança aqui, a mesma
+   página abria com tipografia e cor diferentes só por estar dentro do PC, e o
+   `bg-white` fixo ignorava o tema escuro do app. */
+.win98-app {
+  font-family: theme("fontFamily.sans");
+  font-size: 1rem;
+  line-height: 1.5;
+  color: theme("colors.ink.DEFAULT");
+  background-color: theme("colors.canvas");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark .win98-app {
+  color: theme("colors.paper.DEFAULT");
+  background-color: theme("colors.ink.950");
 }
 
 @media (prefers-reduced-motion: reduce) {

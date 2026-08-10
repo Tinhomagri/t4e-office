@@ -41,7 +41,8 @@ import {
 } from "./resumo.metrics"
 import type { Card, CardStatus, CardType, Member } from "@/features/workspace/workspace.types"
 
-/** Ordem fixa e validada. Índice = identidade da série, nunca o ranking dela. */
+/** Paleta validada para CVD/contraste. A escolha dentro dela é por chave
+ * (ver `hueMap`), nunca pela posição da fatia no ranking. */
 const HUES = [
   "#0C66E4", // blue-500
   "#22A06B", // green-500
@@ -58,8 +59,54 @@ const OTHER_HUE = "#8590A2"
 
 const MAX_SLICES = 8
 
-function hueFor(key: string, index: number): string {
-  return key === "__other__" ? OTHER_HUE : HUES[index % HUES.length]
+/** Status tem cor com significado: verde é entregue, amarelo é em curso. Herdar
+ * a cor do ranking pintaria "Concluído" de azul só por ser a maior fatia. */
+const STATUS_HUE: Record<string, string> = {
+  backlog: "#8590A2", todo: "#8270DB", doing: "#E2B203", review: "#CD519D", done: "#22A06B",
+  briefing: "#6E5DC6", criacao: "#0C66E4", aprovacao: "#946F00", agendado: "#2898BD", publicado: "#6A9A23",
+}
+
+/** Sem responsável é ausência de dado, não uma pessoa — fica no cinza de "Outros". */
+const UNASSIGNED_HUE = OTHER_HUE
+
+/** Cor que a chave "quer" ter: semântica para status, hash estável no resto. */
+function preferredHue(key: string): string {
+  if (key in STATUS_HUE) return STATUS_HUE[key]
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffff
+  return HUES[h % HUES.length]
+}
+
+/**
+ * Cor derivada da CHAVE, nunca da posição no ranking.
+ *
+ * Colorir por índice fazia todo painel começar no mesmo azul: status, tipo e
+ * responsável saíam com a paleta idêntica na mesma ordem, e os três donuts
+ * pareciam o mesmo gráfico repetido.
+ *
+ * O hash sozinho não basta: duas chaves podem cair no mesmo hue e virar duas
+ * fatias indistinguíveis lado a lado. Por isso a atribuição é resolvida no
+ * conjunto — quem chega e encontra a cor ocupada pega o próximo hue livre.
+ * Determinístico para a mesma lista, e a série mantém a cor entre o donut e a
+ * tendência porque ambos recebem as mesmas fatias.
+ */
+function hueMap(slices: { key: string }[]): Map<string, string> {
+  const out = new Map<string, string>()
+  const used = new Set<string>()
+  // Neutros primeiro: não disputam a paleta, e reservá-los evita que uma
+  // categoria real receba o cinza por acidente de ordem.
+  for (const s of slices) {
+    if (s.key === "__other__") out.set(s.key, OTHER_HUE)
+    if (s.key === "__none__") out.set(s.key, UNASSIGNED_HUE)
+  }
+  for (const s of slices) {
+    if (out.has(s.key)) continue
+    const pref = preferredHue(s.key)
+    const hue = used.has(pref) ? HUES.find((h) => !used.has(h)) ?? pref : pref
+    used.add(hue)
+    out.set(s.key, hue)
+  }
+  return out
 }
 
 // ─── Chrome dos gráficos ──────────────────────────────────────────────────────
@@ -152,14 +199,20 @@ function ChartTooltip({
 }
 
 /** Legenda própria (não a do recharts): quebra em várias linhas e usa ink no texto. */
-function Legend({ slices }: { slices: { label: string; key: string }[] }) {
+function Legend({
+  slices,
+  hues,
+}: {
+  slices: { label: string; key: string }[]
+  hues: Map<string, string>
+}) {
   return (
     <ul className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
-      {slices.map((s, i) => (
+      {slices.map((s) => (
         <li key={s.key} className="flex items-center gap-1 text-[10px] text-paper-500">
           <span
             className="size-2 shrink-0 rounded-full"
-            style={{ backgroundColor: hueFor(s.key, i) }}
+            style={{ backgroundColor: hues.get(s.key) }}
             aria-hidden
           />
           <span className="max-w-[110px] truncate" title={s.label}>
@@ -175,6 +228,7 @@ function Legend({ slices }: { slices: { label: string; key: string }[] }) {
 
 function DonutPanel({ title, slices }: { title: string; slices: Slice[] }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0)
+  const hues = useMemo(() => hueMap(slices), [slices])
   return (
     <Panel title={title}>
       {total === 0 ? (
@@ -196,8 +250,8 @@ function DonutPanel({ title, slices }: { title: string; slices: Slice[] }) {
                   stroke="none"
                   isAnimationActive={false}
                 >
-                  {slices.map((s, i) => (
-                    <Cell key={s.key} fill={hueFor(s.key, i)} />
+                  {slices.map((s) => (
+                    <Cell key={s.key} fill={hues.get(s.key)} />
                   ))}
                 </Pie>
                 <Tooltip content={<ChartTooltip />} />
@@ -213,7 +267,7 @@ function DonutPanel({ title, slices }: { title: string; slices: Slice[] }) {
               </div>
             </div>
           </div>
-          <Legend slices={slices} />
+          <Legend slices={slices} hues={hues} />
         </>
       )}
     </Panel>
@@ -242,6 +296,7 @@ function StackedTrendPanel({
   xFormat: (v: string) => string
 }) {
   const grid = useGridColor()
+  const hues = useMemo(() => hueMap(series), [series])
   const hasData = rows.some((r) => series.some((s) => Number(r[s.key]) > 0))
   return (
     <Panel title={title}>
@@ -249,7 +304,7 @@ function StackedTrendPanel({
         <EmptyPlot />
       ) : (
         <>
-          <Legend slices={series} />
+          <Legend slices={series} hues={hues} />
           <div className="mt-1 h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
@@ -274,7 +329,7 @@ function StackedTrendPanel({
                     dataKey={s.key}
                     name={s.label}
                     stackId="a"
-                    fill={hueFor(s.key, i)}
+                    fill={hues.get(s.key)}
                     // 2px de vão entre segmentos da pilha, mesma razão do donut.
                     stroke="none"
                     strokeWidth={0}

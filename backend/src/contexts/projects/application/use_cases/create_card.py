@@ -2,7 +2,6 @@
 from contexts.projects.domain.entities.card import (
     Card,
     CardPriority,
-    CardStatus,
     CardType,
 )
 from contexts.projects.domain.repositories.card_repository import CardRepository
@@ -65,7 +64,7 @@ class CreateCard:
             number=number,
             title=title,
             description=description,
-            status=CardStatus(status),
+            status=status,
             type=CardType(type),
             priority=CardPriority(priority),
             points=points,

@@ -8,7 +8,6 @@
 import {
   BarChart3,
   Building2,
-  CalendarClock,
   CalendarDays,
   FileText,
   Gauge,
@@ -18,11 +17,14 @@ import {
   ListTodo,
   type LucideIcon,
   Megaphone,
+  MessageCircle,
   MessagesSquare,
+  Monitor,
   Share2,
   Smile,
   Sparkles,
   Spade,
+  Video,
   SquareKanban,
   Target,
   Trophy,
@@ -83,6 +85,9 @@ export const SPACES: Space[] = [
       "/app/integrations",
       "/app/reports",
       "/app/portfolio",
+      "/app/reunioes",
+      "/app/chat",
+      "/app/desks",
     ],
     groups: [
       {
@@ -90,7 +95,8 @@ export const SPACES: Space[] = [
         projects: "software",
         items: [
           { label: "Planning Poker", to: "/app/poker", icon: Spade },
-          { label: "Reuniões", to: "/app/integrations", icon: CalendarClock },
+          { label: "Reuniões", to: "/app/reunioes", icon: Video },
+          { label: "Chat", to: "/app/chat", icon: MessageCircle },
         ],
       },
       {
@@ -104,6 +110,7 @@ export const SPACES: Space[] = [
         heading: "Pessoas",
         items: [
           { label: "Membros", to: "/app/members", icon: UserPlus },
+          { label: "Mesas", to: "/app/desks", icon: Monitor },
           { label: "Avatar", to: "/app/avatar", icon: Smile },
         ],
       },

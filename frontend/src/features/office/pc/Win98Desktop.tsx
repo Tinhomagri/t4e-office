@@ -12,6 +12,17 @@
 // linha do visual 98 — sem erro nenhum para avisar.
 import "./win98.css"
 
+import { useEffect, useMemo, useRef } from "react"
+import {
+  RouterProvider,
+  UNSAFE_LocationContext,
+  UNSAFE_RouteContext,
+  createMemoryRouter,
+} from "react-router-dom"
+
+import { appRoutes } from "@/app/router"
+import { AppShell } from "@/features/shell/AppShell"
+
 import { appById, isEnabled } from "./apps.registry"
 import { BootScreen } from "./BootScreen"
 import { DesktopIcons } from "./DesktopIcons"
@@ -24,6 +35,22 @@ export function Win98Desktop() {
   const windows = usePcStore((s) => s.windows)
   const expandedId = usePcStore((s) => s.expandedId)
   const ready = usePcStore((s) => s.ready)
+  const setViewport = usePcStore((s) => s.setViewport)
+
+  // A área útil do painel é o que o store usa para encaixar janelas novas.
+  // Medir no componente (e não chutar no store) é o que mantém o store sem DOM.
+  const deskRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = deskRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setViewport(Math.round(width), Math.round(height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+    // `state` nas deps: a área só existe no desktop, o ref é null durante o boot.
+  }, [state, setViewport])
 
   if (state === "off") return null
   if (state === "booting") return <BootScreen onDone={ready} />
@@ -32,12 +59,14 @@ export function Win98Desktop() {
 
   return (
     <>
-      {/* Painel: 78% do canvas, centralizado. O escritório continua visível em volta. */}
+      {/* Painel: quase todo o canvas. As páginas embutidas são as do produto,
+          feitas para viewport cheia — sobrar moldura bonita e faltar área útil
+          era o que tornava o PC impossível de usar de verdade. */}
       <div
         data-testid="win98-panel"
-        className="win98 win98-raised win98-wallpaper absolute inset-[11%] flex flex-col overflow-hidden"
+        className="win98 win98-raised win98-wallpaper absolute inset-x-[3%] inset-y-[4%] flex flex-col overflow-hidden"
       >
-        <div className="relative flex-1 overflow-hidden">
+        <div ref={deskRef} className="relative flex-1 overflow-hidden">
           <DesktopIcons />
           {windows
             .filter((w) => w.id !== expandedId)
@@ -71,15 +100,60 @@ export function Win98Desktop() {
   )
 }
 
+/**
+ * Conteúdo de uma janela: o SISTEMA inteiro, na rota daquele app.
+ *
+ * Não é a página solta — é `AppShell` + as mesmas rotas do produto, num router
+ * de memória. Isso é o que dá sidebar, header, seletor de workspace e navegação
+ * dentro da janela: sem eles dava para ver uma tela, não para usar o sistema.
+ *
+ * Memória (e não o histórico do navegador) porque a URL de fora tem que
+ * continuar sendo /app/office: o escritório é onde a pessoa está; a janela é
+ * só uma vista para dentro do produto. Cada janela navega por conta própria.
+ *
+ * Estado e dados são compartilhados de graça — stores e QueryClient vivem acima
+ * na árvore, então workspace, tema e cache são os mesmos de fora do PC.
+ */
 function AppBody({ appId }: { appId: string }) {
   const app = appById(appId)
-  if (!app || !isEnabled(app) || !app.component) {
+  const route = app && isEnabled(app) ? app.route : null
+
+  // Um router por janela, criado uma única vez: recriar a cada render jogaria
+  // a navegação de volta para a rota inicial a cada teclada.
+  const router = useMemo(
+    () =>
+      route
+        ? createMemoryRouter(
+            [{ path: "/app", element: <AppShell />, children: appRoutes }],
+            { initialEntries: [route] },
+          )
+        : null,
+    [route],
+  )
+
+  if (!router) {
     return (
       <div className="grid h-full place-items-center p-6 text-center text-[12px]">
-        <p>Em breve — este app entra na próxima fatia.</p>
+        <p>Este atalho não aponta para nenhuma tela.</p>
       </div>
     )
   }
-  const Page = app.component
-  return <Page />
+  // O escritório já roda dentro do router do navegador, e o React Router recusa
+  // um <Router> dentro de outro. Zerar o LocationContext é o escape oficial
+  // (`UNSAFE_` é o aviso de que é API interna, não de que é gambiarra): o
+  // router de dentro passa a se ver como raiz e navega sozinho, sem tocar na
+  // URL de fora. Só o contexto de rota é isolado — stores e QueryClient
+  // continuam vindo de cima, que é o que mantém os dados sincronizados.
+  // RouteContext também precisa zerar: sem isso o router de dentro herda as
+  // rotas já casadas lá fora (/app/office) como se fossem suas ancestrais, e
+  // resolve tudo para nada — janela em branco, sem erro nenhum no console.
+  return (
+    <UNSAFE_LocationContext.Provider value={null as never}>
+      <UNSAFE_RouteContext.Provider
+        value={{ outlet: null, matches: [], isDataRoute: false }}
+      >
+        <RouterProvider router={router} />
+      </UNSAFE_RouteContext.Provider>
+    </UNSAFE_LocationContext.Provider>
+  )
 }

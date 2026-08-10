@@ -33,9 +33,30 @@ in-app e um copiloto de IA (Claude/OpenAI) integrado por workspace.
 | RF-05 | Dashboard por status/prazo/responsável | frontend "Meu Dia" + endpoints de métricas |
 | RF-06 | Notificação in-app ao atribuir/mencionar | `projects` (`NotificationModel`) |
 
-**Diferenciais implementados:** copiloto IA, integração GitHub (OAuth+webhook), integração
-Google (Calendar/Meet), busca/filtros salvos, sub-tarefas e dependências, upload de anexos,
-tags/componentes/versões, dark/light, responsivo.
+**Diferenciais implementados**
+
+| Da lista do challenge | Onde |
+|---|---|
+| Funcionalidade assistida por IA | Copiloto por workspace (`copilot`), sugestão de campos no card |
+| Busca global & filtros | Busca por JQL + filtros salvos (`SavedFilterModel`) |
+| Sub-tarefas & dependências | `parent_id`, épicos e `IssueLinkModel` |
+| Upload de arquivos | Anexos com versionamento (`AttachmentModel`) |
+| Tags customizáveis | Labels, componentes e versões |
+| Relatórios PDF/CSV | Proposta comercial em PDF (WeasyPrint) e import/export CSV de leads |
+| Integração externa | GitHub (OAuth + webhook), Google (Calendar/Meet/Chat), Chatwoot |
+| Dark/light | Tema completo em tokens do Atlassian Design System |
+| Responsividade mobile | Layout do board e do shell adaptativos |
+
+**Além da lista** — o que o produto tem de próprio, e é onde ele deixa de ser um clone:
+
+- **Escritório isométrico** com presença em tempo real: quem está online aparece sentado, e
+  passar o mouse mostra o card em que a pessoa está trabalhando agora.
+- **Planning Poker** com mesa, cartas e emotes — estimativa sem sair do produto.
+- **Meu Dia** que atravessa todos os workspaces da pessoa (`GET /api/me/work/`), em vez de
+  seguir o seletor de workspace.
+- **Automações** por projeto com log de execução.
+- **CRM comercial** (deals, propostas, metas) e **Marketing** (aprovação de peça, métricas)
+  como bounded contexts próprios, não como campo extra no card.
 
 ---
 
@@ -99,7 +120,9 @@ pelas colunas, além de notificações de exemplo. Usuários (senha `demo1234`):
 | `ana@t4e.dev` | member |
 | `bruno@t4e.dev` | member |
 
-O comando é **idempotente** — rodar de novo não duplica dados.
+O comando é **idempotente** — rodar de novo não duplica dados. Verificado em banco limpo:
+duas execuções seguidas deixam os mesmos 3 usuários, 1 projeto, 1 sprint, 8 cards e 6
+notificações, e as três credenciais autenticam.
 
 ---
 
@@ -107,25 +130,50 @@ O comando é **idempotente** — rodar de novo não duplica dados.
 
 Rodam no CI a cada push/PR (`.github/workflows/ci.yml`).
 
-**Backend** (pytest — 70 testes):
+**Backend** (pytest — **454 testes** em 42 arquivos):
 
 ```bash
 cd backend
 pytest -q                                    # unit + integração
-pytest --cov=src --cov-report=term-missing   # cobertura
+pytest --cov=src --cov-report=term-missing   # cobertura por arquivo
 ```
 
 Cobre use cases de identidade, permissões de projeto, ágil (Lexorank/épicos/sprints),
 notificações (RF-06), filtros salvos, documentos, copiloto, regras do Planning Poker
 e fluxo OAuth Google.
 
-**Frontend** (Vitest + Testing Library — 14 testes):
+**Frontend** (Vitest + Testing Library — **495 testes** em 54 arquivos):
 
 ```bash
 cd frontend
 npm test                       # unit (utils, stores, avatar) + componente
 npm run test:coverage
 ```
+
+13 desses arquivos renderizam componente de verdade com Testing Library (board, Meu Dia,
+escritório, Win98Desktop); o resto cobre regra pura — reducers, stores, projeção
+isométrica e formatação.
+
+**Cobertura**
+
+| | Linhas | Branches | Como reproduzir |
+|---|---|---|---|
+| Backend | **75%** (17.300 linhas) | — | `cd backend && pytest --cov=src --cov-report=term-missing` |
+| Frontend | 15,8% | **80,7%** | `cd frontend && npm run test:coverage` |
+
+O CI roda a versão do backend a cada push e PR; o relatório por arquivo fica na saída do job
+*Backend (lint + tests)*.
+
+Os dois números do frontend medem coisas diferentes e o baixo é o menos informativo: o
+denominador de linhas inclui todo `.tsx` de apresentação (SVG do escritório, editor rico,
+menus), enquanto o que a suíte cobre é regra — stores, reducers de board, projeção
+isométrica, formatação de data e permissão. Daí 15,8% de linhas com 80,7% dos ramos de
+decisão cobertos.
+
+A suíte do backend roda com `config.settings.test`, que fixa SQLite em memória. Não é
+detalhe: com `dev`, `DATABASE_URL` vinha do `.env.local` e o pytest tentava criar o banco de
+teste **no Postgres de produção** — a suíte levava mais de 15 minutos presa em rede em vez
+dos ~6 segundos atuais.
 
 Atalho: `make test` roda os dois.
 
@@ -143,10 +191,13 @@ Detalhes e decisões em [`docs/adr/`](docs/adr/) e [`docs/`](docs/).
 
 ## Deploy
 
-Aplicação publicada em: **_(URL pública — preencher)_**
+Aplicação publicada em: **https://t4e-office.vercel.app**
 
-- Backend: container Django (Gunicorn) + Postgres gerenciado.
-- Frontend: build estático (`npm run build`) servido via CDN/Vercel.
+Backend e frontend saem do mesmo deploy na Vercel: o frontend é build estático
+(`npm run build`) e o Django roda como função serverless sob `/api/` (ver `vercel.json` e
+`api/`). Banco: Postgres gerenciado.
+
+Credenciais de avaliação e dados de exemplo: ver [Seed de avaliação](#seed-de-avaliação).
 
 ---
 
@@ -159,4 +210,23 @@ Aplicação publicada em: **_(URL pública — preencher)_**
 
 ## Screenshots
 
-> _(adicionar prints do board Kanban, dashboard "Meu Dia" e copiloto antes da entrega)_
+**Board Kanban** — colunas customizáveis, peso por coluna, scope por sprint, filtros rápidos
+e as demais visões do projeto (Backlog, Lista, Cronograma, Calendário, Metas,
+Desenvolvimento, Documentos, Automações).
+
+![Board Kanban do projeto DEMO](docs/img/board-kanban.png)
+
+**Meu Dia** — visão pessoal que atravessa todos os workspaces: KPIs do dia, burndown real da
+sprint, agenda do Google e follow-ups do comercial na mesma tela.
+
+![Dashboard Meu Dia](docs/img/meu-dia.png)
+
+**Planning Poker** — estimativa em tempo real, com fila de votação puxada dos cards do
+projeto e resultado gravado no peso do card.
+
+![Sala de Planning Poker](docs/img/planning-poker.png)
+
+**Escritório** — presença em tempo real numa planta isométrica: cada pessoa online aparece
+sentada, com status, e passar o mouse mostra o card em que ela está trabalhando agora.
+
+![Escritório isométrico](docs/img/escritorio.png)

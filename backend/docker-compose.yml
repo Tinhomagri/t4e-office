@@ -31,6 +31,22 @@ services:
     ports:
       - "6379:6379"
 
+  # SFU das reuniões. Um SFU recebe um stream de cada participante e o
+  # redistribui, em vez de cada um enviar para todos (mesh) — é o que permite
+  # sala de 20+ sem estourar o upload de quem fala. Self-hosted: sem custo por
+  # minuto e sem dependência de terceiro em runtime.
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --node-ip 127.0.0.1
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    ports:
+      - "7880:7880"      # API/WebSocket de sinalização
+      - "7881:7881"      # WebRTC sobre TCP (fallback de firewall)
+      - "50000-50100:50000-50100/udp"  # mídia RTP
+    depends_on:
+      - redis
+
   # Worker de filas — uso adiado (métricas/automações). Mantido pronto.
   celery:
     build: .

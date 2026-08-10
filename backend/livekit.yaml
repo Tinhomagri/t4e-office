@@ -1,0 +1,24 @@
+# Configuração do SFU de reuniões (dev).
+#
+# As chaves aqui são de DESENVOLVIMENTO e ficam versionadas de propósito, para
+# `docker compose up` funcionar sem setup. Em produção use LIVEKIT_API_KEY /
+# LIVEKIT_API_SECRET no ambiente — o servidor lê `keys` do env quando presente,
+# e o backend assina os tokens com o mesmo par.
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Em dev tudo roda em localhost, então não há NAT a atravessar. Em produção
+  # troque por `use_external_ip: true` e abra a faixa UDP acima.
+  use_external_ip: false
+
+redis:
+  address: redis:6379
+
+keys:
+  devkey: devsecret_troque_em_producao_0123456789abcdef
+
+logging:
+  level: info

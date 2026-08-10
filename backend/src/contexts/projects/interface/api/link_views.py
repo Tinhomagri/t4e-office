@@ -49,7 +49,7 @@ def _link_payload(link, card_id, cards_repo, project_key) -> dict:
             "id": other.id,
             "ref": f"{project_key}-{other.number}",
             "title": other.title,
-            "status": other.status.value,
+            "status": other.status,
             "type": other.type.value,
         }
         if other

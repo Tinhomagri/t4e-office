@@ -190,6 +190,19 @@ export async function listCards(projectId: string, jql?: string): Promise<Card[]
   return data
 }
 
+// Visão pessoal: cards meus + sprints relevantes de TODOS os workspaces em uma
+// requisição. O fan-out por projeto (useWorkspaceCards) só enxerga o workspace
+// ativo, e o "Meu Dia" é sobre a pessoa, não sobre o workspace selecionado.
+export interface MyWork {
+  cards: (Card & { project_key: string; project_name: string })[]
+  sprints: Sprint[]
+}
+
+export async function getMyWork(): Promise<MyWork> {
+  const { data } = await api.get<MyWork>("/me/work/")
+  return data
+}
+
 export async function createCard(
   projectId: string,
   payload: CreateCardInput,

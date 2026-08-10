@@ -562,6 +562,7 @@ class NotificationModel(models.Model):
         ("card_approval", "Peça aprovada/reprovada"),
         ("automation_ran", "Automação executada"),
         ("sprint_started", "Sprint iniciada"),
+        ("meeting_reminder", "Lembrete de reunião"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

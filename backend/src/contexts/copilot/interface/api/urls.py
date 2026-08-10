@@ -1,6 +1,7 @@
 """Rotas do contexto copilot."""
 from django.urls import path
 
+from contexts.copilot.interface.api.card_ai_views import CardSuggestView
 from contexts.copilot.interface.api.marketing_views import (
     BrandKitView,
     GenerateCampaignView,
@@ -35,6 +36,7 @@ urlpatterns = [
     path("ai-config/test/", AiConfigTestView.as_view(), name="ai-config-test"),
     path("chat/", CopilotChatView.as_view(), name="copilot-chat"),
     path("write-assist/", WriteAssistView.as_view(), name="copilot-write-assist"),
+    path("card-suggest/", CardSuggestView.as_view(), name="copilot-card-suggest"),
     path("agent/execute/", AgentExecuteView.as_view(), name="copilot-agent-execute"),
     path("metrics/", CopilotMetricsView.as_view(), name="copilot-metrics"),
     path("feedback/", CopilotFeedbackView.as_view(), name="copilot-feedback"),

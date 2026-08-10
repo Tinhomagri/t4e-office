@@ -59,6 +59,7 @@ from contexts.projects.interface.api.marketing_views import (
     MarketingAssetsView,
     MarketingReportView,
 )
+from contexts.projects.interface.api.me_views import MyWorkView
 from contexts.projects.interface.api.notification_views import (
     NotificationDetailView,
     NotificationListView,
@@ -79,6 +80,8 @@ from contexts.projects.interface.api.views import ProjectListCreateView
 
 urlpatterns = [
     path("anonymous-reports/", AnonymousReportCreateView.as_view(), name="anonymous-report-create"),
+    # Visão pessoal: agrega todos os workspaces da pessoa (ver me_views.py).
+    path("me/work/", MyWorkView.as_view(), name="my-work"),
     path("projects/", ProjectListCreateView.as_view(), name="project-list-create"),
     # Configuração de quadro/projeto (aba Geral + swimlanes/layout/cores)
     path("projects/<uuid:project_id>/", ProjectDetailView.as_view(), name="project-detail"),

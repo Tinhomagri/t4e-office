@@ -283,6 +283,7 @@ export type PendingActionKind =
   | "update_card"
   | "create_sprint"
   | "update_sprint"
+  | "save_document_to_project"
   // comercial
   | "create_deal"
   | "update_deal"
@@ -307,6 +308,8 @@ export interface PendingAction {
   sprint_id?: string
   sprint_name?: string
   goal?: string
+  document_id?: string
+  document_title?: string
   start_date?: string
   end_date?: string
   // comercial
@@ -463,18 +466,79 @@ export type WriteAssistAction =
   | "shorten"
   | "to_bullets"
   | "acceptance_criteria"
+  | "change_tone"
+  | "translate"
+
+// Alvos das ações que precisam de um. Espelham os catálogos de
+// `writing_skills.py` — o backend rejeita qualquer valor fora deles.
+export const TONES = [
+  { key: "professional", label: "Profissional" },
+  { key: "casual", label: "Casual" },
+  { key: "empathetic", label: "Empático" },
+  { key: "direct", label: "Direto" },
+  { key: "educational", label: "Didático" },
+] as const
+
+export const LANGUAGES = [
+  { key: "pt-BR", label: "Português (BR)" },
+  { key: "en", label: "Inglês" },
+  { key: "es", label: "Espanhol" },
+  { key: "fr", label: "Francês" },
+  { key: "de", label: "Alemão" },
+  { key: "it", label: "Italiano" },
+] as const
 
 export async function writeAssist(
   workspaceId: string,
   text: string,
   action: WriteAssistAction,
   instruction = "",
+  target = "",
 ): Promise<string> {
   const { data } = await api.post<{ text: string }>("/copilot/write-assist/", {
     workspace_id: workspaceId,
     text,
     action,
     instruction,
+    target,
   })
   return data.text
+}
+
+// ── Sugestões ancoradas num card ("Melhorar tarefa") ────────────────────────
+export interface SuggestedSubtask {
+  title: string
+  reason: string
+}
+
+export interface SuggestedLink {
+  ref: string
+  card_id: string
+  title: string
+  relation: "relates" | "blocks" | "duplicates"
+  reason: string
+}
+
+export async function suggestSubtasks(cardId: string): Promise<SuggestedSubtask[]> {
+  const { data } = await api.post<{ subtasks: SuggestedSubtask[] }>(
+    "/copilot/card-suggest/",
+    { card_id: cardId, kind: "subtasks" },
+  )
+  return data.subtasks ?? []
+}
+
+export async function suggestSimilar(cardId: string): Promise<SuggestedLink[]> {
+  const { data } = await api.post<{ similar: SuggestedLink[] }>(
+    "/copilot/card-suggest/",
+    { card_id: cardId, kind: "similar" },
+  )
+  return data.similar ?? []
+}
+
+export async function suggestReplies(cardId: string): Promise<string[]> {
+  const { data } = await api.post<{ replies: string[] }>("/copilot/card-suggest/", {
+    card_id: cardId,
+    kind: "replies",
+  })
+  return data.replies ?? []
 }

@@ -338,6 +338,7 @@ class WriteAssistView(APIView):
             text=v["text"],
             action=v["action"],
             instruction=v.get("instruction", ""),
+            target=v.get("target", ""),
         )
         metrics.log_event(
             workspace_id=workspace_id, actor_id=str(request.user.id), kind="write_assist"
