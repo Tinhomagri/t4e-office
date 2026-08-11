@@ -42,6 +42,6 @@ function Tiles({ engine, localAudio }: { engine: React.MutableRefObject<OfficeEn
   })}</>
 }
 
-export function OfficeVideoOverlay({ session, engine, audio, video, onMediaError }: { session: JoinResult; engine: React.MutableRefObject<OfficeEngine | null>; audio: boolean; video: boolean; onMediaError?: (kind: MediaKind, error: unknown) => void }) {
-  return <LiveKitRoom token={session.token} serverUrl={session.url} connect audio={false} video={false} className="absolute inset-0 pointer-events-none"><MediaSync audio={audio} video={video} onError={onMediaError} /><RoomAudioRenderer /><Tiles engine={engine} localAudio={audio} /></LiveKitRoom>
+export function OfficeVideoOverlay({ session, engine, audio, video, onMediaError, showTiles = true }: { session: JoinResult; engine: React.MutableRefObject<OfficeEngine | null>; audio: boolean; video: boolean; onMediaError?: (kind: MediaKind, error: unknown) => void; showTiles?: boolean }) {
+  return <LiveKitRoom token={session.token} serverUrl={session.url} connect audio={false} video={false} className="absolute inset-0 pointer-events-none"><MediaSync audio={audio} video={video} onError={onMediaError} /><RoomAudioRenderer />{showTiles && <Tiles engine={engine} localAudio={audio} />}</LiveKitRoom>
 }

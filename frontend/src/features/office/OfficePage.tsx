@@ -10,6 +10,7 @@ import { saveAvatarConfig } from "./office.api"
 import { useMyAvatar, useRoom } from "./office.hooks"
 import { OfficeRoom } from "./OfficeRoom"
 import { PresenceBar, StatusLegend } from "./PresenceBar"
+import { usePcStore } from "./pc/pc.store"
 import { useWorldStore } from "./world.store"
 import { MOCK_WORKSPACE_ID, isOfficeMock } from "./office.mock"
 import { randomAvatar } from "@/features/avatar/avatar.random"
@@ -65,6 +66,7 @@ function OfficeInner({ workspaceId, mock = false }: { workspaceId: string; mock?
   const floor = useWorldStore((s) => s.floor)
   const room = useRoom(mock ? null : workspaceId, floor)
   const mockConfig = useMemo(() => randomAvatar(42, "Admin Demo"), [])
+  const pcOn = usePcStore((s) => s.state) !== "off"
 
   // Se o avatar existe local mas ainda não no servidor, persiste para que os
   // outros consigam te ver na sala.
@@ -119,15 +121,19 @@ function OfficeInner({ workspaceId, mock = false }: { workspaceId: string; mock?
     <div className="fixed inset-0 z-30 bg-[#1a1712]">
       <OfficeRoom workspaceId={workspaceId} myConfig={activeConfig} mock={mock} />
 
-      {/* Presença e legenda viram overlay: em tela cheia não há onde empilhar. */}
-      <div className="pointer-events-none absolute bottom-3 right-3 flex max-w-[min(92vw,44rem)] flex-col gap-2">
-        <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
-          <PresenceBar workspaceId={workspaceId} onlineCount={onlineCount} readOnly={mock} />
+      {/* Presença e legenda viram overlay: em tela cheia não há onde empilhar.
+          Some com o PC ligado — a tela do computador ocupa esse canto e o
+          "Levantar" da Taskbar fica bem onde este cartão cairia por cima. */}
+      {!pcOn && (
+        <div className="pointer-events-none absolute bottom-3 right-3 flex max-w-[min(92vw,44rem)] flex-col gap-2">
+          <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
+            <PresenceBar workspaceId={workspaceId} onlineCount={onlineCount} readOnly={mock} />
+          </div>
+          <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
+            <StatusLegend />
+          </div>
         </div>
-        <div className="pointer-events-auto rounded-lg bg-ink-950/70 p-2 backdrop-blur-sm">
-          <StatusLegend />
-        </div>
-      </div>
+      )}
 
       <Link
         to="/app"
