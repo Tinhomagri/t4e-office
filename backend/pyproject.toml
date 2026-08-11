@@ -15,6 +15,9 @@ dependencies = [
     "celery>=5.4",
     "redis>=5.0",
     "channels>=4.1",
+    # Camada de canais do chat em tempo real (WebSocket multi-processo via Redis)
+    "channels-redis>=4.2",
+    "daphne>=4.1",
     # Copiloto IA: Claude + OpenAI + extração de documentos
     "anthropic>=0.40",
     "openai>=1.40",
@@ -72,7 +75,9 @@ mypy_path = "src"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings.dev"
+# `test`, não `dev`: dev lê DATABASE_URL do ambiente e a suíte acabava
+# conectando no Postgres de produção. Ver src/config/settings/test.py.
+DJANGO_SETTINGS_MODULE = "config.settings.test"
 pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 addopts = "--tb=short"

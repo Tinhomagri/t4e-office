@@ -94,6 +94,8 @@ class FakeCalendarGateway(CalendarGateway):
         self.busy = busy or []
         self.events = events or []
         self.create_calls: list[dict] = []
+        self.update_calls: list[dict] = []
+        self.delete_calls: list[str] = []
 
     def create_event(self, **kwargs):
         self.create_calls.append(kwargs)
@@ -102,6 +104,17 @@ class FakeCalendarGateway(CalendarGateway):
             meet_link="https://meet.google.com/abc-defg-hij",
             html_link="https://calendar.google.com/evt-1",
         )
+
+    def update_event(self, *, access_token, event_id, **kwargs):
+        self.update_calls.append({"event_id": event_id, **kwargs})
+        return CreatedMeeting(
+            event_id=event_id,
+            meet_link="https://meet.google.com/abc-defg-hij",
+            html_link="https://calendar.google.com/evt-1",
+        )
+
+    def delete_event(self, *, access_token, event_id):
+        self.delete_calls.append(event_id)
 
     def list_upcoming(self, *, access_token, max_results=10, time_min=None, time_max=None):
         return self.events

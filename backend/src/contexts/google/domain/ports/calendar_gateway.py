@@ -23,8 +23,32 @@ class CalendarGateway(ABC):
         attendees: list[str],
         description: str = "",
         with_meet: bool = True,
+        recurrence: list[str] | None = None,
     ) -> CreatedMeeting:
-        """Cria evento na agenda primária, com Google Meet e convidados."""
+        """Cria evento na agenda primária, com Google Meet e convidados.
+
+        `recurrence`, quando informado, é a(s) linha(s) RRULE/EXRULE cruas do
+        RFC 5545 (ex.: ``["RRULE:FREQ=WEEKLY;COUNT=8"]``) — o app monta a regra,
+        o gateway só repassa pro Google.
+        """
+
+    @abstractmethod
+    def update_event(
+        self,
+        *,
+        access_token: str,
+        event_id: str,
+        title: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        attendees: list[str] | None = None,
+        description: str | None = None,
+    ) -> CreatedMeeting:
+        """Atualiza campos informados de um evento existente (patch parcial)."""
+
+    @abstractmethod
+    def delete_event(self, *, access_token: str, event_id: str) -> None:
+        """Cancela um evento — remove da agenda e notifica convidados."""
 
     @abstractmethod
     def list_upcoming(

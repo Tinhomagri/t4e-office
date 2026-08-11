@@ -14,7 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from contexts.google.infrastructure.django.oauth_provider_impl import (
-    LOGIN_SCOPES,
+    SCOPES,
     GoogleOAuthProvider,
 )
 from contexts.identity.application.use_cases.authenticate_with_google import (
@@ -53,11 +53,52 @@ logger = logging.getLogger(__name__)
 
 
 def _google_login_provider() -> GoogleOAuthProvider:
+    """Provider do login com Google.
+
+    Pede os escopos COMPLETOS (agenda + chat), não só a identidade: quem entra
+    com o Google não deveria ter de "conectar o Google" de novo depois. Com
+    isso o callback já grava a conexão e Agenda/Reuniões/Chat funcionam no
+    primeiro acesso — em troca de uma tela de consentimento mais longa.
+    """
     return GoogleOAuthProvider(
         redirect_uri=settings.GOOGLE_OAUTH_LOGIN_REDIRECT_URI,
-        scopes=LOGIN_SCOPES,
+        scopes=SCOPES,
         include_granted_scopes=False,
     )
+
+
+def _save_google_connection(*, user_id: str, tokens) -> None:
+    """Grava a conexão Google a partir dos tokens do login.
+
+    Silencioso por design: o login não pode falhar porque a integração não
+    pôde ser salva. Sem `refresh_token` (o Google só o manda no primeiro
+    consentimento) não há acesso offline, então nem tentamos — a pessoa
+    conecta pela tela de integrações quando precisar.
+    """
+    if not getattr(tokens, "refresh_token", None):
+        return
+    try:
+        from contexts.google.domain.entities.connection import (
+            ConnectionStatus,
+            GoogleConnection,
+        )
+        from contexts.google.infrastructure.django.repositories_impl import (
+            DjangoConnectionRepository,
+        )
+
+        DjangoConnectionRepository().upsert(
+            connection=GoogleConnection(
+                user_id=str(user_id),
+                google_email=tokens.email or "",
+                refresh_token=tokens.refresh_token,
+                access_token=tokens.access_token,
+                expiry=tokens.expiry,
+                scopes=tokens.scopes,
+                status=ConnectionStatus.ACTIVE,
+            )
+        )
+    except Exception:  # noqa: BLE001 — integração é bônus, login é o essencial
+        logger.warning("Não foi possível salvar a conexão Google do login", exc_info=True)
 
 
 class RegisterView(APIView):
@@ -147,6 +188,11 @@ class GoogleLoginCallbackView(APIView):
                     )
         except ValidationError:
             return redirect(f"{front}{callback_path}?error=no_email")
+
+        # Aproveita os tokens do próprio login como conexão Google. Sem isto
+        # eles seriam descartados e a pessoa cairia num "conecte sua conta"
+        # logo após ter acabado de entrar com essa mesma conta.
+        _save_google_connection(user_id=result.user_id, tokens=tokens)
 
         user_row = UserModel.objects.get(id=result.user_id)
         refresh = RefreshToken.for_user(user_row)

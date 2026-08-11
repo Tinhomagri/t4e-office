@@ -15,12 +15,17 @@ export interface CalendarEvent {
   html_link: string
   attendees: string[]
   all_day: boolean
+  description: string
+  recurring_event_id: string | null
+  organizer_email: string
 }
 
 export interface TimeSlot {
   start: string
   end: string
 }
+
+export type RecurrenceFreq = "none" | "daily" | "weekly" | "monthly"
 
 export interface CreateMeetingInput {
   title: string
@@ -29,10 +34,33 @@ export interface CreateMeetingInput {
   attendees: string[]
   description?: string
   card_id?: string | null
+  recurrence?: string[] | null
+}
+
+export interface UpdateMeetingInput {
+  title?: string
+  start?: string
+  end?: string
+  attendees?: string[]
+  description?: string
 }
 
 export interface MeetingResult {
   event_id: string
   meet_link: string | null
   html_link: string
+}
+
+export interface AttendeeStat {
+  email: string
+  meetings: number
+  minutes: number
+}
+
+export interface MeetingParticipationReport {
+  total_meetings: number
+  total_minutes: number
+  average_minutes: number
+  busiest_weekday: string | null
+  top_attendees: AttendeeStat[]
 }

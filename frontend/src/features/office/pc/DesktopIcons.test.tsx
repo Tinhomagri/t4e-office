@@ -34,14 +34,21 @@ describe("<DesktopIcons />", () => {
     expect(usePcStore.getState().windows.map((w) => w.id)).toEqual(["boards"])
   })
 
-  it("app desabilitado não abre e avisa que vem depois", async () => {
+  it("todo ícone da pasta abre — nenhum atalho morto no desktop", async () => {
     render(<DesktopIcons />)
     await userEvent.dblClick(screen.getByRole("button", { name: /Trabalho/ }))
     const meuDia = screen.getByRole("button", { name: /Meu Dia/ })
-    expect(meuDia).toBeDisabled()
-    expect(meuDia).toHaveAttribute("title", "Em breve")
+    expect(meuDia).toBeEnabled()
     await userEvent.dblClick(meuDia)
-    expect(usePcStore.getState().windows).toHaveLength(0)
+    expect(usePcStore.getState().windows.map((w) => w.id)).toEqual(["myday"])
+  })
+
+  it("Enter abre o ícone em foco — abrir não depende de duplo clique", async () => {
+    render(<DesktopIcons />)
+    await userEvent.dblClick(screen.getByRole("button", { name: /Trabalho/ }))
+    screen.getByRole("button", { name: /Boards/ }).focus()
+    await userEvent.keyboard("{Enter}")
+    expect(usePcStore.getState().windows.map((w) => w.id)).toEqual(["boards"])
   })
 
   it("fechar a pasta volta para as pastas", async () => {

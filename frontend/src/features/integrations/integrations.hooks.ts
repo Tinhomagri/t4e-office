@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import * as gApi from "./integrations.api"
-import type { CreateMeetingInput } from "./integrations.types"
+import type { CreateMeetingInput, UpdateMeetingInput } from "./integrations.types"
 
 export function useGoogleStatus() {
   return useQuery({ queryKey: ["google", "status"], queryFn: gApi.getGoogleStatus })
@@ -59,5 +59,30 @@ export function useCreateMeeting() {
   return useMutation({
     mutationFn: (input: CreateMeetingInput) => gApi.createMeeting(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["google", "events"] }),
+  })
+}
+
+export function useUpdateMeeting() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ eventId, input }: { eventId: string; input: UpdateMeetingInput }) =>
+      gApi.updateMeeting(eventId, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["google", "events"] }),
+  })
+}
+
+export function useCancelMeeting() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (eventId: string) => gApi.cancelMeeting(eventId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["google", "events"] }),
+  })
+}
+
+export function useMeetingReport(enabled: boolean, days = 30) {
+  return useQuery({
+    queryKey: ["google", "meetings", "report", days],
+    queryFn: () => gApi.getMeetingReport(days),
+    enabled,
   })
 }

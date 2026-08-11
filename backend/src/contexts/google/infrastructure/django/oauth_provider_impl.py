@@ -24,6 +24,23 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
+    # Nome de exibição: o login com Google usa `tokens.name` para criar a
+    # conta, e sem este escopo ele volta vazio.
+    "https://www.googleapis.com/auth/userinfo.profile",
+    # Google Chat — autenticação de usuário (não bot): ler espaços/mensagens,
+    # enviar mensagem e criar DM em nome de quem conectou. Escopo restrito —
+    # exige tela de consentimento "Interno" (workspace) pra não passar por
+    # verificação do Google.
+    "https://www.googleapis.com/auth/chat.spaces",
+    "https://www.googleapis.com/auth/chat.messages",
+    "https://www.googleapis.com/auth/chat.memberships.readonly",
+    # spaces.members.list só devolve {name, type} do membro, nunca
+    # displayName/foto — sem este escopo toda mensagem/DM cai no fallback
+    # "Alguém" (confirmado em produção, ver chat_gateway_impl.py).
+    # "people.readonly" NÃO é um escopo real do Google (confirmado: o console
+    # rejeita como inválido) — o certo pra resolver colega do mesmo Workspace
+    # via people.getBatchGet é directory.readonly.
+    "https://www.googleapis.com/auth/directory.readonly",
     "openid",
 ]
 

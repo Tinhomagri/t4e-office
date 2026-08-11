@@ -77,6 +77,13 @@ class AiConfigWriteSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(required=False, default=True)
 
 
+class CardSuggestSerializer(serializers.Serializer):
+    """Entrada das sugestões ancoradas num card ("Melhorar tarefa")."""
+
+    card_id = serializers.CharField()
+    kind = serializers.ChoiceField(choices=["subtasks", "similar", "replies"])
+
+
 class WriteAssistSerializer(serializers.Serializer):
     """Entrada da assistência de escrita no editor de descrição/comentário."""
 
@@ -86,4 +93,10 @@ class WriteAssistSerializer(serializers.Serializer):
     # Pedido livre opcional ("deixe mais formal"), anexado à ação escolhida.
     instruction = serializers.CharField(
         max_length=300, required=False, allow_blank=True, default=""
+    )
+    # Alvo das ações que precisam de um: tom (change_tone) ou idioma
+    # (translate). Quem valida contra o catálogo certo é `writing_skills`,
+    # que sabe qual catálogo vale para cada ação.
+    target = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, default=""
     )

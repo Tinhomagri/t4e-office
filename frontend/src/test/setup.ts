@@ -15,6 +15,17 @@ window.matchMedia = window.matchMedia || ((query: string) => ({
   dispatchEvent: () => false,
 }))
 
+// jsdom não implementa ResizeObserver; quem mede o próprio tamanho (painel do
+// PC, canvas do escritório) usa isso no efeito de montagem. Stub inerte: em
+// jsdom todo elemento tem tamanho 0, então observar de verdade não diria nada.
+globalThis.ResizeObserver =
+  globalThis.ResizeObserver ||
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+
 // jsdom não implementa canvas 2D por padrão; mock para permitir testes de pixel art.
 HTMLCanvasElement.prototype.getContext = function(contextType: string) {
   if (contextType === "2d") {

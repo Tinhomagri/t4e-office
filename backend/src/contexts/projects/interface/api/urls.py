@@ -59,6 +59,7 @@ from contexts.projects.interface.api.marketing_views import (
     MarketingAssetsView,
     MarketingReportView,
 )
+from contexts.projects.interface.api.me_views import MyWorkView
 from contexts.projects.interface.api.notification_views import (
     NotificationDetailView,
     NotificationListView,

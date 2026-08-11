@@ -63,11 +63,11 @@ function DesksManagerInner({ workspaceId }: { workspaceId: string }) {
           return (
             <div
               key={seat.id}
-              className="flex items-center justify-between rounded-md border border-gray-300 px-3 py-2"
+              className="flex items-center justify-between rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2.5"
             >
-              <span className="text-sm text-black/80">Mesa {i + 1}</span>
+              <span className="text-sm text-ink dark:text-paper">Mesa {i + 1}</span>
               <select
-                className="rounded-md border border-gray-400 bg-white px-2 py-1 text-sm text-black"
+                className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper-50 dark:bg-ink-800 px-2 py-1.5 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
                 value={current?.user_id ?? ""}
                 onChange={(e) => {
                   const userId = e.target.value || null

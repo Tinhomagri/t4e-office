@@ -48,6 +48,41 @@ ACTIONS: dict[str, str] = {
         "'- Dado … Quando … Então …', um por linha. Responda apenas com a lista. "
         "Preserve o idioma do texto."
     ),
+    # Tom e tradução dependem de um alvo escolhido pela pessoa, que chega em
+    # `target` — sem ele a ação não tem o que fazer, por isso são validados
+    # à parte em `rewrite`.
+    "change_tone": (
+        "Reescreva o texto no tom pedido, preservando o idioma, todos os fatos "
+        "e a estrutura. Mude registro e escolha de palavras, não o conteúdo."
+    ),
+    "translate": (
+        "Traduza o texto para o idioma pedido. Preserve formatação, listas, "
+        "termos técnicos e nomes próprios. Responda apenas com a tradução."
+    ),
+}
+
+# Ações que exigem um alvo (tom ou idioma) — o catálogo de destinos também é
+# fechado para não abrir a ação a instrução livre do cliente.
+TONES: dict[str, str] = {
+    "professional": "profissional e neutro",
+    "casual": "casual e conversacional",
+    "empathetic": "empático e acolhedor",
+    "direct": "direto e assertivo, sem rodeios",
+    "educational": "didático, explicando o porquê de cada ponto",
+}
+
+LANGUAGES: dict[str, str] = {
+    "pt-BR": "português do Brasil",
+    "en": "inglês",
+    "es": "espanhol",
+    "fr": "francês",
+    "de": "alemão",
+    "it": "italiano",
+}
+
+_TARGETS: dict[str, dict[str, str]] = {
+    "change_tone": TONES,
+    "translate": LANGUAGES,
 }
 
 MAX_INPUT_CHARS = 8000
@@ -67,11 +102,28 @@ def _strip_fence(text: str) -> str:
     return match.group(1) if match else text.strip()
 
 
-def rewrite(*, workspace_id: str, text: str, action: str, instruction: str = "") -> str:
-    """Aplica uma ação de reescrita ao texto e devolve o resultado."""
+def rewrite(
+    *,
+    workspace_id: str,
+    text: str,
+    action: str,
+    instruction: str = "",
+    target: str = "",
+) -> str:
+    """Aplica uma ação de reescrita ao texto e devolve o resultado.
+
+    `target` é o alvo das ações que precisam de um: o tom (`change_tone`) ou o
+    idioma (`translate`). Ignorado pelas demais.
+    """
     if action not in ACTIONS:
         raise ValidationError(
             f"Ação inválida: {action}. Use uma de {', '.join(sorted(ACTIONS))}."
+        )
+    choices = _TARGETS.get(action)
+    if choices is not None and target not in choices:
+        raise ValidationError(
+            f"Alvo inválido para {action}: {target or '(vazio)'}. "
+            f"Use um de {', '.join(sorted(choices))}."
         )
     content = (text or "").strip()
     if not content:
@@ -83,6 +135,8 @@ def rewrite(*, workspace_id: str, text: str, action: str, instruction: str = "")
         )
 
     task = ACTIONS[action]
+    if choices is not None:
+        task = f"{task}\n\nAlvo: {choices[target]}."
     # `instruction` é o pedido livre do usuário ("deixe mais formal"), anexado
     # como contexto — a ação escolhida continua mandando no formato da saída.
     if instruction.strip():

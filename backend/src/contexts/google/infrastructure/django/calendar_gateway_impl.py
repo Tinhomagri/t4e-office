@@ -39,6 +39,7 @@ class GoogleCalendarGateway(CalendarGateway):
         attendees: list[str],
         description: str = "",
         with_meet: bool = True,
+        recurrence: list[str] | None = None,
     ) -> CreatedMeeting:
         body: dict = {
             "summary": title,
@@ -47,6 +48,8 @@ class GoogleCalendarGateway(CalendarGateway):
             "end": {"dateTime": end.isoformat()},
             "attendees": [{"email": e} for e in attendees],
         }
+        if recurrence:
+            body["recurrence"] = recurrence
         params: dict = {
             "calendarId": "primary",
             "body": body,
@@ -72,6 +75,63 @@ class GoogleCalendarGateway(CalendarGateway):
             meet_link=event.get("hangoutLink"),
             html_link=event.get("htmlLink", ""),
         )
+
+    def update_event(
+        self,
+        *,
+        access_token: str,
+        event_id: str,
+        title: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        attendees: list[str] | None = None,
+        description: str | None = None,
+    ) -> CreatedMeeting:
+        body: dict = {}
+        if title is not None:
+            body["summary"] = title
+        if start is not None:
+            body["start"] = {"dateTime": start.isoformat()}
+        if end is not None:
+            body["end"] = {"dateTime": end.isoformat()}
+        if attendees is not None:
+            body["attendees"] = [{"email": e} for e in attendees]
+        if description is not None:
+            body["description"] = description
+
+        try:
+            service = self._service(access_token)
+            event = (
+                service.events()
+                .patch(
+                    calendarId="primary",
+                    eventId=event_id,
+                    body=body,
+                    sendUpdates="all",
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise CalendarError(f"Erro ao atualizar evento: {exc}") from exc
+
+        return CreatedMeeting(
+            event_id=event["id"],
+            meet_link=event.get("hangoutLink"),
+            html_link=event.get("htmlLink", ""),
+        )
+
+    def delete_event(self, *, access_token: str, event_id: str) -> None:
+        try:
+            service = self._service(access_token)
+            service.events().delete(
+                calendarId="primary", eventId=event_id, sendUpdates="all"
+            ).execute()
+        except HttpError as exc:
+            # 410 Gone = já tinha sido cancelado (ex.: pelo próprio Google Agenda
+            # em outro dispositivo) — idempotente, não é erro do ponto de vista
+            # do usuário: o resultado desejado (evento fora da agenda) já vale.
+            if exc.resp.status not in (404, 410):
+                raise CalendarError(f"Erro ao cancelar evento: {exc}") from exc
 
     def list_upcoming(
         self,
@@ -119,6 +179,9 @@ class GoogleCalendarGateway(CalendarGateway):
                     attendees=[
                         a.get("email", "") for a in item.get("attendees", [])
                     ],
+                    description=item.get("description", ""),
+                    recurring_event_id=item.get("recurringEventId"),
+                    organizer_email=item.get("organizer", {}).get("email", ""),
                 )
             )
         return events

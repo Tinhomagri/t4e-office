@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/integrations/", include("contexts.integrations.interface.api.urls")),
     path("api/sales/", include("contexts.sales.interface.api.urls")),
     path("api/chatwoot/", include("contexts.chatwoot.interface.api.urls")),
+    path("api/meetings/", include("contexts.meetings.interface.api.urls")),
 ]
 
 # Em dev o próprio runserver entrega os uploads. Em produção quem serve é o

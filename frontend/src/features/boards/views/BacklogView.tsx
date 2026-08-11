@@ -2,13 +2,19 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   CheckCircle2,
   ChevronDown,
@@ -27,6 +33,7 @@ import {
   useCompleteSprint,
   useCreateSprint,
   useEpics,
+  useRankCard,
   useStartSprint,
   useUpdateCard,
 } from "@/features/workspace/workspace.hooks"
@@ -70,6 +77,12 @@ function sumPoints(cards: Card[]) {
   return cards.reduce((acc, c) => acc + (c.points ?? 0), 0)
 }
 
+// Lexorank é string ordenável: comparar como texto dá a ordem manual do usuário.
+// Card sem rank (base antiga) vai para o topo, em ordem estável.
+function byRank(a: Card, b: Card): number {
+  return (a.rank || "").localeCompare(b.rank || "")
+}
+
 export function BacklogView({
   projectId,
   cards,
@@ -87,6 +100,7 @@ export function BacklogView({
   const startSprint = useStartSprint(projectId)
   const completeSprint = useCompleteSprint(projectId)
   const createSprint = useCreateSprint(projectId)
+  const rankCard = useRankCard(projectId)
   const { data: epics } = useEpics(projectId)
 
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -107,18 +121,55 @@ export function BacklogView({
   )
 
   const visibleCards = epicFilter ? cards.filter((c) => c.epic_id === epicFilter) : cards
-  const backlogCards = visibleCards.filter((c) => !c.sprint_id)
+  // Lista de uma coluna (backlog = sprintId null), já na ordem manual.
+  const listOf = (sprintId: string | null) =>
+    visibleCards.filter((c) => (c.sprint_id ?? null) === sprintId).sort(byRank)
+  const backlogCards = listOf(null)
   const activeCard = cards.find((c) => c.id === activeId) ?? null
 
   function onDragStart(e: DragStartEvent) { setActiveId(String(e.active.id)) }
   function onDragEnd(e: DragEndEvent) {
     setActiveId(null)
-    const target = e.over?.id ? String(e.over.id) : null
+    const overId = e.over?.id ? String(e.over.id) : null
     const card = cards.find((c) => c.id === String(e.active.id))
-    if (!card || !target) return
-    const nextSprintId = target === BACKLOG_DROP ? null : target
-    if ((card.sprint_id ?? null) === nextSprintId) return
-    updateCard.mutate({ cardId: card.id, input: { sprint_id: nextSprintId } })
+    if (!card || !overId || overId === card.id) return
+
+    // Soltar sobre um card usa a lista dele; sobre a seção, a própria seção.
+    const overCard = cards.find((c) => c.id === overId)
+    const destSprintId = overCard
+      ? (overCard.sprint_id ?? null)
+      : overId === BACKLOG_DROP
+        ? null
+        : overId
+    const sameList = (card.sprint_id ?? null) === destSprintId
+
+    if (!sameList) {
+      updateCard.mutate({ cardId: card.id, input: { sprint_id: destSprintId } })
+    }
+    // Soltou na área vazia da seção: só mudou de lista, mantém o rank atual.
+    if (!overCard) return
+
+    // Reposiciona entre os vizinhos do destino — o backend converte
+    // before/after em Lexorank.
+    const dest = listOf(destSprintId)
+    let ordered: Card[]
+    let pos: number
+    if (sameList) {
+      const from = dest.findIndex((c) => c.id === card.id)
+      const to = dest.findIndex((c) => c.id === overCard.id)
+      if (from === -1 || to === -1 || from === to) return
+      ordered = arrayMove(dest, from, to)
+      pos = to
+    } else {
+      pos = dest.findIndex((c) => c.id === overCard.id)
+      if (pos === -1) return
+      ordered = [...dest.slice(0, pos), card, ...dest.slice(pos)]
+    }
+    rankCard.mutate({
+      cardId: card.id,
+      beforeId: ordered[pos - 1]?.id ?? null,
+      afterId: ordered[pos + 1]?.id ?? null,
+    })
   }
 
   function submitSprint() {
@@ -195,7 +246,7 @@ export function BacklogView({
             <SprintSection
               key={s.id}
               sprint={s}
-              cards={visibleCards.filter((c) => c.sprint_id === s.id)}
+              cards={listOf(s.id)}
               members={members}
               onOpen={onOpen}
               onStart={() => startSprint.mutate({ sprintId: s.id })}
@@ -463,11 +514,13 @@ function SprintSection({
               <p className="text-sm text-paper-400">Arraste cards do backlog para cá</p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {cards.map((c) => (
-                <CardRow key={c.id} card={c} members={members} onOpen={onOpen} />
-              ))}
-            </div>
+            <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1">
+                {cards.map((c) => (
+                  <CardRow key={c.id} card={c} members={members} onOpen={onOpen} />
+                ))}
+              </div>
+            </SortableContext>
           )}
         </div>
       )}
@@ -515,11 +568,13 @@ function BacklogSection({
           {cards.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-paper-400">Backlog vazio 🎉</p>
           ) : (
-            <div className="space-y-1">
-              {cards.map((c) => (
-                <CardRow key={c.id} card={c} members={members} onOpen={onOpen} />
-              ))}
-            </div>
+            <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1">
+                {cards.map((c) => (
+                  <CardRow key={c.id} card={c} members={members} onOpen={onOpen} />
+                ))}
+              </div>
+            </SortableContext>
           )}
         </div>
       )}
@@ -540,13 +595,18 @@ function CardRow({
   onOpen?: (c: Card) => void
   overlay?: boolean
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
+  // useSortable (e não useDraggable): além de arrastar, registra a linha como
+  // alvo de drop — é isso que permite soltar um card ENTRE outros e reordenar.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: card.id,
+  })
   const assignee = members.find((m) => m.user_id === card.assignee_id)
   const isUrgent = card.priority === "urgent"
 
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
+      style={overlay ? undefined : { transform: CSS.Translate.toString(transform), transition }}
       className={cx(
         "group flex items-center gap-2.5 rounded-xl border bg-paper dark:bg-ink-900 px-3 py-2.5 transition-all",
         overlay ? "shadow-panel rotate-1" : "border-paper-100 dark:border-ink-800 hover:border-paper-300 hover:shadow-card",

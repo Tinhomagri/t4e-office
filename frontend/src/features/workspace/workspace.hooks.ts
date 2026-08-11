@@ -154,6 +154,24 @@ export function useWorkspaceCards(workspaceId: string | null) {
   return { projects, cards, isLoading }
 }
 
+// Visão pessoal ("Meu Dia"): cards meus e sprints de TODOS os workspaces, numa
+// requisição só. `useWorkspaceCards` acima serve ao workspace ativo — usar
+// aquilo aqui escondia metade do trabalho de quem participa de mais de um
+// workspace (Boards, Marketing, Comercial) dependendo do seletor no topo.
+export function useMyWork() {
+  const query = useQuery({ queryKey: ["my-work"], queryFn: wsApi.getMyWork })
+
+  // O backend manda `project_key`/`project_name` no card; o resto do app
+  // consome `BoardCard` (camelCase), então converte aqui e nada mais muda.
+  const cards: BoardCard[] = (query.data?.cards ?? []).map((c) => ({
+    ...c,
+    projectKey: c.project_key,
+    projectName: c.project_name,
+  }))
+
+  return { cards, sprints: query.data?.sprints ?? [], isLoading: query.isLoading }
+}
+
 // ---- Comentários ----
 export function useComments(cardId: string | null) {
   return useQuery({

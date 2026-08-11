@@ -5,7 +5,6 @@ from contexts.projects.domain.entities.card import (
     Card,
     CardPriority,
     CardResolution,
-    CardStatus,
     CardType,
 )
 from contexts.projects.domain.entities.history import CardHistoryEntry
@@ -18,7 +17,7 @@ from contexts.projects.domain.repositories.project_repository import (
 from contexts.projects.domain.repositories.workflow_status_repository import (
     StatusCategoryResolver,
 )
-from shared.domain.errors import NotFoundError, PermissionDeniedError
+from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
 # Sentinela para distinguir "campo ausente" de "campo definido como None".
 _UNSET = object()
@@ -51,7 +50,7 @@ def _repr(card: Card) -> dict[str, str]:
     """Representação textual dos campos rastreados (para diff de histórico)."""
     return {
         "title": card.title,
-        "status": card.status.value,
+        "status": card.status,
         "type": card.type.value,
         "priority": card.priority.value,
         "points": "" if card.points is None else str(card.points),
@@ -144,7 +143,8 @@ class UpdateCard:
         if description is not _UNSET:
             card.description = description
         if status is not _UNSET:
-            card.status = CardStatus(status)
+            self._assert_status_exists(project_id=card.project_id, status=status)
+            card.status = status
         if type is not _UNSET:
             card.type = CardType(type)
         if priority is not _UNSET:
@@ -216,12 +216,27 @@ class UpdateCard:
 
         return updated
 
+    def _assert_status_exists(self, *, project_id: str, status: str) -> None:
+        """Rejeita slug de coluna que não existe no workflow do projeto.
+
+        O serializer deixou de restringir o status à lista canônica (colunas
+        criadas no board têm slug livre), então a checagem real é aqui — sem
+        ela um typo mandaria o card para uma coluna que ninguém renderiza.
+        """
+        if self.status_category_resolver is None:
+            return
+        category = self.status_category_resolver.category_of(
+            project_id=project_id, status=status
+        )
+        if category is None:
+            raise ValidationError(f"A coluna '{status}' não existe neste projeto.")
+
     def _sync_resolution_with_status(self, card: Card) -> None:
         """Alinha o desfecho à categoria da coluna de destino."""
         if self.status_category_resolver is None:
             return
         category = self.status_category_resolver.category_of(
-            project_id=card.project_id, status=card.status.value
+            project_id=card.project_id, status=card.status
         )
         if category == "done":
             # Não sobrescreve um desfecho já escolhido (ex.: "não será feito"):

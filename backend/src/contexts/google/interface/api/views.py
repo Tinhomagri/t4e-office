@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.google.application.use_cases.cancel_meeting import CancelMeeting
 from contexts.google.application.use_cases.create_meeting import CreateMeeting
 from contexts.google.application.use_cases.disconnect_google import DisconnectGoogle
 from contexts.google.application.use_cases.get_authorization_url import (
@@ -24,7 +25,11 @@ from contexts.google.application.use_cases.handle_oauth_callback import (
 from contexts.google.application.use_cases.list_upcoming_events import (
     ListUpcomingEvents,
 )
+from contexts.google.application.use_cases.meeting_participation_report import (
+    BuildMeetingParticipationReport,
+)
 from contexts.google.application.use_cases.suggest_times import SuggestTimes
+from contexts.google.application.use_cases.update_meeting import UpdateMeeting
 from contexts.google.domain.ports.calendar_gateway import CalendarError
 from contexts.google.infrastructure.django.calendar_gateway_impl import (
     GoogleCalendarGateway,
@@ -42,8 +47,10 @@ from contexts.google.interface.api.serializers import (
     CalendarEventSerializer,
     CreateMeetingSerializer,
     GoogleStatusSerializer,
+    MeetingParticipationReportSerializer,
     MeetingResultSerializer,
     TimeSlotSerializer,
+    UpdateMeetingSerializer,
 )
 
 
@@ -156,6 +163,7 @@ class MeetingCreateView(APIView):
                 attendees=data["attendees"],
                 description=data.get("description", ""),
                 card_id=str(data["card_id"]) if data.get("card_id") else None,
+                recurrence=data.get("recurrence"),
             )
         except CalendarError:
             return Response(
@@ -165,6 +173,74 @@ class MeetingCreateView(APIView):
         return Response(
             MeetingResultSerializer(result).data, status=status.HTTP_201_CREATED
         )
+
+
+class MeetingDetailView(APIView):
+    """PATCH edita, DELETE cancela uma reunião existente."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, event_id: str) -> Response:
+        serializer = UpdateMeetingSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = UpdateMeeting(
+                calendar_gateway=GoogleCalendarGateway(),
+                get_valid_credentials=_credentials_use_case(),
+            ).execute(
+                user_id=str(request.user.id),
+                event_id=event_id,
+                title=data.get("title"),
+                start=data.get("start"),
+                end=data.get("end"),
+                attendees=data.get("attendees"),
+                description=data.get("description"),
+            )
+        except CalendarError:
+            return Response(
+                {"error": "Falha ao falar com o Google Agenda. Tente novamente."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(MeetingResultSerializer(result).data)
+
+    def delete(self, request: Request, event_id: str) -> Response:
+        try:
+            CancelMeeting(
+                calendar_gateway=GoogleCalendarGateway(),
+                get_valid_credentials=_credentials_use_case(),
+            ).execute(user_id=str(request.user.id), event_id=event_id)
+        except CalendarError:
+            return Response(
+                {"error": "Falha ao falar com o Google Agenda. Tente novamente."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeetingReportView(APIView):
+    """Relatório de participação/tempo em reunião num período (default: 30 dias)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        now = datetime.now(UTC)
+        days = int(request.query_params.get("days", 30))
+        time_min = _parse_query_dt(request.query_params.get("time_min")) or (
+            now - timedelta(days=days)
+        )
+        time_max = _parse_query_dt(request.query_params.get("time_max")) or now
+        try:
+            report = BuildMeetingParticipationReport(
+                calendar_gateway=GoogleCalendarGateway(),
+                get_valid_credentials=_credentials_use_case(),
+            ).execute(user_id=str(request.user.id), time_min=time_min, time_max=time_max)
+        except CalendarError:
+            return Response(
+                {"error": "Falha ao falar com o Google Agenda. Tente novamente."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(MeetingParticipationReportSerializer(report).data)
 
 
 class UpcomingEventsView(APIView):

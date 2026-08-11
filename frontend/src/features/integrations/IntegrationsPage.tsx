@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion"
 import {
   AlertCircle,
+  BarChart3,
   CalendarClock,
   CalendarPlus,
   CalendarX2,
@@ -9,6 +10,7 @@ import {
   ExternalLink,
   Link2,
   Mail,
+  Repeat,
   Sparkles,
   Type,
   Unplug,
@@ -34,6 +36,9 @@ import {
   useGoogleStatus,
   useUpcomingEvents,
 } from "./integrations.hooks"
+import { MeetingReportPanel } from "./MeetingReportPanel"
+import { buildRecurrence, RECURRENCE_OPTIONS } from "./recurrence"
+import type { RecurrenceFreq } from "./integrations.types"
 import { WeekAgenda } from "./WeekAgenda"
 
 // Avatar com gradiente determinístico por e-mail — mesma técnica usada em
@@ -46,12 +51,12 @@ const AVATAR_GRADIENTS = [
   "from-amber-500 to-orange-700",
   "from-cyan-500 to-sky-700",
 ]
-function gradientFor(seed: string): string {
+export function gradientFor(seed: string): string {
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) & 0xffff
   return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length]
 }
-function AttendeeAvatar({ email, size = "sm" }: { email: string; size?: "xs" | "sm" }) {
+export function AttendeeAvatar({ email, size = "sm" }: { email: string; size?: "xs" | "sm" }) {
   const initials = email.slice(0, 2).toUpperCase()
   return (
     <span
@@ -67,7 +72,7 @@ function AttendeeAvatar({ email, size = "sm" }: { email: string; size?: "xs" | "
   )
 }
 
-function dayLabel(iso: string, allDay?: boolean): string {
+export function dayLabel(iso: string, allDay?: boolean): string {
   const d = new Date(iso)
   const now = new Date()
   // Evento "dia inteiro" chega como UTC-midnight puro (sem hora local de verdade) —
@@ -111,6 +116,7 @@ export function IntegrationsPage() {
   const [params, setParams] = useSearchParams()
   const [banner, setBanner] = useState<string | null>(null)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
 
   // Lê o resultado do callback OAuth (?google=connected|denied|error).
   useEffect(() => {
@@ -145,9 +151,28 @@ export function IntegrationsPage() {
         subtitle="Conecte o Google e agende calls com Meet direto da sua agenda"
       >
         {connected && (
-          <Button icon={<CalendarPlus className="size-4" />} onClick={() => setScheduleOpen(true)}>
-            Agendar reunião
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Pílula outline — mesma forma dos toggles do Meet real, contraste
+                menor que o CTA principal de agendar. */}
+            <button
+              onClick={() => setReportOpen((v) => !v)}
+              className={cx(
+                "inline-flex h-10 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition-colors",
+                reportOpen
+                  ? "border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/10 dark:text-brand-300"
+                  : "border-paper-200 dark:border-ink-700 text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
+              )}
+            >
+              <BarChart3 className="size-4" /> Relatório
+            </button>
+            <Button
+              icon={<CalendarPlus className="size-4" />}
+              onClick={() => setScheduleOpen(true)}
+              className="!rounded-full"
+            >
+              Agendar reunião
+            </Button>
+          </div>
         )}
       </PageHeader>
 
@@ -203,11 +228,12 @@ export function IntegrationsPage() {
                 icon={<Unplug className="size-4" />}
                 loading={disconnect.isPending}
                 onClick={() => disconnect.mutate()}
+                className="!rounded-full"
               >
                 Desconectar
               </Button>
             ) : (
-              <Button loading={connect.isPending} onClick={() => connect.mutate()}>
+              <Button loading={connect.isPending} onClick={() => connect.mutate()} className="!rounded-full">
                 Conectar Google
               </Button>
             )}
@@ -281,7 +307,7 @@ export function IntegrationsPage() {
                   href={next.meet_link}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+                  className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
                 >
                   <Video className="size-4" /> Entrar na call
                 </a>
@@ -298,6 +324,8 @@ export function IntegrationsPage() {
           </div>
         </section>
       )}
+
+      {connected && reportOpen && <MeetingReportPanel />}
 
       {/* A agenda em si — grade própria (não o embed do Google: aquele é um
           iframe cross-origin e nunca deixa a gente colocar o link do Meet
@@ -325,6 +353,8 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
   const [durationMin, setDurationMin] = useState(30)
   const [attendees, setAttendees] = useState("")
   const [description, setDescription] = useState("")
+  const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>("none")
+  const [recurrenceCount, setRecurrenceCount] = useState(8)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
@@ -337,6 +367,8 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
     setDurationMin(30)
     setAttendees("")
     setDescription("")
+    setRecurrenceFreq("none")
+    setRecurrenceCount(8)
     setError(null)
     setDone(null)
   }
@@ -357,6 +389,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
         end: endDate.toISOString(),
         attendees: attendeeList,
         description,
+        recurrence: buildRecurrence(recurrenceFreq, recurrenceCount),
       })
       setDone(result.meet_link ?? result.html_link)
     } catch (e) {
@@ -461,6 +494,44 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
                     </div>
                   </div>
 
+                  {/* Recorrência — mesma linguagem de chip pill da duração. */}
+                  <div>
+                    <p className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-ink dark:text-paper">
+                      <Repeat className="size-3.5 text-paper-400" /> Repetir
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {RECURRENCE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setRecurrenceFreq(opt.value)}
+                          className={cx(
+                            "rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all",
+                            recurrenceFreq === opt.value
+                              ? "bg-brand-600 text-white shadow-brand-glow"
+                              : "bg-paper-100 text-paper-500 hover:bg-paper-200 dark:bg-ink-800 dark:hover:bg-ink-700",
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                      {recurrenceFreq !== "none" && (
+                        <span className="flex items-center gap-1.5 text-xs text-paper-400">
+                          por
+                          <input
+                            type="number"
+                            min={2}
+                            max={52}
+                            value={recurrenceCount}
+                            onChange={(e) => setRecurrenceCount(Number(e.target.value))}
+                            className="w-14 rounded-full border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2 py-1 text-center text-sm font-medium text-ink dark:text-paper focus-ring"
+                          />
+                          ocorrências
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
                   <LiveField icon={Users} label="Participantes" hint="Emails separados por vírgula">
                     <input
                       value={attendees}
@@ -524,7 +595,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-paper-100 dark:border-ink-800 px-6 py-4">
-                  <Button variant="ghost" onClick={handleClose}>
+                  <Button variant="ghost" className="!rounded-full" onClick={handleClose}>
                     Cancelar
                   </Button>
                   <Button
@@ -532,6 +603,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
                     loading={create.isPending}
                     disabled={!canSubmit}
                     onClick={handleSubmit}
+                    className="!rounded-full"
                   >
                     Criar reunião
                   </Button>
@@ -546,7 +618,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
 }
 
 // Campo "vivo": borda só aparece com foco (:focus-within), ícone acompanha a cor.
-function LiveField({
+export function LiveField({
   icon: Icon,
   label,
   hint,
@@ -612,7 +684,7 @@ function SuccessState({ meetLink, onClose }: { meetLink: string; onClose: () => 
           href={meetLink}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
         >
           <Video className="size-4" /> Entrar na call
         </a>
