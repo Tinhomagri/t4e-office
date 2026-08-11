@@ -35,6 +35,8 @@ import { useWorldStore } from "./world.store"
 import { getMockActiveCard, getMockRoom, MOCK_DELIVERY_CHAMPION, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
 import { OfficeVideoOverlay } from "./OfficeVideoOverlay"
 import { joinOfficeRoom, type JoinResult } from "@/features/meetings/meetings.api"
+import { mediaErrorMessage, type MediaKind } from "@/features/meetings/MediaSync"
+import { toast as notify } from "@/shared/ui/toast"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -155,6 +157,7 @@ export function OfficeRoom({
   const [officeSession, setOfficeSession] = useState<JoinResult | null>(null)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [cameraEnabled, setCameraEnabled] = useState(false)
+  const joiningMedia = useRef(false)
 
   const pcState = usePcStore((s) => s.state)
   const bootPc = usePcStore((s) => s.boot)
@@ -498,10 +501,33 @@ export function OfficeRoom({
   }, [pcState])
 
   const online = roomMembers?.length ?? 1
+  // Só acende o botão se a entrada na sala der certo — aceso sem sala é a
+  // aparência de "liguei e não ligou". O guard evita que dois cliques rápidos
+  // abram duas conexões.
   const enableMedia = async (kind: "voice" | "camera") => {
-    if (!officeSession && !mock) setOfficeSession(await joinOfficeRoom(workspaceId, floor))
-    if (kind === "voice") setVoiceEnabled((v) => !v)
-    else setCameraEnabled((v) => !v)
+    const next = kind === "voice" ? !voiceEnabled : !cameraEnabled
+    if (next && !officeSession && !mock) {
+      if (joiningMedia.current) return
+      joiningMedia.current = true
+      try {
+        setOfficeSession(await joinOfficeRoom(workspaceId, floor))
+      } catch {
+        notify.error("Não foi possível entrar na sala de voz deste andar.")
+        return
+      } finally {
+        joiningMedia.current = false
+      }
+    }
+    if (kind === "voice") setVoiceEnabled(next)
+    else setCameraEnabled(next)
+  }
+
+  // Permissão negada, dispositivo ocupado, publicação recusada: desfaz o botão
+  // para ele não ficar aceso mentindo que a mídia está no ar.
+  const handleMediaError = (kind: MediaKind, error: unknown) => {
+    if (kind === "video") setCameraEnabled(false)
+    else setVoiceEnabled(false)
+    notify.error(mediaErrorMessage(kind, error))
   }
 
   return (
@@ -518,7 +544,7 @@ export function OfficeRoom({
         style={{ imageRendering: "pixelated" }}
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
-      {officeSession && <OfficeVideoOverlay session={officeSession} engine={engineRef} audio={voiceEnabled} video={cameraEnabled} />}
+      {officeSession && <OfficeVideoOverlay session={officeSession} engine={engineRef} audio={voiceEnabled} video={cameraEnabled} onMediaError={handleMediaError} />}
 
       {canManageDesks && hoverUserId && hoverPos && hoveredCard && (
         <div

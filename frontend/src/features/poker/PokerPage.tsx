@@ -25,9 +25,11 @@ import {
   VideoOff,
 } from "lucide-react"
 import { joinPokerRoom, type JoinResult } from "@/features/meetings/meetings.api"
+import { mediaErrorMessage, type MediaKind } from "@/features/meetings/MediaSync"
+import { toast as notify } from "@/shared/ui/toast"
 import { MockVideoTiles, PokerVideoOverlay } from "./PokerVideoOverlay"
 import { isMockSeat, makeMockParticipants, mockSeatCount } from "./poker.mockSeats"
-import { SEATS_MAX, seatLayout, tableSize, wrapperMargins } from "./poker.layout"
+import { SEATS_MAX, fitScale, seatLayout, tableSize, wrapperMargins } from "./poker.layout"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { useProjects } from "@/features/workspace/workspace.hooks"
@@ -1638,6 +1640,43 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   const [mediaSession, setMediaSession] = useState<JoinResult | null>(null)
   const [micOn, setMicOn] = useState(false)
   const [camOn, setCamOn] = useState(false)
+  const joiningMedia = useRef(false)
+
+  // Espaço realmente disponível para a mesa: da borda de cima da área até o
+  // fim da janela, menos tudo que fica abaixo dela (progresso, painel do host,
+  // baralho). A conta parte da JANELA, não de `flex-1`: nesta árvore o
+  // `h-full` não resolve numa altura concreta, então o contêiner cresce com o
+  // conteúdo e "espaço disponível" media sempre a própria mesa.
+  const areaRef = useRef<HTMLDivElement>(null)
+  const belowRef = useRef<HTMLDivElement>(null)
+  const [stage, setStage] = useState({ width: 0, height: 0 })
+  useEffect(() => {
+    const area = areaRef.current
+    if (!area) return
+    const measure = () => {
+      const rect = area.getBoundingClientRect()
+      const below = belowRef.current?.getBoundingClientRect().height ?? 0
+      // 24 = respiro do rodapé + o gap entre a mesa e o bloco de baixo.
+      const height = Math.max(0, window.innerHeight - rect.top - below - 24)
+      // Só publica mudança real: a medição roda dentro de um ResizeObserver
+      // que a própria mudança de escala dispara, e um objeto novo a cada
+      // passada manteria o React re-renderizando à toa.
+      setStage((prev) =>
+        Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - height) < 1
+          ? prev
+          : { width: rect.width, height },
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(area)
+    if (belowRef.current) observer.observe(belowRef.current)
+    window.addEventListener("resize", measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", measure)
+    }
+  }, [])
 
   useEffect(() => () => timers.current.forEach(clearTimeout), [])
 
@@ -1769,6 +1808,8 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   const margins = wrapperMargins(videoActive)
   const wrapperWidth = tableWidth + margins.x * 2
   const wrapperHeight = tableHeight + margins.y * 2
+  // Encolhe a mesa inteira (assentos, cartas e câmeras juntos) até caber.
+  const tableScale = fitScale({ width: wrapperWidth, height: wrapperHeight }, stage)
   // Onde cada pessoa está sentada — origem e destino das reações em voo.
   // Medido a partir do centro do wrapper, igual aos assentos.
   const seatOf = (userId: string): { x: number; y: number } | null => {
@@ -1795,11 +1836,32 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   }
 
   // A conexão é preguiçosa: o primeiro toggle entra na sala, os seguintes só
-  // ligam/desligam a faixa. Sair da página derruba a conexão junto.
+  // ligam/desligam a faixa. Sair da página derruba a conexão junto. O botão só
+  // acende se a entrada der certo — aceso sem sala parece "liguei e não ligou".
   const toggleMedia = async (kind: "mic" | "cam") => {
-    if (!mediaSession && sessionId) setMediaSession(await joinPokerRoom(sessionId))
-    if (kind === "mic") setMicOn((v) => !v)
-    else setCamOn((v) => !v)
+    const next = kind === "mic" ? !micOn : !camOn
+    if (next && !mediaSession && sessionId) {
+      if (joiningMedia.current) return
+      joiningMedia.current = true
+      try {
+        setMediaSession(await joinPokerRoom(sessionId))
+      } catch {
+        notify.error("Não foi possível entrar na sala de voz desta mesa.")
+        return
+      } finally {
+        joiningMedia.current = false
+      }
+    }
+    if (kind === "mic") setMicOn(next)
+    else setCamOn(next)
+  }
+
+  // Permissão negada ou dispositivo ocupado: desfaz o botão em vez de deixá-lo
+  // aceso sem mídia no ar.
+  const handleMediaError = (kind: MediaKind, error: unknown) => {
+    if (kind === "video") setCamOn(false)
+    else setMicOn(false)
+    notify.error(mediaErrorMessage(kind, error))
   }
 
   // Centro do cartão de vídeo, já calculado para fora da mesa pelo layout —
@@ -1836,7 +1898,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
         background: `radial-gradient(ellipse 80% 60% at 50% -10%, rgba(12,102,228,0.14), transparent), ${P.bg}`,
       }}
     >
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header da sala */}
         <div
           className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 backdrop-blur"
@@ -1939,12 +2001,36 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
         </div>
 
         {/* Mesa */}
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-4">
+        <div ref={areaRef} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 py-4">
+          {/* Palco: o que sobrou depois do baralho e dos controles do host —
+              são eles que não podem ser cortados. A mesa se encaixa no que
+              restar; ligar as câmeras a faz crescer bem além desta área.
+
+              A mesa fica em `absolute inset-0` de propósito. Medindo um palco
+              que a própria mesa infla, o espaço disponível cresce junto com ela
+              e a escala dá sempre 1 — foi o que aconteceu na primeira versão.
+              Fora do fluxo, o palco tem só o tamanho que o flex lhe deu. */}
+          <div
+            className="relative w-full shrink-0"
+            style={{ height: wrapperHeight * tableScale }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="shrink-0"
+              style={{ width: wrapperWidth * tableScale, height: wrapperHeight * tableScale }}
+            >
           {/* Wrapper maior que a mesa: assentos orbitam FORA da borda. Entrar
               na sala de mídia abre a órbita e muda este tamanho — por isso
               tudo aqui dentro se posiciona pelo CENTRO (left/top 50%), que não
               se move, e não pelo canto, que anda quando o wrapper cresce. */}
-          <div className="relative shrink-0" style={{ width: wrapperWidth, height: wrapperHeight }}>
+          <div
+            className="relative shrink-0 origin-top-left"
+            style={{
+              width: wrapperWidth,
+              height: wrapperHeight,
+              transform: `scale(${tableScale})`,
+            }}
+          >
             <div
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 transition-all duration-500"
               style={{
@@ -2012,6 +2098,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                 seatOf={videoAnchorOf}
                 audio={micOn}
                 video={camOn}
+                onMediaError={handleMediaError}
               />
             )}
 
@@ -2033,7 +2120,14 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               )
             })}
           </div>
+            </div>
+            </div>
+          </div>
 
+          {/* Tudo abaixo da mesa vive junto para ser medido de uma vez: é o
+              espaço que a mesa não pode ocupar, sob pena de cortar o baralho
+              ou o botão de revelar. */}
+          <div ref={belowRef} className="flex w-full shrink-0 flex-col items-center gap-4">
           {session.status === "voting" && (
             <VoteProgress
               voted={liveVotes.filter((v) => v.has_voted).length}
@@ -2064,6 +2158,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               <VotingRow myVote={myVote} onVote={(v) => submitVote.mutate(v)} />
             </div>
           )}
+          </div>
         </div>
       </div>
 

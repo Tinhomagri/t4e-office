@@ -147,3 +147,26 @@ export function seatLayout(
     }
   })
 }
+
+/**
+ * Fator de escala para a mesa caber no espaço disponível.
+ *
+ * A mesa cresce com o número de participantes e cresce de novo ao ligar as
+ * câmeras — em telas comuns ela passa a exceder a área e cortava o baralho e
+ * os controles do host. Encolher tudo junto preserva a geometria provada
+ * acima; nunca amplia, porque pixel art esticada borra.
+ */
+export function fitScale(
+  wrapper: { width: number; height: number },
+  stage: { width: number; height: number },
+): number {
+  if (wrapper.width <= 0 || wrapper.height <= 0) return 1
+  // Palco degenerado é medição inválida (ainda não montou, container sem
+  // altura resolvida), não uma tela minúscula de verdade. Encolher por esse
+  // número deixaria a mesa do tamanho de uma moeda; melhor manter o tamanho
+  // natural e, no pior caso, cortar.
+  if (stage.width < MIN_STAGE || stage.height < MIN_STAGE) return 1
+  return Math.min(1, stage.width / wrapper.width, stage.height / wrapper.height)
+}
+
+const MIN_STAGE = 80

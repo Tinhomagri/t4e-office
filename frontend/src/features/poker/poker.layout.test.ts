@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   SEATS_MAX,
+  fitScale,
   SEAT_BOX_H,
   SEAT_COL_W,
   TILE_H,
@@ -141,5 +142,42 @@ describe("seatLayout sem câmera", () => {
       return Math.hypot(next.x - s.x, next.y - s.y)
     })
     expect(Math.min(...gaps) / Math.max(...gaps)).toBeGreaterThan(0.85)
+  })
+})
+
+describe("fitScale", () => {
+  const wrapper = { width: 1056, height: 808 }
+
+  it("não amplia quando sobra espaço", () => {
+    expect(fitScale(wrapper, { width: 2000, height: 1500 })).toBe(1)
+  })
+
+  it("encolhe pelo eixo mais apertado", () => {
+    // Altura é o gargalo típico: o baralho e os controles do host comem a
+    // parte de baixo, e era o que estava sendo cortado.
+    const scale = fitScale(wrapper, { width: 1300, height: 600 })
+    expect(scale).toBeCloseTo(600 / 808, 6)
+    expect(wrapper.height * scale).toBeLessThanOrEqual(600)
+    expect(wrapper.width * scale).toBeLessThanOrEqual(1300)
+  })
+
+  it("cabe nos dois eixos em qualquer palco", () => {
+    for (const stage of [
+      { width: 700, height: 900 },
+      { width: 1400, height: 500 },
+      { width: 400, height: 400 },
+    ]) {
+      const scale = fitScale(wrapper, stage)
+      expect(wrapper.width * scale).toBeLessThanOrEqual(stage.width + 1e-9)
+      expect(wrapper.height * scale).toBeLessThanOrEqual(stage.height + 1e-9)
+    }
+  })
+
+  it("devolve 1 antes da primeira medição do palco", () => {
+    expect(fitScale(wrapper, { width: 0, height: 0 })).toBe(1)
+  })
+
+  it("ignora medição degenerada em vez de encolher a mesa a um selo", () => {
+    expect(fitScale(wrapper, { width: 1300, height: 12 })).toBe(1)
   })
 })

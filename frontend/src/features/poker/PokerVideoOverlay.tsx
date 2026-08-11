@@ -2,14 +2,13 @@ import {
   LiveKitRoom,
   ParticipantTile,
   RoomAudioRenderer,
-  useLocalParticipant,
   useTracks,
 } from "@livekit/components-react"
 import { Track } from "livekit-client"
 import { Mic, MicOff } from "lucide-react"
-import { useEffect } from "react"
 
 import type { JoinResult } from "@/features/meetings/meetings.api"
+import { MediaSync, type MediaKind } from "@/features/meetings/MediaSync"
 
 /** Posição do cartão, medida a partir do CENTRO do wrapper da mesa. */
 export type SeatPoint = { x: number; y: number }
@@ -100,15 +99,6 @@ export function MockVideoTiles({
   )
 }
 
-function MediaSync({ audio, video }: { audio: boolean; video: boolean }) {
-  const { localParticipant } = useLocalParticipant()
-  useEffect(() => {
-    void localParticipant.setMicrophoneEnabled(audio)
-    void localParticipant.setCameraEnabled(video)
-  }, [audio, video, localParticipant])
-  return null
-}
-
 /**
  * Câmera e microfone na própria mesa do Planning Poker: o vídeo de cada pessoa
  * fica ancorado para fora do assento dela, e o áudio da sala toca sempre —
@@ -122,11 +112,13 @@ export function PokerVideoOverlay({
   seatOf,
   audio,
   video,
+  onMediaError,
 }: {
   session: JoinResult
   seatOf: (userId: string) => SeatPoint | null
   audio: boolean
   video: boolean
+  onMediaError?: (kind: MediaKind, error: unknown) => void
 }) {
   return (
     <LiveKitRoom
@@ -137,7 +129,7 @@ export function PokerVideoOverlay({
       video={false}
       className="pointer-events-none absolute inset-0"
     >
-      <MediaSync audio={audio} video={video} />
+      <MediaSync audio={audio} video={video} onError={onMediaError} />
       <RoomAudioRenderer />
       <Tiles seatOf={seatOf} localAudio={audio} />
     </LiveKitRoom>

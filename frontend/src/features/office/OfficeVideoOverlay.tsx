@@ -1,9 +1,10 @@
-import { LiveKitRoom, ParticipantTile, useLocalParticipant, useTracks } from "@livekit/components-react"
+import { LiveKitRoom, ParticipantTile, RoomAudioRenderer, useTracks } from "@livekit/components-react"
 import { Track } from "livekit-client"
 import { Mic, MicOff } from "lucide-react"
 import { useEffect, useRef } from "react"
 import type { OfficeEngine } from "./world/engine"
 import type { JoinResult } from "@/features/meetings/meetings.api"
+import { MediaSync, type MediaKind } from "@/features/meetings/MediaSync"
 
 function Tiles({ engine, localAudio }: { engine: React.MutableRefObject<OfficeEngine | null>; localAudio: boolean }) {
   const tracks = useTracks([Track.Source.Camera])
@@ -41,15 +42,6 @@ function Tiles({ engine, localAudio }: { engine: React.MutableRefObject<OfficeEn
   })}</>
 }
 
-function MediaSync({ audio, video }: { audio: boolean; video: boolean }) {
-  const { localParticipant } = useLocalParticipant()
-  useEffect(() => {
-    void localParticipant.setMicrophoneEnabled(audio)
-    void localParticipant.setCameraEnabled(video)
-  }, [audio, video, localParticipant])
-  return null
-}
-
-export function OfficeVideoOverlay({ session, engine, audio, video }: { session: JoinResult; engine: React.MutableRefObject<OfficeEngine | null>; audio: boolean; video: boolean }) {
-  return <LiveKitRoom token={session.token} serverUrl={session.url} connect audio={false} video={false} className="absolute inset-0 pointer-events-none"><MediaSync audio={audio} video={video} /><Tiles engine={engine} localAudio={audio} /></LiveKitRoom>
+export function OfficeVideoOverlay({ session, engine, audio, video, onMediaError }: { session: JoinResult; engine: React.MutableRefObject<OfficeEngine | null>; audio: boolean; video: boolean; onMediaError?: (kind: MediaKind, error: unknown) => void }) {
+  return <LiveKitRoom token={session.token} serverUrl={session.url} connect audio={false} video={false} className="absolute inset-0 pointer-events-none"><MediaSync audio={audio} video={video} onError={onMediaError} /><RoomAudioRenderer /><Tiles engine={engine} localAudio={audio} /></LiveKitRoom>
 }
