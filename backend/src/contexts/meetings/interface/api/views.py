@@ -7,6 +7,7 @@ do workspace? pode publicar? — é tomada nestas views, e vira claim no token.
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -14,6 +15,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.estimation.infrastructure.django.models import PokerSessionModel
 from contexts.meetings.infrastructure.django.models import (
     MeetingParticipantModel,
     MeetingRoomModel,
@@ -164,6 +166,65 @@ class RoomJoinView(APIView):
         )
         return Response(
             {"token": token, "url": settings.LIVEKIT_URL, "room": _room_dict(room)}
+        )
+
+
+class OfficeRoomJoinView(APIView):
+    """Entrada na sala persistente de mídia de um andar do Escritório."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        workspace_id = str(request.data.get("workspace_id", ""))
+        floor = max(1, min(8, int(request.data.get("floor", 1))))
+        _assert_member(workspace_id, _uid(request))
+        slug = f"office-{workspace_id[:8]}-floor-{floor}"
+        room, _ = MeetingRoomModel.objects.get_or_create(
+            slug=slug,
+            defaults={"workspace_id": workspace_id, "name": f"Escritório · andar {floor}", "created_by": _uid(request)},
+        )
+        MeetingParticipantModel.objects.get_or_create(room=room, user_id=_uid(request), left_at=None)
+        return Response({"token": issue_token(room=slug, identity=_uid(request), name=request.user.full_name or request.user.email), "url": settings.LIVEKIT_URL, "room": _room_dict(room)})
+
+
+class PokerRoomJoinView(APIView):
+    """Entrada na sala de mídia de uma sessão de Planning Poker.
+
+    A sala segue a sessão (um slug por sessão), então quem abre a mesma URL
+    do poker cai no mesmo áudio/vídeo — sem passar pelo Escritório.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        session_id = str(request.data.get("session_id", ""))
+        try:
+            poker = PokerSessionModel.objects.get(id=session_id)
+        except (PokerSessionModel.DoesNotExist, ValidationError, ValueError) as exc:
+            raise NotFoundError("Sessão de Planning Poker não encontrada.") from exc
+        workspace_id = str(poker.workspace_id)
+        _assert_member(workspace_id, _uid(request))
+        slug = f"poker-{session_id}"
+        room, _ = MeetingRoomModel.objects.get_or_create(
+            slug=slug,
+            defaults={
+                "workspace_id": workspace_id,
+                "name": f"Planning Poker · {poker.name}",
+                "created_by": _uid(request),
+            },
+        )
+        MeetingParticipantModel.objects.get_or_create(
+            room=room, user_id=_uid(request), left_at=None
+        )
+        return Response(
+            {
+                "token": issue_token(
+                    room=slug,
+                    identity=_uid(request),
+                    name=request.user.full_name or request.user.email,
+                ),
+                "url": settings.LIVEKIT_URL,
+                "room": _room_dict(room),
+            }
         )
 
 

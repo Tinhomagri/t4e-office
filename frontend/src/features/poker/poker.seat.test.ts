@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { seatAnim, seatFacing } from "./PokerPage"
+import { seatAnim, seatFacing, seatFacingAt } from "./PokerPage"
 
 // A animação do sprite é a leitura visual do estado da rodada — se ela errar,
 // a mesa mente sobre quem já votou.
@@ -75,5 +75,22 @@ describe("seatFacing", () => {
 
   it("participante sozinho olha para a mesa", () => {
     expect(seatFacing(0, 1)).toBe("down")
+  })
+
+  it("quem está na lateral vira para dentro mesmo fora do eixo exato", () => {
+    // Com a mesa cheia, os quatro das laterais ficam em |sin| ≈ 0,38 e
+    // |cos| ≈ 0,92. O limiar fixo antigo os jogava em "up"/"down" — de costas
+    // para a mesa, que é o oposto do que a posição diz.
+    const lateral = Math.asin(0.38)
+    expect(seatFacingAt(lateral)).toBe("left")
+    expect(seatFacingAt(-lateral)).toBe("left")
+    expect(seatFacingAt(Math.PI - lateral)).toBe("right")
+    expect(seatFacingAt(Math.PI + lateral)).toBe("right")
+  })
+
+  it("quem está mais para cima ou para baixo continua encarando a mesa", () => {
+    const alto = Math.asin(0.86)
+    expect(seatFacingAt(-alto)).toBe("down")
+    expect(seatFacingAt(alto)).toBe("up")
   })
 })

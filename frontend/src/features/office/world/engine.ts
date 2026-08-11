@@ -280,6 +280,22 @@ export class OfficeEngine {
     return [...this.actors.values()]
   }
 
+  /** Ponto em pixels CSS acima do avatar, para overlays DOM (ex.: câmera). */
+  actorScreenPoint(id: string): { x: number; y: number } | null {
+    const actor = this.actors.get(id)
+    if (!actor) return null
+    const point = this.actorRenderPoint(actor)
+    const iso = this.toIso(point.x, point.y)
+    // Arredonda ANTES de escalar, exatamente como o blit do sprite faz. Sem
+    // isso o sprite anda em degraus de `scale` px e quem segue este ponto (o
+    // cartão de câmera) anda contínuo — a diferença sub-pixel oscila a cada
+    // quadro e lê como tremor.
+    return {
+      x: Math.round(iso.x - this.camX) * this.scale,
+      y: Math.round(iso.y - FH - this.camY) * this.scale,
+    }
+  }
+
   updateSelfConfig(config: AvatarConfig): void {
     if (!this.me) return
     const key = JSON.stringify(config)

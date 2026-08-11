@@ -76,6 +76,17 @@ export async function joinRoom(roomId: string, publish = true): Promise<JoinResu
   return data
 }
 
+export async function joinOfficeRoom(workspaceId: string, floor: number): Promise<JoinResult> {
+  const { data } = await api.post<JoinResult>("/meetings/office/join/", { workspace_id: workspaceId, floor })
+  return data
+}
+
+/** Sala de mídia de uma sessão de Planning Poker (uma sala por sessão). */
+export async function joinPokerRoom(sessionId: string): Promise<JoinResult> {
+  const { data } = await api.post<JoinResult>("/meetings/poker/join/", { session_id: sessionId })
+  return data
+}
+
 export async function leaveRoom(roomId: string): Promise<void> {
   await api.post(`/meetings/rooms/${roomId}/leave/`)
 }

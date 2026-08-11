@@ -15,11 +15,19 @@ import {
   Eye,
   Link2,
   ListOrdered,
+  Mic,
+  MicOff,
   Radio,
   SkipForward,
   Sparkles,
   Spade,
+  Video,
+  VideoOff,
 } from "lucide-react"
+import { joinPokerRoom, type JoinResult } from "@/features/meetings/meetings.api"
+import { MockVideoTiles, PokerVideoOverlay } from "./PokerVideoOverlay"
+import { isMockSeat, makeMockParticipants, mockSeatCount } from "./poker.mockSeats"
+import { SEATS_MAX, seatLayout, tableSize, wrapperMargins } from "./poker.layout"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { useProjects } from "@/features/workspace/workspace.hooks"
@@ -72,39 +80,6 @@ function cx(...cls: (string | false | undefined | null)[]) {
   return cls.filter(Boolean).join(" ")
 }
 
-// Mesa se ajusta ao número de participantes.
-function tableSize(count: number): { width: number; height: number } {
-  if (count <= 2) return { width: 340, height: 200 }
-  if (count <= 4) return { width: 430, height: 240 }
-  if (count <= 7) return { width: 520, height: 280 }
-  return { width: 600, height: 310 }
-}
-
-// Assentos ficam FORA da borda da mesa (wrapper maior que a mesa) —
-// nada de carta sobrepondo avatar ou o centro. Margens dimensionadas para
-// conter o assento inteiro (carta 52 + corpo 72 + nome ≈ 150px de altura).
-const SEAT_MARGIN_X = 120
-const SEAT_MARGIN_Y = 120
-
-// Posições em px no wrapper: elipse com raio = metade da mesa + folga fixa.
-function seatPositions(
-  total: number,
-  tableWidth: number,
-  tableHeight: number,
-): { x: number; y: number }[] {
-  const cx = tableWidth / 2 + SEAT_MARGIN_X
-  const cy = tableHeight / 2 + SEAT_MARGIN_Y
-  const rx = tableWidth / 2 + 52
-  const ry = tableHeight / 2 + 46
-  return Array.from({ length: total }, (_, i) => {
-    const angle = (i / total) * 2 * Math.PI - Math.PI / 2
-    return {
-      x: cx + rx * Math.cos(angle),
-      y: cy + ry * Math.sin(angle),
-    }
-  })
-}
-
 // ─── Estatísticas da rodada revelada ────────────────────────────────────────
 
 interface RoundStats {
@@ -148,7 +123,6 @@ function computeStats(votes: PokerSession["votes"]): RoundStats | null {
 // Assento: 80px de largura por ~114 de altura. As margens negativas centram o
 // bloco no ponto da órbita sem usar `translate(-50%,-50%)`, que brigaria com o
 // x/y do framer-motion (os dois escrevem no mesmo `transform`).
-const SEATS_MAX = 10
 const SEAT_W = 96
 // Escala 3 (48×96 antes do recorte). Sempre inteira: fracionária faz colunas
 // de pixel com larguras diferentes e o sprite "ondula".
@@ -189,12 +163,20 @@ export function seatAnim(opts: {
 
 // Todo mundo olha para a mesa: quem senta em cima olha para baixo, quem senta
 // embaixo olha para cima, e as laterais viram para dentro.
-export function seatFacing(index: number, total: number): Direction {
-  const angle = (index / total) * 2 * Math.PI - Math.PI / 2
+export function seatFacingAt(angle: number): Direction {
   const sin = Math.sin(angle)
-  if (sin < -0.35) return "down"
-  if (sin > 0.35) return "up"
-  return Math.cos(angle) > 0 ? "left" : "right"
+  const cos = Math.cos(angle)
+  // Quem manda é o eixo dominante (corte em 45°), não um limiar fixo em `sin`.
+  // Com o limiar antigo (0,35) os quatro assentos das laterais caíam em
+  // |sin| ≈ 0,38 e olhavam para cima/baixo, mesmo com |cos| ≈ 0,92 — de costas
+  // para a mesa em vez de virados para ela.
+  if (Math.abs(sin) >= Math.abs(cos)) return sin < 0 ? "down" : "up"
+  return cos > 0 ? "left" : "right"
+}
+
+/** Mesma regra a partir do índice, quando os assentos são igualmente angulares. */
+export function seatFacing(index: number, total: number): Direction {
+  return seatFacingAt((index / total) * 2 * Math.PI - Math.PI / 2)
 }
 
 function Seat({
@@ -255,7 +237,7 @@ function Seat({
   }, [revealed])
   return (
     <motion.div
-      className="absolute left-0 top-0 z-10"
+      className="absolute left-1/2 top-1/2 z-10"
       style={{ width: SEAT_W, marginLeft: -SEAT_W / 2, marginTop: -SEAT_H / 2 }}
       initial={{ x, y, scale: 0.6, opacity: 0 }}
       animate={{ x, y, scale: 1, opacity: 1 }}
@@ -285,7 +267,10 @@ function Seat({
         }
       }}
     >
-    <div className="relative flex w-20 flex-col items-center gap-1.5">
+    {/* Ocupa a caixa inteira: com uma coluna mais estreita encostada à
+        esquerda, o eixo visual do assento não era o ponto da órbita — e a
+        câmera, ancorada nesse ponto, saía da vertical da carta. */}
+    <div className="relative flex w-full flex-col items-center gap-1.5">
       {onEmote && (
         <EmoteMenu
           open={emoteOpen}
@@ -589,7 +574,7 @@ function FlyingReaction({
     // recebeu o quê) continua chegando, só não atravessa a tela.
     return (
       <motion.span
-        className="pointer-events-none absolute left-0 top-0 z-30 text-2xl"
+        className="pointer-events-none absolute left-1/2 top-1/2 z-30 text-2xl"
         style={{ marginLeft: -12, marginTop: -12 }}
         initial={{ x: to.x, y: to.y, opacity: 0 }}
         animate={{ opacity: [0, 1, 1, 0] }}
@@ -604,7 +589,7 @@ function FlyingReaction({
 
   return (
     <motion.span
-      className="pointer-events-none absolute left-0 top-0 z-30 text-2xl"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-30 text-2xl"
       style={{ marginLeft: -12, marginTop: -12 }}
       initial={{ x: originX, y: originY, scale: 0.4, opacity: 0 }}
       animate={{
@@ -1648,6 +1633,12 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   const [emoting, setEmoting] = useState<Record<string, string>>({})
   const timers = useRef<number[]>([])
 
+  // Mídia da mesa: só conecta no SFU quando alguém liga microfone ou câmera —
+  // abrir a sala não deve custar uma conexão de vídeo para quem só observa.
+  const [mediaSession, setMediaSession] = useState<JoinResult | null>(null)
+  const [micOn, setMicOn] = useState(false)
+  const [camOn, setCamOn] = useState(false)
+
   useEffect(() => () => timers.current.forEach(clearTimeout), [])
 
   const playThrow = (from: string, to: string) => {
@@ -1757,15 +1748,33 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   const myVote = liveVotes.find((v) => v.participant_id === userId)?.value ?? null
   // A mesa comporta 10 assentos; acima disso a órbita fica ilegível. O
   // cabeçalho continua mostrando o total real para ninguém achar que sumiu.
-  const participants = session.participants.slice(0, SEATS_MAX)
+  // `?mockseats=N` completa a mesa com gente falsa para inspecionar a
+  // proporção com a mesa cheia. Fora desse parâmetro, `mockCount` é 0 e a
+  // lista é exatamente a que veio do backend.
+  const mockCount = mockSeatCount(window.location.search)
+  const participants = [
+    ...session.participants,
+    ...makeMockParticipants(Math.max(0, mockCount - session.participants.length)),
+  ].slice(0, SEATS_MAX)
+  // Com mídia na sala a órbita abre para caber os cartões de câmera; sem ela a
+  // mesa fica compacta como sempre foi.
+  const videoActive = mockCount > 0 || mediaSession !== null
   const { width: tableWidth, height: tableHeight } = tableSize(participants.length)
-  const seats = seatPositions(Math.max(participants.length, 1), tableWidth, tableHeight)
-  const wrapperWidth = tableWidth + SEAT_MARGIN_X * 2
-  const wrapperHeight = tableHeight + SEAT_MARGIN_Y * 2
+  const seats = seatLayout(
+    Math.max(participants.length, 1),
+    tableWidth,
+    tableHeight,
+    videoActive,
+  )
+  const margins = wrapperMargins(videoActive)
+  const wrapperWidth = tableWidth + margins.x * 2
+  const wrapperHeight = tableHeight + margins.y * 2
   // Onde cada pessoa está sentada — origem e destino das reações em voo.
+  // Medido a partir do centro do wrapper, igual aos assentos.
   const seatOf = (userId: string): { x: number; y: number } | null => {
     const i = participants.findIndex((p) => p.user_id === userId)
-    return i === -1 ? null : seats[i] ?? null
+    const slot = i === -1 ? null : seats[i]
+    return slot ? { x: slot.ox, y: slot.oy } : null
   }
   const currentCard = allCards.find((c) => c.id === session.current_card_id) ?? null
   const selectedIds = session.card_ids
@@ -1783,6 +1792,22 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
       { status: "done" },
       { onSuccess: () => navigate("/app/poker") },
     )
+  }
+
+  // A conexão é preguiçosa: o primeiro toggle entra na sala, os seguintes só
+  // ligam/desligam a faixa. Sair da página derruba a conexão junto.
+  const toggleMedia = async (kind: "mic" | "cam") => {
+    if (!mediaSession && sessionId) setMediaSession(await joinPokerRoom(sessionId))
+    if (kind === "mic") setMicOn((v) => !v)
+    else setCamOn((v) => !v)
+  }
+
+  // Centro do cartão de vídeo, já calculado para fora da mesa pelo layout —
+  // também em relação ao centro do wrapper.
+  const videoAnchorOf = (uid: string) => {
+    const i = participants.findIndex((p) => p.user_id === uid)
+    const slot = i === -1 ? null : seats[i]
+    return slot ? { x: slot.videoOx, y: slot.videoOy } : null
   }
 
   const handleReveal = () => updateSession.mutate({ status: "revealed" })
@@ -1862,6 +1887,34 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               )}
             </div>
             <button
+              onClick={() => void toggleMedia("mic")}
+              aria-pressed={micOn}
+              aria-label={micOn ? "Desligar microfone" : "Ligar microfone"}
+              title={micOn ? "Desligar microfone" : "Ligar microfone"}
+              className={cx(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]",
+                micOn
+                  ? "border-[#0C66E4] bg-[#0C66E4]/20 text-[#579DFF]"
+                  : "border-[#2E3036] text-[#B3B9C4] hover:border-[#0C66E4] hover:text-[#F7F8F9]",
+              )}
+            >
+              {micOn ? <Mic className="size-3.5" aria-hidden /> : <MicOff className="size-3.5" aria-hidden />}
+            </button>
+            <button
+              onClick={() => void toggleMedia("cam")}
+              aria-pressed={camOn}
+              aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
+              title={camOn ? "Desligar câmera" : "Ligar câmera"}
+              className={cx(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]",
+                camOn
+                  ? "border-[#0C66E4] bg-[#0C66E4]/20 text-[#579DFF]"
+                  : "border-[#2E3036] text-[#B3B9C4] hover:border-[#0C66E4] hover:text-[#F7F8F9]",
+              )}
+            >
+              {camOn ? <Video className="size-3.5" aria-hidden /> : <VideoOff className="size-3.5" aria-hidden />}
+            </button>
+            <button
               onClick={copyInvite}
               aria-label="Copiar link de convite da sala"
               className="flex items-center gap-1.5 rounded-full border border-[#2E3036] px-3 py-1 text-xs text-[#B3B9C4] transition-colors hover:border-[#0C66E4] hover:text-[#F7F8F9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
@@ -1887,13 +1940,14 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
 
         {/* Mesa */}
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-4">
-          {/* Wrapper maior que a mesa: assentos orbitam FORA da borda */}
+          {/* Wrapper maior que a mesa: assentos orbitam FORA da borda. Entrar
+              na sala de mídia abre a órbita e muda este tamanho — por isso
+              tudo aqui dentro se posiciona pelo CENTRO (left/top 50%), que não
+              se move, e não pelo canto, que anda quando o wrapper cresce. */}
           <div className="relative shrink-0" style={{ width: wrapperWidth, height: wrapperHeight }}>
             <div
-              className="absolute rounded-[50%] border-2 transition-all duration-500"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 transition-all duration-500"
               style={{
-                left: SEAT_MARGIN_X,
-                top: SEAT_MARGIN_Y,
                 width: tableWidth,
                 height: tableHeight,
                 background: "linear-gradient(145deg, #212328, #0A0B0D)",
@@ -1928,19 +1982,38 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                     revealed={session.status === "revealed"}
                     voting={session.status === "voting"}
                     index={i}
-                    x={seats[i]?.x ?? 50}
-                    y={seats[i]?.y ?? 50}
-                    canReact={p.user_id !== userId}
+                    x={seats[i]?.ox ?? 0}
+                    y={seats[i]?.oy ?? 0}
+                    canReact={p.user_id !== userId && !isMockSeat(p.user_id)}
                     onReact={(emoji) => handleReact(p.user_id, emoji)}
                     cheering={cheerers.includes(p.user_id)}
                     throwing={throwers.includes(p.user_id)}
-                    facing={seatFacing(i, participants.length)}
+                    facing={seatFacingAt(seats[i]?.angle ?? -Math.PI / 2)}
                     emote={emoting[p.user_id] ?? null}
                     onEmote={p.user_id === userId ? handleEmote : undefined}
                   />
                 )
               })}
             </AnimatePresence>
+
+            {/* Câmeras ancoradas acima de cada assento */}
+            {mockCount > 0 && (
+              <MockVideoTiles
+                people={participants.map((p) => ({
+                  userId: p.user_id,
+                  name: p.user_name.split(" ")[0],
+                }))}
+                seatOf={videoAnchorOf}
+              />
+            )}
+            {mediaSession && (
+              <PokerVideoOverlay
+                session={mediaSession}
+                seatOf={videoAnchorOf}
+                audio={micOn}
+                video={camOn}
+              />
+            )}
 
             {/* Reações atravessando a mesa */}
             {flying.map((f) => {

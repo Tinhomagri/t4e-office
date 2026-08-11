@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* O cartão de câmera sobre o avatar mostra apenas a imagem; o nome já está
+   associado ao personagem — no Escritório e na mesa do Planning Poker. */
+.office-video-tile .lk-participant-name,
+.poker-video-tile .lk-participant-name {
+  display: none;
+}
+
+.office-video-tile .lk-participant-metadata,
+.office-video-tile .lk-participant-placeholder,
+.office-video-tile .lk-focus-toggle-button,
+.poker-video-tile .lk-participant-metadata,
+.poker-video-tile .lk-participant-placeholder,
+.poker-video-tile .lk-focus-toggle-button {
+  display: none;
+}
+
 @layer base {
   :root {
     color-scheme: light;

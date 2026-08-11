@@ -4,7 +4,7 @@
 // o HUD. Toda a simulação (movimento, colisão, luz, partículas) roda dentro do
 // OfficeEngine em passo fixo, sem provocar re-render a 60fps.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Keyboard, MessageSquare, Smile, Volume2, VolumeX } from "lucide-react"
+import { Keyboard, MessageSquare, Mic, MicOff, Smile, Video, VideoOff, Volume2, VolumeX } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AvatarConfig, Direction } from "@/features/avatar/avatar.types"
@@ -33,6 +33,8 @@ import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
 import { getMockActiveCard, getMockRoom, MOCK_DELIVERY_CHAMPION, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
+import { OfficeVideoOverlay } from "./OfficeVideoOverlay"
+import { joinOfficeRoom, type JoinResult } from "@/features/meetings/meetings.api"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -150,6 +152,9 @@ export function OfficeRoom({
   const [chatText, setChatText] = useState("")
   const [emoteOpen, setEmoteOpen] = useState(false)
   const [muted, setMuted] = useState(true)
+  const [officeSession, setOfficeSession] = useState<JoinResult | null>(null)
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [cameraEnabled, setCameraEnabled] = useState(false)
 
   const pcState = usePcStore((s) => s.state)
   const bootPc = usePcStore((s) => s.boot)
@@ -493,6 +498,11 @@ export function OfficeRoom({
   }, [pcState])
 
   const online = roomMembers?.length ?? 1
+  const enableMedia = async (kind: "voice" | "camera") => {
+    if (!officeSession && !mock) setOfficeSession(await joinOfficeRoom(workspaceId, floor))
+    if (kind === "voice") setVoiceEnabled((v) => !v)
+    else setCameraEnabled((v) => !v)
+  }
 
   return (
     <div
@@ -508,6 +518,7 @@ export function OfficeRoom({
         style={{ imageRendering: "pixelated" }}
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
+      {officeSession && <OfficeVideoOverlay session={officeSession} engine={engineRef} audio={voiceEnabled} video={cameraEnabled} />}
 
       {canManageDesks && hoverUserId && hoverPos && hoveredCard && (
         <div
@@ -598,6 +609,12 @@ export function OfficeRoom({
           </HudButton>
           <HudButton onClick={() => setEmoteOpen((v) => !v)} active={emoteOpen} title="Emotes">
             <Smile className="size-4" />
+          </HudButton>
+          <HudButton onClick={() => enableMedia("voice")} active={voiceEnabled} title={voiceEnabled ? "Desligar microfone" : "Ligar microfone"}>
+            {voiceEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+          </HudButton>
+          <HudButton onClick={() => enableMedia("camera")} active={cameraEnabled} title={cameraEnabled ? "Desligar câmera" : "Ligar câmera"}>
+            {cameraEnabled ? <Video className="size-4" /> : <VideoOff className="size-4" />}
           </HudButton>
           <HudButton
             onClick={() => engineRef.current?.tryInteract()}
