@@ -240,6 +240,7 @@ export function OfficeRoom({
 
     window.addEventListener("keydown", engine.onKeyDown)
     window.addEventListener("keyup", engine.onKeyUp)
+    window.addEventListener("blur", engine.onWindowBlur)
     engine.start()
 
     return () => {
@@ -247,6 +248,7 @@ export function OfficeRoom({
       ro.disconnect()
       window.removeEventListener("keydown", engine.onKeyDown)
       window.removeEventListener("keyup", engine.onKeyUp)
+      window.removeEventListener("blur", engine.onWindowBlur)
       engineRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -544,7 +546,11 @@ export function OfficeRoom({
         style={{ imageRendering: "pixelated" }}
         aria-label="Escritório virtual — use WASD ou clique para andar"
       />
-      {officeSession && <OfficeVideoOverlay session={officeSession} engine={engineRef} audio={voiceEnabled} video={cameraEnabled} onMediaError={handleMediaError} />}
+      {/* Com o PC ligado a tela do computador cobre o mundo — os cartões de
+          câmera do pessoal, que seguem a posição no mundo, ficariam boiando
+          por cima do desktop. A chamada continua no ar (áudio/vídeo publicados),
+          só os cartões visuais somem. */}
+      {officeSession && <OfficeVideoOverlay session={officeSession} engine={engineRef} audio={voiceEnabled} video={cameraEnabled} onMediaError={handleMediaError} showTiles={pcState === "off"} />}
 
       {canManageDesks && hoverUserId && hoverPos && hoveredCard && (
         <div

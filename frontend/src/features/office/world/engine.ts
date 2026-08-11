@@ -358,6 +358,11 @@ export class OfficeEngine {
   }
 
   onKeyDown = (e: KeyboardEvent): void => {
+    // Digitando no chat (ou em qualquer campo), WASD é texto, não comando de
+    // movimento — sem isto o boneco andava e o chat nunca recebia a tecla.
+    const target = e.target as HTMLElement | null
+    const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable
+    if (typing) return
     const action = keyAction(e.key, this.inputEnabled)
     if (action === "move") {
       this.keys.add(e.key.toLowerCase())
@@ -369,6 +374,13 @@ export class OfficeEngine {
 
   onKeyUp = (e: KeyboardEvent): void => {
     this.keys.delete(e.key.toLowerCase())
+  }
+
+  /** A janela perde o foco (alt-tab, outra aba) sem soltar a tecla antes: o
+   * keyup nunca chega e o boneco fica andando para sempre na última direção.
+   * Chamado no blur da janela. */
+  onWindowBlur = (): void => {
+    this.keys.clear()
   }
 
   /** Clique na tela → alvo de caminhada no mundo (passa pela inversa iso). */
