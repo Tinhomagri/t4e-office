@@ -8,7 +8,8 @@
  * (protanopia), fora da banda de piso. Não reordene sem revalidar: a ordem é o
  * que garante que vizinhos na pilha sejam distinguíveis.
  */
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import {
   Bar,
   BarChart,
@@ -123,19 +124,50 @@ function useGridColor(): string {
     : GRID
 }
 
+// Duração da entrada. Curta o bastante para não atrasar a leitura do número,
+// longa o bastante para o olho acompanhar a barra subindo.
+const INTRO_MS = 850
+// Escada entre painéis: o dashboard "monta" da esquerda para a direita em vez
+// de piscar tudo de uma vez.
+const STEP_MS = 70
+
+/**
+ * Verdadeiro só na primeira montagem, pelo tempo da entrada.
+ *
+ * Sem isso a animação repetiria a cada mudança de dados — filtrar, trocar de
+ * período ou um refetch em segundo plano fariam os gráficos redesenharem do
+ * zero, o que lê como travamento, não como polimento.
+ */
+function useIntro(): boolean {
+  const reduce = useReducedMotion()
+  const [running, setRunning] = useState(true)
+  useEffect(() => {
+    const id = window.setTimeout(() => setRunning(false), INTRO_MS + STEP_MS * 8)
+    return () => window.clearTimeout(id)
+  }, [])
+  return !reduce && running
+}
+
 function Panel({
   title,
   action,
   children,
   className,
+  index = 0,
 }: {
   title: string
   action?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** Posição na escada de entrada. */
+  index?: number
 }) {
+  const reduce = useReducedMotion()
   return (
-    <section
+    <motion.section
+      initial={reduce ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: (index * STEP_MS) / 1000 }}
       className={cx(
         "rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-4 shadow-card dark:shadow-none",
         className,
@@ -146,7 +178,7 @@ function Panel({
         {action}
       </div>
       {children}
-    </section>
+    </motion.section>
   )
 }
 
@@ -226,11 +258,12 @@ function Legend({
 
 // ─── Donut ────────────────────────────────────────────────────────────────────
 
-function DonutPanel({ title, slices }: { title: string; slices: Slice[] }) {
+function DonutPanel({ title, slices, index = 0 }: { title: string; slices: Slice[]; index?: number }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0)
   const hues = useMemo(() => hueMap(slices), [slices])
+  const intro = useIntro()
   return (
-    <Panel title={title}>
+    <Panel title={title} index={index}>
       {total === 0 ? (
         <EmptyPlot />
       ) : (
@@ -248,7 +281,13 @@ function DonutPanel({ title, slices }: { title: string; slices: Slice[] }) {
                   // adjacentes se tocam e a borda some para quem tem CVD.
                   paddingAngle={2}
                   stroke="none"
-                  isAnimationActive={false}
+                  // O donut entra girando e abrindo do centro; depois da
+                  // entrada a animação é desligada para que filtrar não
+                  // redesenhe o gráfico inteiro a cada tecla.
+                  isAnimationActive={intro}
+                  animationBegin={index * STEP_MS}
+                  animationDuration={INTRO_MS}
+                  animationEasing="ease-out"
                 >
                   {slices.map((s) => (
                     <Cell key={s.key} fill={hues.get(s.key)} />
@@ -288,18 +327,21 @@ function StackedTrendPanel({
   series,
   xKey,
   xFormat,
+  index = 0,
 }: {
   title: string
   rows: Record<string, number | string>[]
   series: Slice[]
   xKey: string
   xFormat: (v: string) => string
+  index?: number
 }) {
   const grid = useGridColor()
   const hues = useMemo(() => hueMap(series), [series])
+  const intro = useIntro()
   const hasData = rows.some((r) => series.some((s) => Number(r[s.key]) > 0))
   return (
-    <Panel title={title}>
+    <Panel title={title} index={index}>
       {!hasData ? (
         <EmptyPlot />
       ) : (
@@ -334,7 +376,12 @@ function StackedTrendPanel({
                     stroke="none"
                     strokeWidth={0}
                     maxBarSize={22}
-                    isAnimationActive={false}
+                    // Cada faixa da pilha entra um pouco depois da anterior,
+                    // então a barra parece crescer de baixo para cima.
+                    isAnimationActive={intro}
+                    animationBegin={index * STEP_MS + i * 90}
+                    animationDuration={INTRO_MS}
+                    animationEasing="ease-out"
                     // Canto arredondado só no topo da pilha, ancorado na base.
                     radius={i === series.length - 1 ? [4, 4, 0, 0] : undefined}
                   />
@@ -350,11 +397,18 @@ function StackedTrendPanel({
 
 // ─── Lead time ────────────────────────────────────────────────────────────────
 
-function LeadTimePanel({ rows }: { rows: { week: string; days: number | null; count: number }[] }) {
+function LeadTimePanel({
+  rows,
+  index = 0,
+}: {
+  rows: { week: string; days: number | null; count: number }[]
+  index?: number
+}) {
   const grid = useGridColor()
+  const intro = useIntro()
   const hasData = rows.some((r) => r.days != null)
   return (
-    <Panel title="Lead time — dias entre criação e entrega">
+    <Panel title="Lead time — dias entre criação e entrega" index={index}>
       {!hasData ? (
         <EmptyPlot label="Nenhum card entregue no período" />
       ) : (
@@ -384,7 +438,10 @@ function LeadTimePanel({ rows }: { rows: { week: string; days: number | null; co
                 connectNulls={false}
                 dot={{ r: 3, strokeWidth: 0, fill: HUES[0] }}
                 activeDot={{ r: 5 }}
-                isAnimationActive={false}
+                isAnimationActive={intro}
+                animationBegin={index * STEP_MS}
+                animationDuration={INTRO_MS + 250}
+                animationEasing="ease-out"
               />
             </LineChart>
           </ResponsiveContainer>
@@ -540,9 +597,11 @@ export function ResumoDashboard({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <DonutPanel title="Tickets por status" slices={statusSlices} />
-        <DonutPanel title="Tickets por tipo" slices={typeSlices} />
-        <DonutPanel title="Tickets por responsável" slices={assigneeSlices} />
+        {/* `index` monta a escada: cada painel entra logo depois do anterior,
+            na ordem de leitura, em vez de tudo aparecer no mesmo quadro. */}
+        <DonutPanel title="Tickets por status" slices={statusSlices} index={0} />
+        <DonutPanel title="Tickets por tipo" slices={typeSlices} index={1} />
+        <DonutPanel title="Tickets por responsável" slices={assigneeSlices} index={2} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -552,8 +611,9 @@ export function ResumoDashboard({
           series={statusSlices}
           xKey="date"
           xFormat={shortDay}
+          index={3}
         />
-        <LeadTimePanel rows={leadRows} />
+        <LeadTimePanel rows={leadRows} index={4} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -563,6 +623,7 @@ export function ResumoDashboard({
           series={typeSlices}
           xKey="month"
           xFormat={shortMonth}
+          index={5}
         />
         <DetailsTable cards={cards} />
       </div>

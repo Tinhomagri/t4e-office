@@ -1,6 +1,8 @@
 // Aba Resumo — dashboard estilo "Resumo" do Jira: métricas dos últimos 7
 // dias, visão geral de status (donut), atividade recente, prioridades,
 // tipos de trabalho, carga da equipe e progresso de épicos.
+import { useEffect, useRef, useState } from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import { CheckCircle2, Circle, ListChecks, PenLine, Plus, Sparkles } from "lucide-react"
 import { cx } from "@/shared/ui/primitives"
 import { useActivity } from "@/features/workspace/workspace.hooks"
@@ -132,25 +134,25 @@ export function ResumoView({
           icon={<CheckCircle2 className="size-4" />}
           chip="bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400"
           accent="from-green-500 to-emerald-400"
-          value={completedLast7.length} label="concluído(s)" sub="nos últimos 7 dias"
+          value={completedLast7.length} label="concluído(s)" sub="nos últimos 7 dias" index={0}
         />
         <MetricCard
           icon={<PenLine className="size-4" />}
           chip="bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400"
           accent="from-blue-500 to-cyan-400"
-          value={updatedLast7.length} label="atualizado(s)" sub="nos últimos 7 dias"
+          value={updatedLast7.length} label="atualizado(s)" sub="nos últimos 7 dias" index={1}
         />
         <MetricCard
           icon={<Plus className="size-4" />}
           chip="bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400"
           accent="from-violet-500 to-fuchsia-400"
-          value={createdLast7.length} label="criado(s)" sub="nos últimos 7 dias"
+          value={createdLast7.length} label="criado(s)" sub="nos últimos 7 dias" index={2}
         />
         <MetricCard
           icon={<ListChecks className="size-4" />}
           chip="bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400"
           accent="from-orange-500 to-amber-400"
-          value={dueNext7.length} label="a ser(em) entregue(s)" sub="nos próximos 7 dias"
+          value={dueNext7.length} label="a ser(em) entregue(s)" sub="nos próximos 7 dias" index={3}
         />
       </div>
 
@@ -320,8 +322,39 @@ export function ResumoView({
   )
 }
 
+/** Conta de 0 até `value` na abertura. Depois disso, valor novo entra direto:
+ *  ficar recontando a cada atualização em segundo plano cansa mais do que
+ *  informa. `tabular` no número evita o texto "dançar" enquanto os dígitos
+ *  mudam. */
+function useCountUp(value: number, durationMs: number, delayMs: number): number {
+  const reduce = useReducedMotion()
+  const [shown, setShown] = useState(reduce ? value : 0)
+  const done = useRef(false)
+
+  useEffect(() => {
+    if (reduce || done.current) {
+      setShown(value)
+      return
+    }
+    let frame = 0
+    let start = 0
+    const step = (t: number) => {
+      if (!start) start = t + delayMs
+      const progress = Math.min(1, Math.max(0, (t - start) / durationMs))
+      // easeOutCubic: rápido no começo, assenta no fim.
+      setShown(Math.round(value * (1 - (1 - progress) ** 3)))
+      if (progress < 1) frame = requestAnimationFrame(step)
+      else done.current = true
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [value, durationMs, delayMs, reduce])
+
+  return shown
+}
+
 function MetricCard({
-  icon, chip, accent, value, label, sub,
+  icon, chip, accent, value, label, sub, index = 0,
 }: {
   icon: React.ReactNode
   chip: string
@@ -329,17 +362,31 @@ function MetricCard({
   value: number
   label: string
   sub: string
+  index?: number
 }) {
+  const reduce = useReducedMotion()
+  const delay = index * 70
+  const shown = useCountUp(value, 700, delay)
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-4 shadow-card">
-      <span className={cx("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", accent)} />
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: delay / 1000 }}
+      className="relative overflow-hidden rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-4 shadow-card"
+    >
+      <motion.span
+        className={cx("absolute inset-x-0 top-0 h-1 origin-left bg-gradient-to-r", accent)}
+        initial={reduce ? false : { scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: delay / 1000 + 0.1 }}
+      />
       <div className="flex items-center gap-2.5">
         <span className={cx("grid size-8 place-items-center rounded-xl", chip)}>{icon}</span>
-        <span className="text-2xl font-bold tabular text-ink dark:text-paper">{value}</span>
+        <span className="text-2xl font-bold tabular text-ink dark:text-paper">{shown}</span>
       </div>
       <p className="mt-2 text-xs font-medium text-paper-500">{label}</p>
       <p className="text-[11px] text-paper-400">{sub}</p>
-    </div>
+    </motion.div>
   )
 }
 

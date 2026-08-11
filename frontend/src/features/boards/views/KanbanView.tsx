@@ -4,13 +4,20 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { createPortal } from "react-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
@@ -36,7 +43,7 @@ import {
   X,
   Zap,
 } from "lucide-react"
-import { forwardRef, useEffect, useMemo, useState } from "react"
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react"
 import type { Ref } from "react"
 import { Link } from "react-router-dom"
 
@@ -71,6 +78,7 @@ import {
   useProjectPermissions,
   useSprints,
   useUpdateBoardConfig,
+  useRankCard,
   useUpdateCard,
   useUpdateWorkflowStatus,
   useWorkflowStatuses,
@@ -122,6 +130,7 @@ export function KanbanView({
   const { data: sprints } = useSprints(projectId)
   const { data: members } = useMembers(workspaceId)
   const updateCard = useUpdateCard(projectId)
+  const rankCard = useRankCard(projectId)
 
   const [scope, setScope] = useState<Scope>({ kind: "backlog" })
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -178,15 +187,62 @@ export function KanbanView({
   const activeCard = scopeCards.find((c) => c.id === activeId) ?? null
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
+
+  /**
+   * Muda a coluna já durante o arrasto, assim que o card entra nela.
+   *
+   * Sem isto o card só trocaria de coluna ao soltar: enquanto sobrevoa, a
+   * coluna de destino não abre espaço e a origem não fecha o buraco — que é
+   * exatamente a sensação de "o card não está indo para lugar nenhum".
+   */
+  const onDragOver = (e: DragOverEvent) => {
+    const overId = e.over?.id ? String(e.over.id) : null
+    const activeCardId = String(e.active.id)
+    if (!overId || overId === activeCardId) return
+
+    const card = scopeCards.find((c) => c.id === activeCardId)
+    if (!card) return
+
+    const overCard = scopeCards.find((c) => c.id === overId)
+    const destino = (overCard?.status ?? overId) as CardStatus
+    if (card.status === destino) return
+
+    // Só o cache: o PATCH sai uma vez, no fim do gesto.
+    qc.setQueryData<Card[]>(["cards", projectId], (old) =>
+      (old ?? []).map((c) => (c.id === card.id ? { ...c, status: destino } : c)),
+    )
+  }
+
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
-    const overId = e.over?.id ? (String(e.over.id) as CardStatus) : null
+    const overId = e.over?.id ? String(e.over.id) : null
     const card = scopeCards.find((c) => c.id === String(e.active.id))
-    if (!card || !overId || card.status === overId) return
-    qc.setQueryData<Card[]>(["cards", projectId], (old) =>
-      (old ?? []).map((c) => (c.id === card.id ? { ...c, status: overId } : c)),
-    )
-    updateCard.mutate({ cardId: card.id, input: { status: overId } })
+    if (!card || !overId) return
+
+    const overCard = scopeCards.find((c) => c.id === overId)
+    const destino = (overCard?.status ?? overId) as CardStatus
+
+    if (card.status !== destino) {
+      qc.setQueryData<Card[]>(["cards", projectId], (old) =>
+        (old ?? []).map((c) => (c.id === card.id ? { ...c, status: destino } : c)),
+      )
+      updateCard.mutate({ cardId: card.id, input: { status: destino } })
+    }
+
+    // Soltou no vazio da coluna: mudou de lista, mantém a posição relativa.
+    if (!overCard || overCard.id === card.id) return
+
+    // Reposiciona entre os vizinhos do destino; o backend converte o par
+    // before/after em Lexorank (mesmo caminho que o Backlog já usa).
+    const destinoCards = scopeCards.filter((c) => c.status === destino && c.id !== card.id)
+    const alvo = destinoCards.findIndex((c) => c.id === overCard.id)
+    if (alvo === -1) return
+    const ordenado = [...destinoCards.slice(0, alvo), card, ...destinoCards.slice(alvo)]
+    rankCard.mutate({
+      cardId: card.id,
+      beforeId: ordenado[alvo - 1]?.id ?? null,
+      afterId: ordenado[alvo + 1]?.id ?? null,
+    })
   }
 
   const currentSprintId = scope.kind === "sprint" ? scope.id : null
@@ -361,7 +417,12 @@ export function KanbanView({
 
           {/* Kanban — full width breakout (alinhado ao padding do main: 4 no mobile, 6 no sm+) */}
           <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-4 scrollbar-slim sm:-mx-6 sm:px-6">
-            <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+            <DndContext
+              sensors={sensors}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragEnd={onDragEnd}
+            >
               {swimlane !== "none" ? (
                 <SwimlaneBoard
                   mode={swimlane}
@@ -374,6 +435,9 @@ export function KanbanView({
                   onAddDetailed={onNewCard}
                   onOpen={onOpen}
                   onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
+                  onAssign={(cardId, assigneeId) =>
+                    updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
+                  }
                 />
               ) : (
                 <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
@@ -394,6 +458,9 @@ export function KanbanView({
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
                       onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
+                  onAssign={(cardId, assigneeId) =>
+                    updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
+                  }
                       onRename={(name) => updateWorkflowStatus.mutate({ statusId: ws.id, input: { name } })}
                       onMoveLeft={i > 0 ? () => moveColumn(ws, -1) : undefined}
                       onMoveRight={i < columns.length - 1 ? () => moveColumn(ws, 1) : undefined}
@@ -412,10 +479,17 @@ export function KanbanView({
                   />
                 </div>
               )}
-              {/* `key` e `id` são obrigatórios: o AnimationManager do dnd-kit só
-                  segura o clone durante o voo de drop se o filho tiver os dois —
-                  sem eles a animação era descartada e o card teleportava. */}
-              <DragOverlay dropAnimation={reduceMotion ? null : dropFlight}>
+              {/* Em portal para o body: o overlay nasce dentro da faixa que
+                  rola na horizontal (`overflow-x-auto`), e ali o clone era
+                  recortado pela borda do contêiner — parecia que o card
+                  passava POR BAIXO da coluna vizinha ao ser arrastado.
+                  createPortal muda só o nó no DOM; o contexto do dnd-kit
+                  continua valendo. */}
+              {createPortal(
+              /* `key` e `id` são obrigatórios: o AnimationManager do dnd-kit só
+                 segura o clone durante o voo de drop se o filho tiver os dois —
+                 sem eles a animação era descartada e o card teleportava. */
+              <DragOverlay dropAnimation={reduceMotion ? null : dropFlight} zIndex={60}>
                 {activeCard ? (
                   <motion.div
                     key={activeCard.id}
@@ -428,7 +502,9 @@ export function KanbanView({
                     <CardCell card={activeCard} members={members ?? []} dragging />
                   </motion.div>
                 ) : null}
-              </DragOverlay>
+              </DragOverlay>,
+              document.body,
+              )}
             </DndContext>
           </div>
         </div>
@@ -776,6 +852,7 @@ function SwimlaneBoard({
   onAddDetailed,
   onOpen,
   onDone,
+  onAssign,
 }: {
   mode: SwimlaneMode
   epics: Card[]
@@ -787,6 +864,7 @@ function SwimlaneBoard({
   onAddDetailed: (s: CardStatus) => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
+  onAssign?: (cardId: string, assigneeId: string | null) => void
 }) {
   const nonEpic = scopeCards.filter((c) => c.type !== "epic")
 
@@ -862,6 +940,7 @@ function SwimlaneBoard({
                   onAddDetailed={() => onAddDetailed(ws.slug as CardStatus)}
                   onOpen={onOpen}
                   onDone={onDone}
+                  onAssign={onAssign}
                   compact
                 />
               ))}
@@ -886,6 +965,7 @@ function Column({
   onAddDetailed,
   onOpen,
   onDone,
+  onAssign,
   onRemove,
   onRename,
   onMoveLeft,
@@ -907,6 +987,7 @@ function Column({
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
+  onAssign?: (cardId: string, assigneeId: string | null) => void
   onRemove?: () => void
   onRename?: (name: string) => void
   onMoveLeft?: () => void
@@ -1105,11 +1186,22 @@ function Column({
       {/* Card list */}
       {/* gap 4px e padding 1px/4px — o scroll-container do Jira. */}
       <div className="flex min-h-[60px] flex-1 flex-col gap-1 overflow-y-auto px-1 py-px scrollbar-slim">
-        <AnimatePresence initial={false}>
-          {cards.map((card) => (
-            <DraggableCard key={card.id} card={card} members={members} onOpen={onOpen} onDone={onDone} />
-          ))}
-        </AnimatePresence>
+        {/* Um contexto por coluna: é ele que dá aos cards a noção de vizinho e
+            produz o vão abrindo na posição de destino. */}
+        <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          <AnimatePresence initial={false}>
+            {cards.map((card) => (
+              <DraggableCard
+                key={card.id}
+                card={card}
+                members={members}
+                onOpen={onOpen}
+                onDone={onDone}
+                onAssign={onAssign}
+              />
+            ))}
+          </AnimatePresence>
+        </SortableContext>
         {cards.length === 0 && !isOver && (
           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
             <div className="mb-2 grid size-10 place-items-center rounded-full bg-paper-200 dark:bg-ink-800">
@@ -1436,25 +1528,34 @@ const DraggableCard = forwardRef<HTMLDivElement, {
   members: Member[]
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
-}>(function DraggableCard({ card, members, onOpen, onDone }, forwardedRef) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id })
+  onAssign?: (cardId: string, assigneeId: string | null) => void
+}>(function DraggableCard({ card, members, onOpen, onDone, onAssign }, forwardedRef) {
+  // useSortable, não useDraggable: além de arrastar, registra o card como ALVO
+  // de drop. É o que permite soltar ENTRE dois cards — e o que faz os vizinhos
+  // abrirem espaço enquanto o card sobrevoa, em vez de a coluna ficar parada
+  // até o drop.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: card.id,
+  })
   return (
-    <motion.div
+    // Duas camadas de propósito. A de fora é do dnd-kit: só ela escreve
+    // `transform`, que é o deslocamento abrindo espaço para o card em voo. A de
+    // dentro é do framer-motion, cuidando apenas de opacidade na entrada e
+    // saída. Já houve tremor neste arquivo por três donos disputarem o mesmo
+    // transform; manter um dono por elemento é o que evita a repetição.
+    <div
       ref={mergeRefs<HTMLDivElement>(setNodeRef, forwardedRef)}
       {...attributes}
       {...listeners}
-      // Uma única autoridade sobre o transform. Antes havia três disputando o
-      // mesmo elemento — `layoutId` (FLIP de shared element entre colunas),
-      // `layout="position"` e o `mode="popLayout"` do AnimatePresence —, e o
-      // resultado era o card tremendo e saltando no drop. Quem move o card de
-      // uma coluna para a outra agora é só o voo do clone no DragOverlay; aqui
-      // ficam apenas entrada e saída da lista.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      onClick={() => onOpen(card)}
+      className="cursor-grab touch-none active:cursor-grabbing"
+    >
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={cardFade}
-      onClick={() => onOpen(card)}
-      className="cursor-grab touch-none active:cursor-grabbing"
     >
       {/* Slot fantasma: o card sai de cena e fica o buraco do tamanho exato,
           então a coluna não reflui durante o arrasto. `visibility` (e não
@@ -1471,23 +1572,201 @@ const DraggableCard = forwardRef<HTMLDivElement, {
         )}
       >
         <div className={cx(isDragging && "invisible")}>
-          <CardCell card={card} members={members} onDone={onDone} />
+          <CardCell
+            card={card}
+            members={members}
+            onDone={onDone}
+            onAssign={onAssign && ((assigneeId) => onAssign(card.id, assigneeId))}
+          />
         </div>
       </div>
     </motion.div>
+    </div>
   )
 })
+
+/**
+ * Troca o responsável sem sair do quadro, como no Jira: clicar no avatar abre
+ * a lista ali mesmo, em vez de exigir abrir o card.
+ *
+ * Dois cuidados que fazem isso conviver com o arrasto:
+ *  - `stopPropagation` no clique, senão o clique sobe para o card e abre o
+ *    painel lateral por baixo do menu;
+ *  - `stopPropagation` no pointerdown, porque quem escuta o gesto de arrasto é
+ *    o wrapper: sem isso, tentar clicar no avatar começava a arrastar o card.
+ */
+function AssigneePicker({
+  card,
+  members,
+  onAssign,
+}: {
+  card: Card
+  members: Member[]
+  onAssign: (userId: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const assignee = members.find((m) => m.user_id === card.assignee_id)
+
+  // O card tem `overflow-hidden` (e ainda vive dentro da coluna que rola), então
+  // um menu ali dentro nasce recortado. Vai por portal no body, com a posição
+  // medida a partir do botão — é o que faz ele SOBREPOR o quadro.
+  const place = () => {
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const largura = 208
+    const altura = 240
+    // Abre para baixo, como pedido; só sobe se não houver espaço embaixo.
+    const cabeAbaixo = rect.bottom + altura < window.innerHeight
+    setAt({
+      top: cabeAbaixo ? rect.bottom + 6 : Math.max(8, rect.top - altura - 6),
+      left: Math.min(Math.max(8, rect.right - largura), window.innerWidth - largura - 8),
+    })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      const alvo = event.target as Node
+      if (!boxRef.current?.contains(alvo) && !menuRef.current?.contains(alvo)) setOpen(false)
+    }
+    const esc = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false)
+    // Fora do fluxo do card, o menu não acompanha a rolagem: fecha em vez de
+    // ficar flutuando solto sobre o quadro.
+    const reposition = () => setOpen(false)
+    document.addEventListener("mousedown", close)
+    document.addEventListener("keydown", esc)
+    window.addEventListener("scroll", reposition, true)
+    window.addEventListener("resize", reposition)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("keydown", esc)
+      window.removeEventListener("scroll", reposition, true)
+      window.removeEventListener("resize", reposition)
+    }
+  }, [open])
+
+  const found = members.filter((m) =>
+    m.name.toLowerCase().includes(query.trim().toLowerCase()),
+  )
+
+  const pick = (userId: string | null) => {
+    onAssign(userId)
+    setOpen(false)
+    setQuery("")
+  }
+
+  return (
+    <div
+      ref={boxRef}
+      className="relative"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => {
+          place()
+          setOpen((v) => !v)
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={assignee ? `Responsável: ${assignee.name}. Trocar` : "Definir responsável"}
+        className="rounded-full transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+      >
+        {assignee ? (
+          <ColoredAvatar name={assignee.name} size="xs" />
+        ) : (
+          <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 transition-colors hover:border-brand-500 hover:text-brand-500">
+            ?
+          </span>
+        )}
+      </button>
+
+      {createPortal(
+        <AnimatePresence>
+          {open && at && (
+          <motion.div
+            ref={menuRef}
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+            style={{ top: at.top, left: at.left }}
+            className="fixed z-[70] w-52 overflow-hidden rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 shadow-lg"
+            role="listbox"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {members.length > 6 && (
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar pessoa…"
+                className="w-full border-b border-paper-200 dark:border-ink-700 bg-transparent px-3 py-2 text-xs text-ink dark:text-paper outline-none placeholder:text-paper-400"
+              />
+            )}
+            <div className="max-h-56 overflow-y-auto py-1">
+              <button
+                type="button"
+                onClick={() => pick(null)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-paper-500 transition-colors hover:bg-paper-100 dark:hover:bg-ink-700"
+              >
+                <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px]">
+                  ?
+                </span>
+                Sem responsável
+              </button>
+              {found.map((m) => (
+                <button
+                  key={m.user_id}
+                  type="button"
+                  onClick={() => pick(m.user_id)}
+                  role="option"
+                  aria-selected={m.user_id === card.assignee_id}
+                  className={cx(
+                    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-paper-100 dark:hover:bg-ink-700",
+                    m.user_id === card.assignee_id
+                      ? "font-semibold text-ink dark:text-paper"
+                      : "text-paper-600 dark:text-paper-400",
+                  )}
+                >
+                  <ColoredAvatar name={m.name} size="xs" />
+                  <span className="truncate">{m.name}</span>
+                </button>
+              ))}
+              {found.length === 0 && (
+                <p className="px-3 py-2 text-xs text-paper-400">Ninguém encontrado</p>
+              )}
+            </div>
+          </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </div>
+  )
+}
 
 export function CardCell({
   card,
   members,
   dragging = false,
   onDone,
+  onAssign,
 }: {
   card: Card
   members: Member[]
   dragging?: boolean
   onDone?: (cardId: string) => void
+  /** Ausente no clone do arrasto: o menu não deve abrir no card em voo. */
+  onAssign?: (userId: string | null) => void
 }) {
   const assignee = members.find((m) => m.user_id === card.assignee_id)
   const isEpic = card.type === "epic"
@@ -1631,7 +1910,9 @@ export function CardCell({
               </span>
             )}
           </div>
-          {assignee ? (
+          {onAssign && !dragging ? (
+            <AssigneePicker card={card} members={members} onAssign={onAssign} />
+          ) : assignee ? (
             <ColoredAvatar name={assignee.name} size="xs" />
           ) : (
             <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400">

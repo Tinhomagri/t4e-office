@@ -236,29 +236,11 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
         </Button>
       </PageHeader>
 
-      {/* Project tabs (workspaces) */}
-      {projects && projects.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center gap-1.5 border-b border-paper-200 dark:border-ink-700 pb-px">
-          {projects.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setProjectId(p.id)}
-              className={cx(
-                "relative -mb-px rounded-t-lg px-3.5 py-2 text-sm font-medium transition-colors",
-                p.id === projectId ? "text-ink dark:text-paper" : "text-paper-500 hover:text-ink dark:hover:text-paper",
-              )}
-            >
-              <span className="font-mono text-xs text-paper-400">{p.key}</span>{" "}
-              {p.name}
-              {p.id === projectId && (
-                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500" />
-              )}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <EmptyProjects onCreate={() => setNewProjectOpen(true)} />
-      )}
+      {/* A faixa com uma aba por projeto saiu daqui: ela cresce com o número de
+          projetos e, depois da importação do Jira, tomava quatro linhas antes
+          de o quadro começar. A troca de projeto continua na barra lateral,
+          que já navega para /app/boards?project=<id>. */}
+      {!projects?.length && <EmptyProjects onCreate={() => setNewProjectOpen(true)} />}
 
       {/* Jira-style view tab bar */}
       {activeProject && (

@@ -14,6 +14,10 @@ class ProjectModel(models.Model):
     )
     name = models.CharField(max_length=120, help_text="Nome do projeto")
     key = models.CharField(max_length=10, help_text="Prefixo curto do ID dos cards (ex: MIA)")
+    # Chave do item na ferramenta de origem, quando veio de importação (ex.:
+    # "GES" no Jira). É o que torna a importação repetível: reimportar atualiza
+    # o mesmo registro em vez de criar outro.
+    external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     # Template de criação: define workflow inicial (software | campanha | social | conteudo)
     template = models.CharField(max_length=20, default="software")
     description = models.TextField(blank=True, default="")
@@ -95,6 +99,7 @@ class SprintModel(models.Model):
     )
     name = models.CharField(max_length=120)
     goal = models.TextField(blank=True, default="")
+    external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="planned")
@@ -217,6 +222,10 @@ class CardModel(models.Model):
     rank = models.CharField(max_length=64, blank=True, default="", db_index=True)
     # Procedência: marca cards criados pela IA do copiloto (Fase 2)
     source = models.CharField(max_length=20, default="manual")
+    external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
+    # Nome de quem estava responsável na origem e não tem conta aqui. Sem isto a
+    # informação se perde: o card viria sem responsável e sem pista de quem era.
+    external_assignee = models.CharField(max_length=120, blank=True, default="")
     # Observação livre de quem está com o card em "Em andamento" — só o
     # assignee edita. Mostrada no balão de hover do escritório virtual.
     working_note = models.TextField(blank=True, default="")
@@ -323,6 +332,7 @@ class CardCommentModel(models.Model):
         "identity.UserModel", on_delete=models.CASCADE, related_name="card_comments"
     )
     body = models.TextField()
+    external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
