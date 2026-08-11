@@ -2,6 +2,15 @@
 from rest_framework import serializers
 
 
+class CreateAnonymousReportSerializer(serializers.Serializer):
+    """Dados estritamente necessários para uma denúncia sem identificação."""
+
+    category = serializers.ChoiceField(
+        choices=["conduct", "harassment", "security", "fraud", "other"]
+    )
+    description = serializers.CharField(min_length=20, max_length=8000, trim_whitespace=True)
+
+
 class CreateProjectSerializer(serializers.Serializer):
     """Payload de criação de projeto."""
 

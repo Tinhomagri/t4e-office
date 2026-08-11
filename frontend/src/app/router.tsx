@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter } from "react-router-dom"
 import { useAuthStore } from "@/features/auth/auth.store"
 import { AppShell } from "@/features/shell/AppShell"
 import { AvatarLabPage } from "@/features/avatar/AvatarLabPage"
+import { AnonymousReportPage } from "@/features/anonymous-reports/AnonymousReportPage"
 import { BoardsPage } from "@/features/boards/BoardsPage"
 import { BoardSettingsPage } from "@/features/boards/settings/BoardSettingsPage"
 import { CopilotPage } from "@/features/copilot/CopilotPage"
@@ -142,6 +143,7 @@ export const router = createBrowserRouter([
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/invite", element: <AcceptInvitePage /> },
+  { path: "/reports", element: <AnonymousReportPage /> },
   {
     path: "/app",
     element: (
