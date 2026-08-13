@@ -21,7 +21,9 @@ def scenario(db):
     ws = WorkspaceModel.objects.create(name="WS", slug="ws", owner=owner)
     MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
     MembershipModel.objects.create(workspace=ws, user=member, role="member")
-    project = ProjectModel.objects.create(workspace=ws, name="Proj", key="PRJ")
+    project = ProjectModel.objects.create(
+        workspace=ws, name="Proj", key="PRJ", visibility="workspace"
+    )
     client = APIClient()
     client.force_authenticate(user=owner)
     member_client = APIClient()

@@ -22,6 +22,18 @@ class MeetingRoomModel(models.Model):
     # workspaces — dois times podem ter uma sala "Daily" sem se cruzarem.
     slug = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=120)
+    # Como a sala nasceu.
+    #
+    # "meeting" é a reunião que alguém marcou — a única que aparece na lista de
+    # Reuniões. Escritório e Planning Poker também criam sala aqui (é o mesmo
+    # SFU), mas são canais de mídia do ambiente, não compromissos: listá-las
+    # enchia a tela de salas que ninguém criou e ninguém sabia encerrar.
+    KIND_CHOICES = [
+        ("meeting", "Reunião"),
+        ("office", "Andar do Escritório"),
+        ("poker", "Planning Poker"),
+    ]
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default="meeting", db_index=True)
     # Reunião ancorada num projeto/card: dá contexto e permite abrir a sala
     # direto do board. Nulo = sala solta do workspace.
     project = models.ForeignKey(

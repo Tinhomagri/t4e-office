@@ -16,6 +16,7 @@ from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoSprintRepository,
     DjangoWorkspaceAccess,
 )
+from contexts.projects.interface.api.permissions import assert_project_member
 from contexts.projects.interface.api.serializers import (
     CreateSprintSerializer,
     SprintSerializer,
@@ -68,6 +69,9 @@ class SprintListCreateView(APIView):
     def post(self, request: Request, project_id: str) -> Response:
         serializer = CreateSprintSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Sem esta guarda dava para criar sprint num board que a pessoa nem
+        # enxerga: o caso de uso só verifica pertencimento ao workspace.
+        assert_project_member(project_id=str(project_id), user_id=str(request.user.id))
         projects, sprints, access = _deps()
         sprint = CreateSprint(projects, sprints, access).execute(
             project_id=str(project_id),

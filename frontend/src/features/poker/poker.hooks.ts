@@ -12,11 +12,18 @@ export function useSession(sessionId: string | null) {
   })
 }
 
-export function usePokerCards(sessionId: string | null) {
+/** Cards disponíveis para a fila. `busca` chega ao backend porque a sessão da
+ *  squad varre o workspace inteiro — filtrar só no cliente traria uma fatia
+ *  arbitrária de milhares de cards. */
+export function usePokerCards(sessionId: string | null, busca = "") {
+  const termo = busca.trim()
   return useQuery({
-    queryKey: ["poker-cards", sessionId],
-    queryFn: () => pokerApi.getPokerCards(sessionId!),
+    queryKey: ["poker-cards", sessionId, termo],
+    queryFn: () => pokerApi.getPokerCards(sessionId!, termo ? { q: termo } : undefined),
     enabled: !!sessionId,
+    // Mantém a lista anterior enquanto a busca nova viaja: sem isso a coluna
+    // pisca em branco a cada tecla.
+    placeholderData: (anterior) => anterior,
   })
 }
 
@@ -27,6 +34,52 @@ export function useHeartbeat(sessionId: string | null) {
     const timer = setInterval(() => pokerApi.heartbeat(sessionId), 10_000)
     return () => clearInterval(timer)
   }, [sessionId])
+}
+
+export function useSquads(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["squads", workspaceId],
+    queryFn: () => pokerApi.listSquads(workspaceId!),
+    enabled: !!workspaceId,
+  })
+}
+
+export function useCreateSquad(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; color?: string; member_ids?: string[] }) =>
+      pokerApi.createSquad(workspaceId!, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["squads", workspaceId] }),
+  })
+}
+
+export function useUpdateSquad(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ squadId, input }: {
+      squadId: string
+      input: { name?: string; color?: string; member_ids?: string[] }
+    }) => pokerApi.updateSquad(squadId, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["squads", workspaceId] }),
+  })
+}
+
+export function useDeleteSquad(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (squadId: string) => pokerApi.deleteSquad(squadId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["squads", workspaceId] }),
+  })
+}
+
+/** Sessão da squad — sem projeto, estima cards de qualquer projeto. */
+export function useCreateSquadSession(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ squadId, name }: { squadId: string; name: string }) =>
+      pokerApi.createSquadSession(workspaceId!, squadId, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-sessions", workspaceId] }),
+  })
 }
 
 export function useCreateSession(workspaceId: string | null) {

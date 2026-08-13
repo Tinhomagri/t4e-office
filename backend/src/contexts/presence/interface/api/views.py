@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -21,7 +21,7 @@ from contexts.presence.infrastructure.django.models import (
     UserAvatarModel,
 )
 from contexts.presence.infrastructure.meeting import refresh_busy_until
-from contexts.projects.infrastructure.django.models import CardModel
+from contexts.projects.infrastructure.django.models import CardModel, WorkflowStatusModel
 from contexts.projects.interface.api.permissions import _assert_workspace
 from shared.domain.errors import PermissionDeniedError
 
@@ -132,11 +132,17 @@ class RoomView(APIView):
             for assignment in working_assignments
             if assignment.user_id not in live_user_ids
         }
+        # A coluna que significa "trabalhando nisso" é configuração de cada
+        # quadro (`is_working`), não o slug "doing": um projeto que renomeie a
+        # coluna continuaria sem sentar ninguém.
+        em_trabalho = WorkflowStatusModel.objects.filter(
+            project_id=OuterRef("project_id"), slug=OuterRef("status"), is_working=True
+        )
         active_user_ids = set(
             CardModel.objects.filter(
+                Exists(em_trabalho),
                 project__workspace_id=workspace_id,
                 assignee_id__in=working_user_ids,
-                status="doing",
             ).values_list("assignee_id", flat=True)
         )
         auto_rows = [

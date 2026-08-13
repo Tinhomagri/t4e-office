@@ -27,12 +27,18 @@ export interface Workspace {
   slug: string
 }
 
+// Quem enxerga o board: restrito (só quem tem papel ou é da squad dona) ou
+// aberto a todo o workspace.
+export type ProjectVisibility = "restricted" | "workspace"
+
 export interface Project {
   id: string
   name: string
   key: string
   workspace_id: string
   template?: ProjectTemplate
+  squad_id: string | null
+  visibility: ProjectVisibility
 }
 
 // /projects/<id>/ — projeto com os campos da aba "Geral" da configuração do quadro.
@@ -56,6 +62,8 @@ export interface UpdateProjectInput {
   avatar_color?: string
   lead_id?: string | null
   default_assignee_id?: string | null
+  squad_id?: string | null
+  visibility?: ProjectVisibility
 }
 
 export interface Card {
@@ -184,6 +192,9 @@ export interface CreateProjectInput {
   name: string
   key: string
   template?: ProjectTemplate
+  squad_id?: string | null
+  member_ids?: string[]
+  visibility?: ProjectVisibility
 }
 
 export interface CreateCardInput {
@@ -238,6 +249,9 @@ export interface WorkflowStatus {
   is_default: boolean
   // null = coluna sem limite de WIP.
   wip_limit: number | null
+  /** Card nesta coluna significa "estou trabalhando nisso agora": senta o
+   *  boneco na mesa da pessoa no Escritório e conta o tempo desde a entrada. */
+  is_working: boolean
 }
 
 export interface CreateWorkflowStatusInput {
@@ -253,6 +267,7 @@ export interface UpdateWorkflowStatusInput {
   color?: string
   order?: number
   wip_limit?: number | null
+  is_working?: boolean
 }
 
 // ---- Configuração do quadro (swimlanes, layout do card, cores) ----

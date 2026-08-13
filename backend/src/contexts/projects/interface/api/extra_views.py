@@ -354,11 +354,20 @@ def _ser_fv(v: IssueFieldValueModel) -> dict:
 
 # ── WorkflowStatuses ──────────────────────────────────────────────────────────
 
+# Fluxo padrão do time. Todo projeto de software nasce com estas cinco colunas;
+# criar outras continua livre, mas são estas que aparecem sem ninguém pedir.
+#
+# Os slugs `todo`/`doing`/`done` são preservados de propósito nas pontas: o
+# `CardModel.status` guarda o slug, e o resto do sistema (Resumo, métricas,
+# "concluído nos últimos 7 dias", presença no Escritório) reconhece esses três.
+# Trocá-los por nomes novos quebraria essas leituras em silêncio.
 DEFAULT_STATUSES = [
-    {"name": "A fazer", "slug": "todo", "category": "todo", "color": "#6b7280", "order": 0},
-    {"name": "Em andamento", "slug": "doing", "category": "in_progress", "color": "#3b82f6", "order": 1},
-    {"name": "Em revisão", "slug": "review", "category": "in_progress", "color": "#f59e0b", "order": 2},
-    {"name": "Concluído", "slug": "done", "category": "done", "color": "#10b981", "order": 3},
+    {"name": "Itens pendentes", "slug": "todo", "category": "todo", "color": "#6b7280", "order": 0},
+    # `is_working`: card aqui faz o boneco sentar na mesa no Escritório.
+    {"name": "Em andamento", "slug": "doing", "category": "in_progress", "color": "#3b82f6", "order": 1, "is_working": True},
+    {"name": "Backend / integrar", "slug": "backend", "category": "in_progress", "color": "#8b5cf6", "order": 2},
+    {"name": "Code Review", "slug": "review", "category": "in_progress", "color": "#f59e0b", "order": 3},
+    {"name": "Concluídos", "slug": "done", "category": "done", "color": "#10b981", "order": 4},
 ]
 
 # Workflow dos templates de marketing (Campanha / Social Media / Conteúdo)
@@ -392,7 +401,7 @@ def _ser_ws(ws: WorkflowStatusModel) -> dict:
         "name": ws.name, "slug": ws.slug,
         "category": ws.category, "color": ws.color,
         "order": ws.order, "is_default": ws.is_default,
-        "wip_limit": ws.wip_limit,
+        "wip_limit": ws.wip_limit, "is_working": ws.is_working,
     }
 
 
@@ -440,6 +449,8 @@ class WorkflowStatusDetailView(APIView):
         for f in ("name", "slug", "category", "color", "order"):
             if f in request.data:
                 setattr(ws, f, request.data[f])
+        if "is_working" in request.data:
+            ws.is_working = bool(request.data["is_working"])
         # 0/"" /null no wip_limit significam "sem limite", não zero cards.
         if "wip_limit" in request.data:
             raw = request.data["wip_limit"]

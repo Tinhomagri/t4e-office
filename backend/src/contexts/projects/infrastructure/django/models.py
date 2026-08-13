@@ -20,6 +20,29 @@ class ProjectModel(models.Model):
     external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     # Template de criação: define workflow inicial (software | campanha | social | conteudo)
     template = models.CharField(max_length=20, default="software")
+    # Quem enxerga o board.
+    #
+    # "restricted" (padrão): só quem tem papel atribuído no projeto — mais
+    # owner/admin do workspace, que precisam administrar. "workspace": qualquer
+    # membro do workspace. O padrão é fechado porque abrir depois é decisão
+    # consciente; descobrir que o board sigiloso estava aberto, não.
+    VISIBILITY_CHOICES = [
+        ("restricted", "Restrito a quem tem acesso"),
+        ("workspace", "Todo o workspace"),
+    ]
+    visibility = models.CharField(
+        max_length=12, choices=VISIBILITY_CHOICES, default="restricted", db_index=True
+    )
+    # Squad dona do board. Quem está na squad enxerga o projeto sem precisar de
+    # papel individual — é o que evita atribuir pessoa a pessoa em dezenas de
+    # projetos. Quem é de fora entra por papel explícito.
+    squad = models.ForeignKey(
+        "estimation.SquadModel",
+        on_delete=models.SET_NULL,
+        related_name="projects",
+        null=True,
+        blank=True,
+    )
     description = models.TextField(blank=True, default="")
     # Categoria livre para agrupar projetos no portfólio (equivalente ao "Categoria" do Jira).
     category = models.CharField(max_length=40, blank=True, default="")
@@ -507,6 +530,13 @@ class WorkflowStatusModel(models.Model):
     # Limite de WIP da coluna no board. None = sem limite. Estava no localStorage
     # do front (board.prefs.store) e passou a ser config de projeto.
     wip_limit = models.PositiveSmallIntegerField(null=True, blank=True)
+    # "Card aqui significa que a pessoa está trabalhando nisso agora."
+    #
+    # É o que faz o boneco sentar na mesa no Escritório e o hover contar desde
+    # quando. Antes isso era o slug "doing" cravado no código: quadro com outro
+    # nome de coluna simplesmente não acionava nada. Como configuração, cada
+    # time escolhe a própria coluna — e pode ter mais de uma.
+    is_working = models.BooleanField(default=False)
 
     class Meta:
         db_table = "projects_workflow_status"

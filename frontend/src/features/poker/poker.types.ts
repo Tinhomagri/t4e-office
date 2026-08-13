@@ -7,10 +7,22 @@ export type SessionStatus = "waiting" | "voting" | "revealed" | "done"
 // os deixam fora da média, e qualquer um deles derruba o consenso.
 export const FIBONACCI = ["1", "2", "3", "5", "8", "13", "21", "?", "☕"]
 
+/** Time que estima junto. A sessão é da squad; os cards podem ser de vários
+ *  projetos. */
+export interface Squad {
+  id: string
+  workspace_id: string
+  name: string
+  color: string
+  members: { user_id: string; name: string; initials: string }[]
+}
+
 export interface PokerSession {
   id: string
   workspace_id: string
-  project_id: string
+  /** Nulo nas sessões da squad — elas não pertencem a um projeto. */
+  project_id: string | null
+  squad_id: string | null
   created_by: string
   name: string
   status: SessionStatus

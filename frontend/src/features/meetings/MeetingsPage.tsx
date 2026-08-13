@@ -6,6 +6,7 @@ import {
   useTracks,
 } from "@livekit/components-react"
 import "@livekit/components-styles"
+import { ROOM_OPTIONS } from "./roomOptions"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
@@ -351,6 +352,7 @@ export function MeetingsPage() {
                 connect
                 video
                 audio
+                options={ROOM_OPTIONS}
                 onDisconnected={leave}
                 data-lk-theme="default"
                 className="flex min-h-0 flex-1 flex-col"

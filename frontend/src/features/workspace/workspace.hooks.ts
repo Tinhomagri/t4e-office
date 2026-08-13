@@ -11,9 +11,9 @@ import type {
   Capability,
   CreateCardInput,
   CreateIssueLinkInput,
+  CreateProjectInput,
   CreateSprintInput,
   ProjectRoleSlug,
-  ProjectTemplate,
   Role,
   Sprint,
   UpdateCardInput,
@@ -71,7 +71,7 @@ export function useProjects(workspaceId: string | null) {
 export function useCreateProject(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; key: string; template?: ProjectTemplate }) =>
+    mutationFn: (input: Omit<CreateProjectInput, "workspace_id">) =>
       wsApi.createProject({ workspace_id: workspaceId!, ...input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", workspaceId] }),
   })

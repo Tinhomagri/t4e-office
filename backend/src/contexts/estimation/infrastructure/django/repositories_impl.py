@@ -36,7 +36,8 @@ def _session_to_entity(row: PokerSessionModel) -> PokerSession:
     return PokerSession(
         id=str(row.id),
         workspace_id=str(row.workspace_id),
-        project_id=str(row.project_id),
+        project_id=str(row.project_id) if row.project_id else None,
+        squad_id=str(row.squad_id) if row.squad_id else None,
         created_by=str(row.created_by_id),
         name=row.name,
         status=SessionStatus(row.status),
@@ -65,6 +66,7 @@ class DjangoPokerSessionRepository(PokerSessionRepository):
         row = PokerSessionModel.objects.create(
             workspace_id=session.workspace_id,
             project_id=session.project_id,
+            squad_id=session.squad_id,
             created_by_id=session.created_by,
             name=session.name,
             status=session.status.value,

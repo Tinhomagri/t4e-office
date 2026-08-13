@@ -11,6 +11,7 @@ Resolução do papel efetivo de um usuário num projeto:
 """
 from __future__ import annotations
 
+from contexts.estimation.infrastructure.django.models import SquadMemberModel
 from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.infrastructure.django.models import (
     ProjectModel,
@@ -64,8 +65,42 @@ _WORKSPACE_TO_PROJECT_ROLE = {
 }
 
 
+def can_browse(project: ProjectModel, user_id: str) -> bool:
+    """A pessoa pode ENXERGAR este board?
+
+    Três caminhos, nesta ordem:
+      1. owner/admin do workspace — administram tudo. Sem isto, fechar todos os
+         projetos trancaria a chave do lado de fora: a tela de permissões se
+         acessa a partir do projeto, e ninguém conseguiria dar acesso a ninguém.
+      2. projeto aberto ao workspace (`visibility="workspace"`);
+      3. papel atribuído explicitamente no projeto.
+
+    Fora isso, o board não existe para a pessoa — nem na lista, nem por URL.
+    """
+    membership = MembershipModel.objects.filter(
+        workspace_id=project.workspace_id, user_id=user_id
+    ).first()
+    if membership is None:
+        return False
+    if membership.role in ("owner", "admin"):
+        return True
+    if project.visibility == "workspace":
+        return True
+    # Estar na squad dona do board basta: é o caminho normal de acesso, e evita
+    # repetir a mesma lista de pessoas em cada projeto do time.
+    if project.squad_id and SquadMemberModel.objects.filter(
+        squad_id=project.squad_id, user_id=user_id
+    ).exists():
+        return True
+    return ProjectRoleMemberModel.objects.filter(
+        role__project_id=project.id, user_id=user_id
+    ).exists()
+
+
 def effective_role(project: ProjectModel, user_id: str) -> str | None:
     """Papel efetivo do usuário no projeto, ou None se sem acesso."""
+    if not can_browse(project, user_id):
+        return None
     # 1) Atribuição explícita (maior poder vence).
     assigned = list(
         ProjectRoleMemberModel.objects.filter(

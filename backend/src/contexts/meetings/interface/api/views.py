@@ -98,12 +98,14 @@ class RoomListCreateView(APIView):
         closed = request.query_params.get("closed") in ("1", "true")
         if closed:
             rooms = MeetingRoomModel.objects.filter(
-                workspace_id=workspace_id, closed_at__isnull=False
+                workspace_id=workspace_id, closed_at__isnull=False, kind="meeting"
             )[:50]
             return Response([_room_dict(r, participants=_history_of(r)) for r in rooms])
 
+        # Só reuniões marcadas por alguém: Escritório e Poker usam o mesmo SFU
+        # e a mesma tabela, mas não são compromissos que caibam nesta lista.
         rooms = MeetingRoomModel.objects.filter(
-            workspace_id=workspace_id, closed_at__isnull=True
+            workspace_id=workspace_id, closed_at__isnull=True, kind="meeting"
         )
         # Presentes = participação aberta. Uma query só para todas as salas,
         # senão a listagem viraria N+1 com uma sala por linha.
@@ -180,7 +182,12 @@ class OfficeRoomJoinView(APIView):
         slug = f"office-{workspace_id[:8]}-floor-{floor}"
         room, _ = MeetingRoomModel.objects.get_or_create(
             slug=slug,
-            defaults={"workspace_id": workspace_id, "name": f"Escritório · andar {floor}", "created_by": _uid(request)},
+            defaults={
+                "workspace_id": workspace_id,
+                "name": f"Escritório · andar {floor}",
+                "created_by": _uid(request),
+                "kind": "office",
+            },
         )
         MeetingParticipantModel.objects.get_or_create(room=room, user_id=_uid(request), left_at=None)
         return Response({"token": issue_token(room=slug, identity=_uid(request), name=request.user.full_name or request.user.email), "url": settings.LIVEKIT_URL, "room": _room_dict(room)})
@@ -210,6 +217,7 @@ class PokerRoomJoinView(APIView):
                 "workspace_id": workspace_id,
                 "name": f"Planning Poker · {poker.name}",
                 "created_by": _uid(request),
+                "kind": "poker",
             },
         )
         MeetingParticipantModel.objects.get_or_create(

@@ -43,9 +43,11 @@ class PokerVote:
 class PokerSession:
     id: str | None
     workspace_id: str
-    project_id: str
+    # Opcional: a sessão é da squad e pode pontuar cards de vários projetos.
+    project_id: str | None
     created_by: str
     name: str
+    squad_id: str | None = None
     status: SessionStatus = SessionStatus.WAITING
     current_card_id: str | None = None
     card_ids: list[str] = field(default_factory=list)  # cards selected by host

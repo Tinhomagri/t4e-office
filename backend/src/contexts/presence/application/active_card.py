@@ -4,8 +4,14 @@ app projects — mesmo padrão de assign_desk.py, sem passar pela camada de
 domínio pesada do projects (aqui é leitura/escrita de um campo só)."""
 from __future__ import annotations
 
+from django.db.models import Exists, OuterRef
+
 from contexts.identity.infrastructure.django.models import MembershipModel
-from contexts.projects.infrastructure.django.models import CardHistoryModel, CardModel
+from contexts.projects.infrastructure.django.models import (
+    CardHistoryModel,
+    CardModel,
+    WorkflowStatusModel,
+)
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 
@@ -22,14 +28,23 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
     Um usuário raramente tem mais de um card em doing ao mesmo tempo; o loop
     abaixo prioriza clareza sobre uma query anotada única.
     """
+    # Qual coluna conta como "trabalhando nisso" é configuração do quadro
+    # (`is_working`), não o slug "doing" cravado no código: um quadro que
+    # chamasse a coluna de outro jeito não acionava nada.
+    em_trabalho = WorkflowStatusModel.objects.filter(
+        project_id=OuterRef("project_id"), slug=OuterRef("status"), is_working=True
+    )
     candidates = CardModel.objects.filter(
-        assignee_id=user_id, status="doing", project__workspace_id=workspace_id
+        Exists(em_trabalho), assignee_id=user_id, project__workspace_id=workspace_id
     ).select_related("project")
     best_card = None
     best_since = None
     for card in candidates:
         entry = (
-            CardHistoryModel.objects.filter(card_id=card.id, field="status", new_value="doing")
+            # Desde quando está nesta coluna — que pode não se chamar "doing".
+            CardHistoryModel.objects.filter(
+                card_id=card.id, field="status", new_value=card.status
+            )
             .order_by("-created_at")
             .first()
         )

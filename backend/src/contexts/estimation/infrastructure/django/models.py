@@ -4,6 +4,53 @@ from django.db import models
 from django.utils import timezone
 
 
+class SquadModel(models.Model):
+    """Time que se reúne para estimar.
+
+    Uma sessão de Planning Poker é da SQUAD, não de um projeto: o mesmo time
+    pontua cards de vários produtos na mesma reunião. Antes a sessão era presa a
+    um projeto, o que obrigava a abrir uma sessão por projeto — e a estimativa
+    de quinta-feira virava três salas diferentes.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="squads"
+    )
+    name = models.CharField(max_length=120)
+    color = models.CharField(max_length=7, default="#6366f1")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "estimation_squad"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"], name="uniq_squad_name_per_workspace"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class SquadMemberModel(models.Model):
+    """Quem faz parte da squad."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    squad = models.ForeignKey(SquadModel, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(
+        "identity.UserModel", on_delete=models.CASCADE, related_name="squad_memberships"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "estimation_squad_member"
+        constraints = [
+            models.UniqueConstraint(fields=["squad", "user"], name="uniq_member_per_squad")
+        ]
+
+
 class PokerSessionModel(models.Model):
     STATUS_CHOICES = [
         ("waiting", "Aguardando"),
@@ -18,10 +65,22 @@ class PokerSessionModel(models.Model):
         on_delete=models.CASCADE,
         related_name="poker_sessions",
     )
+    # Opcional: a sessão nasce da squad e pode pontuar cards de vários
+    # projetos. Continua preenchido quando a sala é aberta a partir de um board
+    # — ali o projeto é o contexto de origem, não uma amarra.
     project = models.ForeignKey(
         "projects.ProjectModel",
         on_delete=models.CASCADE,
         related_name="poker_sessions",
+        null=True,
+        blank=True,
+    )
+    squad = models.ForeignKey(
+        SquadModel,
+        on_delete=models.SET_NULL,
+        related_name="poker_sessions",
+        null=True,
+        blank=True,
     )
     created_by = models.ForeignKey(
         "identity.UserModel",

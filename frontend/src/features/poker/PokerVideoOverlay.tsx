@@ -9,6 +9,7 @@ import { Mic, MicOff } from "lucide-react"
 
 import type { JoinResult } from "@/features/meetings/meetings.api"
 import { MediaSync, type MediaKind } from "@/features/meetings/MediaSync"
+import { ROOM_OPTIONS } from "@/features/meetings/roomOptions"
 
 /** Posição do cartão, medida a partir do CENTRO do wrapper da mesa. */
 export type SeatPoint = { x: number; y: number }
@@ -127,6 +128,9 @@ export function PokerVideoOverlay({
       connect
       audio={false}
       video={false}
+      // adaptiveStream/dynacast/limite de captura: sem isso, cada cartão de
+      // 128×96 recebia vídeo em qualidade cheia (ver roomOptions.ts).
+      options={ROOM_OPTIONS}
       className="pointer-events-none absolute inset-0"
     >
       <MediaSync audio={audio} video={video} onError={onMediaError} />

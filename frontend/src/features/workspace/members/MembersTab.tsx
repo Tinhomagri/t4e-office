@@ -3,6 +3,7 @@ import { Mail, Trash2, UserPlus } from "lucide-react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { toast } from "@/shared/ui/toast"
+import { useSquads } from "@/features/poker/poker.hooks"
 import {
   Avatar,
   Badge,
@@ -54,6 +55,11 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
   )
   const canManage = myRole === "owner" || myRole === "admin"
   const ownersCount = list.filter((m) => m.role === "owner").length
+  // Uma pessoa pode estar em mais de uma squad — é comum quem atua em duas
+  // frentes participar das duas estimativas.
+  const { data: squads = [] } = useSquads(workspaceId)
+  const squadDe = (userId: string) =>
+    squads.filter((sq) => sq.members.some((m) => m.user_id === userId))
 
   const pending = (invitations.data ?? []).filter((i) => i.status === "pending")
 
@@ -177,7 +183,21 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
                         </span>
                       )}
                     </p>
-                    <p className="truncate text-xs text-paper-500">{m.email}</p>
+                    <p className="flex items-center gap-1.5 truncate text-xs text-paper-500">
+                      {m.email}
+                      {/* Squad é etiqueta, não divisão: mostra a que time a
+                          pessoa estima junto, sem mudar o que ela enxerga. */}
+                      {squadDe(m.user_id).map((sq) => (
+                        <span
+                          key={sq.id}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{ backgroundColor: `${sq.color}22`, color: sq.color }}
+                        >
+                          <span className="size-1.5 rounded-full" style={{ backgroundColor: sq.color }} />
+                          {sq.name}
+                        </span>
+                      ))}
+                    </p>
                   </div>
 
                   {rLock ? (

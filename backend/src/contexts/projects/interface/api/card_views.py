@@ -164,12 +164,14 @@ class CardListCreateView(APIView):
 
     @extend_schema(responses=CardSerializer(many=True))
     def get(self, request: Request, project_id: str) -> Response:
+        # Guarda no topo, valendo para os DOIS caminhos (com e sem JQL): o
+        # caminho sem JQL checava apenas o workspace, então um board restrito
+        # continuava respondendo a lista de cards por URL direta.
+        assert_project_member(project_id=str(project_id), user_id=str(request.user.id))
         projects, cards, access = _deps()
         jql = request.query_params.get("jql", "").strip()
 
         if jql:
-            # Fecha vazamento: valida pertencimento antes de qualquer query crua.
-            assert_project_member(project_id=str(project_id), user_id=str(request.user.id))
             try:
                 jql_filter = parse_jql(jql, actor_id=str(request.user.id))
             except ValueError as exc:

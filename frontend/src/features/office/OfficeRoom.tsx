@@ -13,7 +13,7 @@ import { useMembers } from "@/features/workspace/workspace.hooks"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
-import { useActivePokerSession, useSession } from "@/features/poker/poker.hooks"
+import { useActivePokerSession, useSession, useSquads } from "@/features/poker/poker.hooks"
 
 import { ElevatorPanel } from "./ElevatorPanel"
 import { useDeliveryChampion, useHeartbeat, useRoom } from "./office.hooks"
@@ -119,6 +119,10 @@ export function OfficeRoom({
     [mock, floor, deskAssignments.data],
   )
   const hoveredCard = mock ? getMockActiveCard(hoverUserId) : activeCard.data
+  const { data: squads = [] } = useSquads(queryWorkspaceId)
+  const squadDoHover = hoverUserId
+    ? squads.find((sq) => sq.members.some((m) => m.user_id === hoverUserId))
+    : undefined
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -553,6 +557,19 @@ export function OfficeRoom({
              de cima jogava o balão pra `top` negativo (cortado, invisível). */
           style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4) }}
         >
+          {/* Squad de quem está sob o cursor: identifica o time sem mudar nada
+              do que a pessoa acessa. */}
+          {squadDoHover && (
+            <div className="mb-1 flex items-center gap-1.5">
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: squadDoHover.color }}
+              />
+              <span className="text-[11px] font-medium" style={{ color: squadDoHover.color }}>
+                {squadDoHover.name}
+              </span>
+            </div>
+          )}
           {hoveredCard.active ? (
             <>
               <div className="font-semibold">

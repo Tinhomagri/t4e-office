@@ -28,6 +28,7 @@ from contexts.projects.infrastructure.django.models import (
 from contexts.projects.interface.api.capabilities import (
     DEFAULT_ROLES,
     ROLE_CAPABILITIES,
+    can_browse,
     effective_role,
 )
 from contexts.projects.interface.api.permissions import assert_project_capability
@@ -59,10 +60,9 @@ class ProjectAccessView(APIView):
             raise NotFoundError("Projeto não encontrado.")
 
         user_id = str(request.user.id)
-        # Qualquer membro do workspace pode listar (BROWSE implícito)
-        if not MembershipModel.objects.filter(
-            workspace_id=project.workspace_id, user_id=user_id
-        ).exists():
+        # Ver quem tem acesso a um board é ver o board: quem não enxerga o
+        # projeto não deve descobrir quem trabalha nele.
+        if not can_browse(project, user_id):
             raise PermissionDeniedError("Você não tem acesso a este projeto.")
 
         # Busca todas as atribuições explícitas para os projetos deste projeto

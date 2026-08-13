@@ -12,7 +12,11 @@ from contexts.presence.infrastructure.django.models import (
     PresenceModel,
     UserAvatarModel,
 )
-from contexts.projects.infrastructure.django.models import CardModel, ProjectModel
+from contexts.projects.infrastructure.django.models import (
+    CardModel,
+    ProjectModel,
+    WorkflowStatusModel,
+)
 
 
 @pytest.fixture
@@ -153,6 +157,10 @@ def test_card_em_andamento_com_mesa_aparece_sentado_sem_heartbeat(scenario):
         workspace=ws, floor=1, seat_id="ws-9-4", user=other
     )
     project = ProjectModel.objects.create(workspace=ws, name="Produto", key="PROD")
+    WorkflowStatusModel.objects.create(
+        project=project, name="Em andamento", slug="doing",
+        category="in_progress", order=1, is_working=True,
+    )
     CardModel.objects.create(
         project=project, number=1, title="Em andamento", assignee=other, status="doing"
     )

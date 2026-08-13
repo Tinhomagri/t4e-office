@@ -1,17 +1,19 @@
 import { useState } from "react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
-import { RotateCcw } from "lucide-react"
+import { Globe2, Lock, RotateCcw } from "lucide-react"
 
 import { toast } from "@/shared/ui/toast"
 import { Avatar, EmptyState, Spinner, cx } from "@/shared/ui/primitives"
 
 import * as wsApi from "../workspace.api"
-import { useProjects } from "../workspace.hooks"
+import { useProjects, useUpdateProject } from "../workspace.hooks"
 import type {
   Project,
   ProjectAccessMember,
   ProjectRoleSlug,
 } from "../workspace.types"
+import { useSquads } from "@/features/poker/poker.hooks"
+import type { Squad } from "@/features/poker/poker.types"
 import {
   errMsg,
   initials,
@@ -20,9 +22,81 @@ import {
   PROJECT_ROLE_OPTIONS,
 } from "./shared"
 
+// Squad dona + visibilidade de um board, editável direto no cabeçalho da
+// matriz — é onde a permissão nasce, não faz sentido morar em outra tela.
+function ProjectAccessControl({ project, squads }: { project: Project; squads: Squad[] }) {
+  const update = useUpdateProject(project.id)
+
+  const setVisibility = (visibility: "restricted" | "workspace") => {
+    if (visibility === project.visibility) return
+    update.mutate(
+      { visibility },
+      {
+        onError: (e) => toast.error(errMsg(e)),
+      },
+    )
+  }
+
+  const setSquad = (squadId: string) => {
+    update.mutate(
+      { squad_id: squadId || null },
+      {
+        onError: (e) => toast.error(errMsg(e)),
+      },
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => setVisibility("restricted")}
+          title="Restrito: só squad dona e convidados"
+          className={cx(
+            "grid size-6 place-items-center rounded-md border",
+            project.visibility === "restricted"
+              ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+              : "border-paper-200 text-paper-400 dark:border-ink-700",
+          )}
+        >
+          <Lock className="size-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setVisibility("workspace")}
+          title="Aberto: todo o workspace vê"
+          className={cx(
+            "grid size-6 place-items-center rounded-md border",
+            project.visibility === "workspace"
+              ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+              : "border-paper-200 text-paper-400 dark:border-ink-700",
+          )}
+        >
+          <Globe2 className="size-3" />
+        </button>
+      </div>
+      <select
+        value={project.squad_id ?? ""}
+        onChange={(e) => setSquad(e.target.value)}
+        disabled={project.visibility === "workspace"}
+        className="rounded-md border border-paper-300 bg-paper px-1.5 py-1 text-[11px] text-paper-600 disabled:opacity-40 dark:border-ink-700 dark:bg-ink-900"
+      >
+        <option value="">Sem squad dona</option>
+        {squads.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) {
   const projects = useProjects(workspaceId)
   const projectList = projects.data ?? []
+  const squads = useSquads(workspaceId).data ?? []
 
   // Uma query de acesso por projeto (fan-out) — cada uma devolve todos os membros.
   const accessQueries = useQueries({
@@ -126,6 +200,16 @@ export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) 
                       {p.key}
                     </span>{" "}
                     <span className="text-paper-500">{p.name}</span>
+                  </th>
+                ))}
+              </tr>
+              <tr className="border-b border-ink/10 dark:border-ink-700">
+                <th className="sticky left-0 z-10 bg-paper dark:bg-ink-900 px-4 py-2 text-left text-xs font-normal text-paper-500">
+                  Squad dona / visibilidade
+                </th>
+                {projectList.map((p) => (
+                  <th key={p.id} className="px-4 py-2 text-left font-normal">
+                    <ProjectAccessControl project={p} squads={squads} />
                   </th>
                 ))}
               </tr>

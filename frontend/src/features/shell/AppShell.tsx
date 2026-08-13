@@ -1021,7 +1021,11 @@ function ProjectsNavLink({
   // Só o item realmente aberto ganha fundo. Pintar pai e filho ao mesmo tempo
   // dava duas seleções concorrentes na mesma coluna.
   const groupActive = selfActive || childActive
-  const [open, setOpen] = useState(true)
+  // Recolhido por padrão. Com dezenas de projetos importados, a lista aberta
+  // empurrava o resto do menu para fora da tela; quem quer ver expande. Abre
+  // sozinho apenas quando um projeto do grupo já está aberto, senão o item
+  // ativo ficaria escondido dentro de um grupo fechado.
+  const [open, setOpen] = useState(childActive)
 
   if (collapsed) {
     return (

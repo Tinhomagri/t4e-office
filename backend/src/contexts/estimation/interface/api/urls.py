@@ -12,9 +12,17 @@ from contexts.estimation.interface.api.views import (
     PokerVoteView,
     PokerWorkspaceSummaryView,
     ProjectPokerListCreateView,
+    SquadDetailView,
+    SquadListCreateView,
 )
 
 urlpatterns = [
+    path(
+        "workspaces/<str:workspace_id>/squads/",
+        SquadListCreateView.as_view(),
+        name="squad-list-create",
+    ),
+    path("squads/<str:squad_id>/", SquadDetailView.as_view(), name="squad-detail"),
     path(
         "workspaces/<str:workspace_id>/poker/",
         PokerSessionListCreateView.as_view(),

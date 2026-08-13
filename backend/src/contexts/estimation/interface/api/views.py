@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from django.db.models import Avg
+from django.db.models import Avg, Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -22,13 +22,18 @@ from contexts.estimation.infrastructure.django.models import (
     PokerParticipantModel,
     PokerReactionModel,
     PokerRoundModel,
+    SquadMemberModel,
+    SquadModel,
 )
 from contexts.estimation.infrastructure.django.repositories_impl import (
     DjangoPokerParticipantRepository,
     DjangoPokerSessionRepository,
     DjangoPokerVoteRepository,
 )
-from contexts.identity.infrastructure.django.models import WorkspaceModel
+from contexts.identity.infrastructure.django.models import (
+    MembershipModel,
+    WorkspaceModel,
+)
 from contexts.presence.infrastructure.django.models import UserAvatarModel
 from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.interface.api import capabilities as caps
@@ -36,6 +41,7 @@ from contexts.projects.interface.api.permissions import (
     assert_project_capability,
     assert_project_member,
 )
+from shared.domain.errors import PermissionDeniedError
 
 _session_repo = DjangoPokerSessionRepository()
 _participant_repo = DjangoPokerParticipantRepository()
@@ -57,6 +63,7 @@ def _session_dict(session: PokerSession, *, with_counts: bool = False) -> dict:
         "id": session.id,
         "workspace_id": session.workspace_id,
         "project_id": session.project_id,
+        "squad_id": session.squad_id,
         "created_by": session.created_by,
         "name": session.name,
         "status": session.status.value,
@@ -168,7 +175,14 @@ def _session_or_404(session_id: str, user_id: str) -> PokerSession | None:
     session = _session_repo.get(session_id)
     if session is None:
         return None
-    assert_project_member(project_id=session.project_id, user_id=user_id)
+    # Pertencimento ao WORKSPACE da sessão, não ao projeto: a sala de
+    # estimativa é do time. A sessão da squad nem tem projeto, e um board
+    # restrito não deve impedir quem foi chamado para estimar de votar — o
+    # acesso ao board continua valendo para ver e editar os cards.
+    if not MembershipModel.objects.filter(
+        workspace_id=session.workspace_id, user_id=user_id
+    ).exists():
+        raise PermissionDeniedError("Você não tem acesso a esta sala.")
     return session
 
 
@@ -183,15 +197,24 @@ class PokerSessionListCreateView(APIView):
     @extend_schema(request=dict, responses={201: dict})
     def post(self, request: Request, workspace_id: str) -> Response:
         project_id = request.data.get("project_id")
+        squad_id = request.data.get("squad_id")
         name = request.data.get("name", "Planning Poker")
-        if not project_id:
-            return Response({"error": "project_id obrigatório"}, status=400)
+        # Squad OU projeto: a sessão é do time, e o projeto é só o contexto de
+        # quem abriu a sala a partir de um board. Exigir os dois obrigaria a
+        # abrir uma sessão por projeto, que é o que queríamos acabar.
+        if not project_id and not squad_id:
+            return Response({"error": "Informe a squad ou o projeto."}, status=400)
+        if squad_id and not SquadModel.objects.filter(
+            id=squad_id, workspace_id=workspace_id
+        ).exists():
+            return Response({"error": "Squad não pertence a este workspace."}, status=400)
 
         session = _session_repo.create(
             PokerSession(
                 id=None,
                 workspace_id=workspace_id,
                 project_id=project_id,
+                squad_id=squad_id,
                 created_by=str(request.user.id),
                 name=name,
             )
@@ -530,7 +553,15 @@ class PokerRoundListView(APIView):
 
 
 class PokerCardsView(APIView):
-    """Lista cards do projeto para o host selecionar."""
+    """Cards que o host pode colocar na fila da sessão.
+
+    Varre TODOS os projetos do workspace, não só um: a sessão é da squad e a
+    mesma reunião estima vários produtos. Só o que ainda não tem pontos —
+    numa sessão de estimativa ninguém repontua o que já foi estimado.
+
+    `?q=` filtra por título ou referência (com 2400 cards, a busca é o caminho
+    principal) e `?project=` restringe a um projeto.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses={200: dict})
@@ -538,14 +569,23 @@ class PokerCardsView(APIView):
         session = _session_repo.get(session_id)
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
-        # "ref" (ex.: MIA-142) não é campo do banco — é sempre calculado a
-        # partir da key do projeto + number, nunca deu pra usar .values("ref").
+
         cards = (
-            CardModel.objects.filter(project_id=session.project_id)
+            CardModel.objects.filter(
+                project__workspace_id=session.workspace_id, points__isnull=True
+            )
             .exclude(type="epic")
             .select_related("project")
-            .order_by("rank", "number")
         )
+        projeto = request.query_params.get("project")
+        if projeto:
+            cards = cards.filter(project_id=projeto)
+        busca = (request.query_params.get("q") or "").strip()
+        if busca:
+            cards = cards.filter(Q(title__icontains=busca) | Q(number__icontains=busca))
+        # Já escolhidos continuam visíveis: o host precisa enxergar a fila que
+        # montou mesmo depois de eles saírem do filtro de "sem pontos".
+        cards = cards.order_by("project__key", "rank", "number")[:200]
         return Response([
             {
                 "id": str(c.id),
@@ -556,3 +596,94 @@ class PokerCardsView(APIView):
             }
             for c in cards
         ])
+
+
+# ── Squads ────────────────────────────────────────────────────────────────────
+
+
+def _squad_dict(squad: SquadModel) -> dict:
+    return {
+        "id": str(squad.id),
+        "workspace_id": str(squad.workspace_id),
+        "name": squad.name,
+        "color": squad.color,
+        "members": [
+            {
+                "user_id": str(m.user_id),
+                "name": m.user.full_name or m.user.email,
+                "initials": _initials(m.user.full_name or m.user.email),
+            }
+            for m in squad.members.select_related("user")
+        ],
+    }
+
+
+class SquadListCreateView(APIView):
+    """GET/POST /api/workspaces/<id>/squads/ — times que estimam juntos."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: dict})
+    def get(self, request: Request, workspace_id: str) -> Response:
+        squads = SquadModel.objects.filter(workspace_id=workspace_id).prefetch_related(
+            "members__user"
+        )
+        return Response([_squad_dict(s) for s in squads])
+
+    @extend_schema(request=dict, responses={201: dict})
+    def post(self, request: Request, workspace_id: str) -> Response:
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"error": "Nome obrigatório"}, status=400)
+        if SquadModel.objects.filter(workspace_id=workspace_id, name__iexact=name).exists():
+            return Response({"error": "Já existe uma squad com esse nome."}, status=400)
+
+        squad = SquadModel.objects.create(
+            workspace_id=workspace_id,
+            name=name,
+            color=request.data.get("color") or "#6366f1",
+        )
+        for user_id in request.data.get("member_ids") or []:
+            SquadMemberModel.objects.get_or_create(squad=squad, user_id=user_id)
+        return Response(_squad_dict(squad), status=status.HTTP_201_CREATED)
+
+
+class SquadDetailView(APIView):
+    """PATCH/DELETE /api/squads/<id>/ — renomear, trocar cor e membros."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=dict, responses={200: dict})
+    def patch(self, request: Request, squad_id: str) -> Response:
+        squad = SquadModel.objects.filter(id=squad_id).first()
+        if not squad:
+            return Response({"error": "Squad não encontrada"}, status=404)
+
+        if "name" in request.data:
+            nome = (request.data.get("name") or "").strip()
+            if not nome:
+                return Response({"error": "Nome obrigatório"}, status=400)
+            squad.name = nome
+        if "color" in request.data:
+            squad.color = request.data["color"]
+        squad.save()
+
+        # Lista de membros é substituída inteira: é como a tela edita (marca e
+        # desmarca), e diferenciar adição de remoção aqui não traria nada.
+        if "member_ids" in request.data:
+            desejados = {str(u) for u in (request.data.get("member_ids") or [])}
+            atuais = {str(m.user_id) for m in squad.members.all()}
+            SquadMemberModel.objects.filter(
+                squad=squad, user_id__in=atuais - desejados
+            ).delete()
+            for user_id in desejados - atuais:
+                SquadMemberModel.objects.get_or_create(squad=squad, user_id=user_id)
+
+        squad.refresh_from_db()
+        return Response(_squad_dict(squad))
+
+    def delete(self, request: Request, squad_id: str) -> Response:
+        # As sessões que já aconteceram continuam existindo (squad vira nulo):
+        # apagar histórico de estimativa junto com o time seria perda de dado.
+        SquadModel.objects.filter(id=squad_id).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

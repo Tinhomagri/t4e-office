@@ -18,6 +18,7 @@ import {
   Mic,
   MicOff,
   Radio,
+  Search,
   SkipForward,
   Sparkles,
   Spade,
@@ -34,6 +35,8 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { useProjects } from "@/features/workspace/workspace.hooks"
 import {
+  useCreateSquadSession,
+  useSquads,
   useSession,
   usePokerCards,
   useHeartbeat,
@@ -47,7 +50,7 @@ import {
   useSendReaction,
   useSendEmote,
 } from "./poker.hooks"
-import { FIBONACCI, POKER_EMOTES, REACTION_EMOJIS } from "./poker.types"
+import { FIBONACCI, POKER_EMOTES, REACTION_EMOJIS, type Squad } from "./poker.types"
 import type { PokerParticipant, PokerCard, PokerSession } from "./poker.types"
 
 // Paleta da sala. Os valores vêm do tailwind.config do projeto (escalas `ink`,
@@ -974,11 +977,15 @@ function CardSelector({
   queueIds,
   currentCardId,
   onSelectCard,
+  query,
+  onQueryChange,
 }: {
   cards: PokerCard[]
   queueIds: string[]
   currentCardId: string | null
   onSelectCard: (id: string) => void
+  query: string
+  onQueryChange: (value: string) => void
 }) {
   // Fila primeiro (na ordem da sessão), depois o resto do projeto.
   const inQueue = queueIds
@@ -1035,6 +1042,19 @@ function CardSelector({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[#B3B9C4]">Fila de votação</h3>
       </div>
 
+      {/* A sessão da squad enxerga os cards de todos os projetos: sem busca,
+          achar um card específico seria rolar milhares. A consulta vai ao
+          servidor — filtrar no cliente pegaria só a fatia já carregada. */}
+      <div className="relative mb-2">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[#8590A2]" aria-hidden />
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Buscar card por título ou número"
+          className="w-full rounded-lg border border-[#2E3036] bg-[#17191E] py-1.5 pl-8 pr-2 text-xs text-[#F7F8F9] outline-none placeholder:text-[#8590A2] focus:border-[#0C66E4]"
+        />
+      </div>
+
       {inQueue.length > 0 && (
         <div className="mb-3">
           <div className="mb-1 flex items-center justify-between text-[10px] text-[#8590A2]">
@@ -1072,20 +1092,30 @@ function CardSelector({
 
 function NewSessionModal({
   projects,
+  squads,
   onClose,
   onCreate,
+  onCreateForSquad,
 }: {
   projects: { id: string; name: string; key: string }[]
+  squads: Squad[]
   onClose: () => void
   onCreate: (projectId: string, name: string) => Promise<void>
+  onCreateForSquad: (squadId: string, name: string) => Promise<void>
 }) {
+  // Squad é o caminho normal: o time se reúne uma vez e estima o que precisar,
+  // de qualquer projeto. "Um projeto só" continua existindo para quem abre a
+  // sala a partir de um board específico.
+  const [modo, setModo] = useState<"squad" | "projeto">(squads.length ? "squad" : "projeto")
+  const [squadId, setSquadId] = useState(squads[0]?.id ?? "")
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "")
   const [name, setName] = useState("Planning Poker")
   const [loading, setLoading] = useState(false)
 
   const handleCreate = async () => {
     setLoading(true)
-    await onCreate(projectId, name)
+    if (modo === "squad") await onCreateForSquad(squadId, name)
+    else await onCreate(projectId, name)
     setLoading(false)
   }
 
@@ -1096,18 +1126,60 @@ function NewSessionModal({
           <Spade className="size-5 text-[#579DFF]" aria-hidden /> Nova sessão de Planning Poker
         </h2>
         <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-[#8590A2]">Projeto</label>
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="w-full rounded-lg border border-[#2E3036] bg-[#212328] px-3 py-2 text-sm text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>[{p.key}] {p.name}</option>
-              ))}
-            </select>
+          <div className="flex gap-1 rounded-lg border border-[#2E3036] bg-[#17191E] p-1">
+            {(["squad", "projeto"] as const).map((opcao) => (
+              <button
+                key={opcao}
+                onClick={() => setModo(opcao)}
+                disabled={opcao === "squad" && squads.length === 0}
+                className={cx(
+                  "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40",
+                  modo === opcao
+                    ? "bg-[#0C66E4] text-white"
+                    : "text-[#8590A2] hover:text-[#F7F8F9]",
+                )}
+              >
+                {opcao === "squad" ? "Por squad" : "Por projeto"}
+              </button>
+            ))}
           </div>
+
+          {modo === "squad" ? (
+            <div>
+              <label className="mb-1 block text-xs text-[#8590A2]">Squad</label>
+              {squads.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#2E3036] px-3 py-2 text-xs text-[#8590A2]">
+                  Nenhuma squad cadastrada ainda. Crie uma em Pessoas → Squads.
+                </p>
+              ) : (
+                <select
+                  value={squadId}
+                  onChange={(e) => setSquadId(e.target.value)}
+                  className="w-full rounded-lg border border-[#2E3036] bg-[#212328] px-3 py-2 text-sm text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
+                >
+                  {squads.map((sq) => (
+                    <option key={sq.id} value={sq.id}>{sq.name}</option>
+                  ))}
+                </select>
+              )}
+              <p className="mt-1.5 text-[11px] text-[#8590A2]">
+                A sessão pontua cards de qualquer projeto — sem abrir uma sala por projeto.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs text-[#8590A2]">Projeto</label>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="w-full rounded-lg border border-[#2E3036] bg-[#212328] px-3 py-2 text-sm text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>[{p.key}] {p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs text-[#8590A2]">Nome da sessão</label>
             <input
@@ -1122,7 +1194,7 @@ function NewSessionModal({
             Cancelar
           </button>
           <button
-            disabled={!projectId || loading}
+            disabled={loading || (modo === "squad" ? !squadId : !projectId)}
             onClick={handleCreate}
             className="rounded-lg bg-[#0C66E4] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0055CC] disabled:opacity-40"
           >
@@ -1483,6 +1555,8 @@ function SessionListView({
 }) {
   const navigate = useNavigate()
   const createSession = useCreateSession(workspaceId)
+  const createSquadSession = useCreateSquadSession(workspaceId)
+  const { data: squads = [] } = useSquads(workspaceId)
   const [showModal, setShowModal] = useState(false)
   const [sessions, setSessions] = useState<PokerSession[]>([])
 
@@ -1498,8 +1572,19 @@ function SessionListView({
     navigate(`/app/poker/${session.id}`)
   }
 
-  const projectLabel = (id: string) => {
-    const p = projects.find((pr) => pr.id === id)
+  /** Sessão da squad: uma reunião estima cards de vários projetos. */
+  const handleCreateForSquad = async (squadId: string, name: string) => {
+    const session = await createSquadSession.mutateAsync({ squadId, name })
+    setShowModal(false)
+    navigate(`/app/poker/${session.id}`)
+  }
+
+  /** Rótulo de origem da sessão: a squad quando existe, senão o projeto.
+   *  Sessão de squad não tem projeto — ela estima cards de vários. */
+  const projectLabel = (session: { project_id: string | null; squad_id: string | null }) => {
+    const squad = squads.find((sq) => sq.id === session.squad_id)
+    if (squad) return squad.name
+    const p = projects.find((pr) => pr.id === session.project_id)
     return p ? `[${p.key}] ${p.name}` : "Projeto"
   }
 
@@ -1533,7 +1618,7 @@ function SessionListView({
             <SessionHistoryCard
               key={s.id}
               session={s}
-              projectLabel={projectLabel(s.project_id)}
+              projectLabel={projectLabel(s)}
               onEnter={() => navigate(`/app/poker/${s.id}`)}
             />
           ))}
@@ -1542,8 +1627,10 @@ function SessionListView({
       {showModal && (
         <NewSessionModal
           projects={projects}
+          squads={squads}
           onClose={() => setShowModal(false)}
           onCreate={handleCreate}
+          onCreateForSquad={handleCreateForSquad}
         />
       )}
     </div>
@@ -1608,7 +1695,10 @@ function AvatarPrompt({ onDone }: { onDone: () => void }) {
 function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) {
   const navigate = useNavigate()
   const { data: session, refetch: refetchSession } = useSession(sessionId)
-  const { data: allCards = [] } = usePokerCards(sessionId)
+  // Busca da fila: com a sessão da squad, a lista vem de TODOS os projetos do
+  // workspace — sem busca, escolher um card viraria rolagem infinita.
+  const [cardQuery, setCardQuery] = useState("")
+  const { data: allCards = [] } = usePokerCards(sessionId, cardQuery)
   const { data: projects = [] } = useProjects(session?.workspace_id ?? null)
   const submitVote = useSubmitVote(sessionId)
   const updateSession = useUpdateSession(sessionId)
@@ -2173,6 +2263,8 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             queueIds={selectedIds}
             currentCardId={session.current_card_id}
             onSelectCard={handleSelectCard}
+            query={cardQuery}
+            onQueryChange={setCardQuery}
           />
         </div>
       )}

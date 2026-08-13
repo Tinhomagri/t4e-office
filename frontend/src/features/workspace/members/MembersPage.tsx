@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react"
-import { History, ShieldCheck, SlidersHorizontal, Users } from "lucide-react"
+import { History, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { EmptyState, PageHeader, Spinner } from "@/shared/ui/primitives"
+import { SquadsTab } from "./SquadsTab"
 
 import { useMembers, useWorkspaces } from "../workspace.hooks"
 import { AuditTab } from "./AuditTab"
@@ -11,10 +12,11 @@ import { MembersTab } from "./MembersTab"
 import { ProjectPermissionsTab } from "./ProjectPermissionsTab"
 import { TabBar, type TabDef } from "./shared"
 
-type TabId = "members" | "project-perms" | "capabilities" | "audit"
+type TabId = "members" | "squads" | "project-perms" | "capabilities" | "audit"
 
 const TABS: TabDef<TabId>[] = [
   { id: "members", label: "Membros", icon: <Users className="size-4" /> },
+  { id: "squads", label: "Squads", icon: <UsersRound className="size-4" /> },
   {
     id: "project-perms",
     label: "Permissões de projeto",
@@ -71,6 +73,7 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === "members" && <MembersTab workspaceId={workspaceId} />}
+      {tab === "squads" && <SquadsTab workspaceId={workspaceId} />}
       {tab === "project-perms" && (
         <ProjectPermissionsTab workspaceId={workspaceId} />
       )}

@@ -2,14 +2,17 @@
 // compartilhados. O quadro Kanban em si vive em views/KanbanView.tsx.
 import {
   CalendarDays,
+  Check,
   CheckCircle2,
   FileText,
   FolderPlus,
   GanttChartSquare,
   GitBranch,
+  Globe2,
   Layers,
   LayoutList,
   ListChecks,
+  Lock,
   Megaphone,
   Plus,
   SquareKanban,
@@ -73,6 +76,7 @@ import {
   useCloseProjectSession,
   useCreateProjectSession,
   useProjectSessions,
+  useSquads,
 } from "@/features/poker/poker.hooks"
 import { useAuthStore } from "@/features/auth/auth.store"
 
@@ -482,19 +486,39 @@ function NewProjectModal({
   onCreated: (p: Project) => void
 }) {
   const createProject = useCreateProject(workspaceId)
+  const { data: squads } = useSquads(workspaceId)
+  const { data: members } = useMembers(workspaceId)
   const [name, setName] = useState("")
   const [key, setKey] = useState("")
   const [template, setTemplate] = useState<ProjectTemplate>("software")
+  const [squadId, setSquadId] = useState<string>("")
+  const [visibility, setVisibility] = useState<"restricted" | "workspace">("restricted")
+  const [convidados, setConvidados] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  const alternarConvidado = (userId: string) =>
+    setConvidados((atual) =>
+      atual.includes(userId) ? atual.filter((id) => id !== userId) : [...atual, userId],
+    )
 
   const submit = async () => {
     setError(null)
     try {
-      const p = await createProject.mutateAsync({ name, key: key.toUpperCase(), template })
+      const p = await createProject.mutateAsync({
+        name,
+        key: key.toUpperCase(),
+        template,
+        squad_id: squadId || null,
+        member_ids: convidados,
+        visibility,
+      })
       onCreated(p)
       setName("")
       setKey("")
       setTemplate("software")
+      setSquadId("")
+      setVisibility("restricted")
+      setConvidados([])
       onClose()
     } catch (e) {
       setError(errMsg(e))
@@ -550,6 +574,77 @@ function NewProjectModal({
             ))}
           </div>
         </Field>
+        <Field label="Quem enxerga este board">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibility("restricted")}
+              className={`flex items-center gap-2 rounded-lg border p-3 text-left transition ${
+                visibility === "restricted"
+                  ? "border-brand bg-brand/5 ring-1 ring-brand"
+                  : "border-border hover:border-brand/50"
+              }`}
+            >
+              <Lock className="size-4 shrink-0" />
+              <span>
+                <span className="block text-sm font-medium">Restrito</span>
+                <span className="block text-xs text-fg-muted">Só squad dona e convidados</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility("workspace")}
+              className={`flex items-center gap-2 rounded-lg border p-3 text-left transition ${
+                visibility === "workspace"
+                  ? "border-brand bg-brand/5 ring-1 ring-brand"
+                  : "border-border hover:border-brand/50"
+              }`}
+            >
+              <Globe2 className="size-4 shrink-0" />
+              <span>
+                <span className="block text-sm font-medium">Todo o workspace</span>
+                <span className="block text-xs text-fg-muted">Qualquer membro vê</span>
+              </span>
+            </button>
+          </div>
+        </Field>
+        {visibility === "restricted" && (
+          <>
+            <Field label="Squad dona" hint="Opcional — todo o time da squad ganha acesso.">
+              <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
+                <option value="">Nenhuma</option>
+                {(squads ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Convidar pessoas" hint="Além da squad dona, quem mais pode acessar.">
+              <div className="flex flex-wrap gap-1.5">
+                {(members ?? []).map((m) => {
+                  const dentro = convidados.includes(m.user_id)
+                  return (
+                    <button
+                      key={m.user_id}
+                      type="button"
+                      onClick={() => alternarConvidado(m.user_id)}
+                      className={cx(
+                        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                        dentro
+                          ? "border-brand bg-brand/10 text-brand"
+                          : "border-border text-fg-muted hover:border-brand/50",
+                      )}
+                    >
+                      {dentro && <Check className="size-3" />}
+                      {m.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          </>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>
     </Modal>

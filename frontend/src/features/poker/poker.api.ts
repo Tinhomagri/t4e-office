@@ -1,8 +1,53 @@
 import { api } from "@/shared/api/client"
-import type { PokerCard, PokerRound, PokerSession, PokerWorkspaceSummary } from "./poker.types"
+import type {
+  PokerCard,
+  PokerRound,
+  PokerSession,
+  PokerWorkspaceSummary,
+  Squad,
+} from "./poker.types"
 
 export async function listSessions(workspaceId: string): Promise<PokerSession[]> {
   const { data } = await api.get(`/workspaces/${workspaceId}/poker/`)
+  return data
+}
+
+// ---- Squads ----
+export async function listSquads(workspaceId: string): Promise<Squad[]> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/squads/`)
+  return data
+}
+
+export async function createSquad(
+  workspaceId: string,
+  input: { name: string; color?: string; member_ids?: string[] },
+): Promise<Squad> {
+  const { data } = await api.post(`/workspaces/${workspaceId}/squads/`, input)
+  return data
+}
+
+export async function updateSquad(
+  squadId: string,
+  input: { name?: string; color?: string; member_ids?: string[] },
+): Promise<Squad> {
+  const { data } = await api.patch(`/squads/${squadId}/`, input)
+  return data
+}
+
+export async function deleteSquad(squadId: string): Promise<void> {
+  await api.delete(`/squads/${squadId}/`)
+}
+
+/** Sessão da squad: sem projeto, pontua cards de qualquer projeto. */
+export async function createSquadSession(
+  workspaceId: string,
+  squadId: string,
+  name: string,
+): Promise<PokerSession> {
+  const { data } = await api.post(`/workspaces/${workspaceId}/poker/`, {
+    squad_id: squadId,
+    name,
+  })
   return data
 }
 
@@ -55,8 +100,13 @@ export async function updateSession(
   return data
 }
 
-export async function getPokerCards(sessionId: string): Promise<PokerCard[]> {
-  const { data } = await api.get(`/poker/${sessionId}/cards/`)
+/** Cards que o host pode enfileirar: sem pontuação, de todos os projetos.
+ *  `q` busca por título/número e `project` restringe a um projeto. */
+export async function getPokerCards(
+  sessionId: string,
+  filtros?: { q?: string; project?: string },
+): Promise<PokerCard[]> {
+  const { data } = await api.get(`/poker/${sessionId}/cards/`, { params: filtros })
   return data
 }
 

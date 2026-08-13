@@ -26,7 +26,9 @@ def scenario(db):
     )
     ws = WorkspaceModel.objects.create(name="WS", slug="ws", owner=owner)
     MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
-    project = ProjectModel.objects.create(workspace=ws, name="Proj", key="PRJ")
+    project = ProjectModel.objects.create(
+        workspace=ws, name="Proj", key="PRJ", visibility="workspace"
+    )
     card = CardModel.objects.create(project=project, number=1, title="Card")
     return {"owner": owner, "outsider": outsider, "project": project, "card": card}
 

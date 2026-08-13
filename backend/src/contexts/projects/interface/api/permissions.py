@@ -21,7 +21,7 @@ from contexts.projects.infrastructure.django.models import (
     CardModel,
     ProjectModel,
 )
-from contexts.projects.interface.api.capabilities import capabilities_for
+from contexts.projects.interface.api.capabilities import can_browse, capabilities_for
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 # Hierarquia de papéis (maior número = mais poder). Reservado para granularidade.
@@ -45,11 +45,19 @@ def _assert_workspace(workspace_id: str, user_id: str, min_role: str) -> None:
 def assert_project_member(
     *, project_id: str, user_id: str, min_role: str = "member"
 ) -> ProjectModel:
-    """Garante que o usuário é membro do workspace do projeto. Retorna o projeto."""
+    """Garante acesso ao projeto. Retorna o projeto.
+
+    Além de pertencer ao workspace, a pessoa precisa enxergar ESTE board. Esta
+    função é o ponto por onde as views finas passam — tirar o projeto da
+    listagem sem barrar aqui esconderia o board do menu e o deixaria acessível
+    por URL, que é pior do que não ter permissão nenhuma: parece protegido.
+    """
     project = ProjectModel.objects.filter(id=project_id).first()
     if project is None:
         raise NotFoundError("Projeto não encontrado.")
     _assert_workspace(str(project.workspace_id), user_id, min_role)
+    if not can_browse(project, user_id):
+        raise PermissionDeniedError("Você não tem acesso a este projeto.")
     return project
 
 
@@ -63,6 +71,8 @@ def assert_card_member(
     if card is None:
         raise NotFoundError("Card não encontrado.")
     _assert_workspace(str(card.project.workspace_id), user_id, min_role)
+    if not can_browse(card.project, user_id):
+        raise PermissionDeniedError("Você não tem acesso a este projeto.")
     return card
 
 

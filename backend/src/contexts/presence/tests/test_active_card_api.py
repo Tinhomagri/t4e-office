@@ -12,6 +12,7 @@ from contexts.projects.infrastructure.django.models import (
     CardHistoryModel,
     CardModel,
     ProjectModel,
+    WorkflowStatusModel,
 )
 
 
@@ -30,6 +31,10 @@ def scenario(db):
     MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
     MembershipModel.objects.create(workspace=ws, user=dev, role="member")
     project = ProjectModel.objects.create(workspace=ws, name="Mia", key="MIA")
+    WorkflowStatusModel.objects.create(
+        project=project, name="Em andamento", slug="doing",
+        category="in_progress", order=1, is_working=True,
+    )
     card = CardModel.objects.create(
         project=project, number=1, title="Card ativo", assignee=dev, status="doing"
     )
@@ -197,6 +202,10 @@ def test_card_ativo_de_outro_workspace_nao_aparece_na_api(scenario):
     MembershipModel.objects.create(workspace=ws_b, user=owner_b, role="owner")
     MembershipModel.objects.create(workspace=ws_b, user=dev, role="member")
     project_b = ProjectModel.objects.create(workspace=ws_b, name="Nia", key="NIA")
+    WorkflowStatusModel.objects.create(
+        project=project_b, name="Em andamento", slug="doing",
+        category="in_progress", order=1, is_working=True,
+    )
     card_b = CardModel.objects.create(
         project=project_b, number=1, title="Card em B", assignee=dev, status="doing"
     )

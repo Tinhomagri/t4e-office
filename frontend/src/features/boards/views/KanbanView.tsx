@@ -13,6 +13,8 @@ import {
 } from "@dnd-kit/core"
 import {
   SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
@@ -199,6 +201,9 @@ export function KanbanView({
     const overId = e.over?.id ? String(e.over.id) : null
     const activeCardId = String(e.active.id)
     if (!overId || overId === activeCardId) return
+    // Arrasto de coluna: o reposicionamento visual é do dnd-kit; a gravação
+    // acontece no fim, para não disparar um PATCH por pixel percorrido.
+    if (activeCardId.startsWith("col:")) return
 
     const card = scopeCards.find((c) => c.id === activeCardId)
     if (!card) return
@@ -216,7 +221,14 @@ export function KanbanView({
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
     const overId = e.over?.id ? String(e.over.id) : null
-    const card = scopeCards.find((c) => c.id === String(e.active.id))
+    const activeId = String(e.active.id)
+
+    if (activeId.startsWith("col:")) {
+      if (overId?.startsWith("col:")) reorderColumns(activeId, overId)
+      return
+    }
+
+    const card = scopeCards.find((c) => c.id === activeId)
     if (!card || !overId) return
 
     const overCard = scopeCards.find((c) => c.id === overId)
@@ -249,6 +261,21 @@ export function KanbanView({
   const activeFiltersCount =
     filters.types.length + filters.priorities.length + filters.assigneeIds.length
   const epicCards = allCards.filter((c) => c.type === "epic")
+
+  /** Reordena a partir de um arrasto: `col:<id>` sobre `col:<id>`. */
+  const reorderColumns = (activeId: string, overId: string) => {
+    const de = columns.findIndex((c) => `col:${c.id}` === activeId)
+    const para = columns.findIndex((c) => `col:${c.id}` === overId)
+    if (de === -1 || para === -1 || de === para) return
+    const nova = arrayMove(columns, de, para)
+    // `order` é reescrito para todas: trocar só o par (como fazem as setas)
+    // não resolve quando a coluna anda várias casas de uma vez.
+    nova.forEach((c, ordem) => {
+      if (c.order !== ordem) {
+        updateWorkflowStatus.mutate({ statusId: c.id, input: { order: ordem } })
+      }
+    })
+  }
 
   const moveColumn = (ws: WorkflowStatus, dir: -1 | 1) => {
     const idx = columns.findIndex((c) => c.id === ws.id)
@@ -441,9 +468,17 @@ export function KanbanView({
                 />
               ) : (
                 <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
+                  {/* Reordenar coluna arrastando. Os ids levam prefixo `col:`
+                      porque cards e colunas dividem o mesmo DndContext — sem
+                      isso, soltar um card sobre uma coluna viraria reordenação. */}
+                  <SortableContext
+                    items={columns.map((c) => `col:${c.id}`)}
+                    strategy={horizontalListSortingStrategy}
+                  >
                   {columns.map((ws, i) => (
                     <Column
                       key={ws.slug}
+                      sortableId={`col:${ws.id}`}
                       status={ws.slug}
                       label={ws.name}
                       color={ws.color}
@@ -454,6 +489,10 @@ export function KanbanView({
                       wipLimit={ws.wip_limit}
                       onWipChange={(wip_limit) =>
                         updateWorkflowStatus.mutate({ statusId: ws.id, input: { wip_limit } })
+                      }
+                      isWorking={ws.is_working}
+                      onWorkingChange={(is_working) =>
+                        updateWorkflowStatus.mutate({ statusId: ws.id, input: { is_working } })
                       }
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
@@ -471,6 +510,7 @@ export function KanbanView({
                       }
                     />
                   ))}
+                  </SortableContext>
                   <AddColumn
                     projectId={projectId}
                     onCreate={(name) =>
@@ -972,6 +1012,9 @@ function Column({
   onMoveRight,
   wipLimit,
   onWipChange,
+  isWorking = false,
+  onWorkingChange,
+  sortableId,
   compact = false,
 }: {
   status: string
@@ -984,6 +1027,9 @@ function Column({
   // Ausentes nas swimlanes, onde o WIP é só exibido e não editável.
   wipLimit?: number | null
   onWipChange?: (limit: number | null) => void
+  /** Ausente nas swimlanes, onde a coluna é só exibição. */
+  isWorking?: boolean
+  onWorkingChange?: (value: boolean) => void
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
@@ -992,9 +1038,21 @@ function Column({
   onRename?: (name: string) => void
   onMoveLeft?: () => void
   onMoveRight?: () => void
+  /** Sem id, a coluna não é arrastável (é o caso das swimlanes). */
+  sortableId?: string
   compact?: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
+  // A coluna inteira é o alvo de drop dos cards; só o CABEÇALHO arrasta a
+  // coluna. Sem essa separação, pegar um card arrastaria a coluna junto.
+  const {
+    attributes: colAttrs,
+    listeners: colListeners,
+    setNodeRef: setColRef,
+    transform: colTransform,
+    transition: colTransition,
+    isDragging: colDragging,
+  } = useSortable({ id: sortableId ?? `col-inerte-${status}`, disabled: !sortableId })
   const totalPoints = cards.reduce((acc, c) => acc + (c.points ?? 0), 0)
   const displayLabel = label ?? (STATUS_LABEL[status as CardStatus] ?? status)
   const displayColor = color ?? "#626F86"
@@ -1045,7 +1103,18 @@ function Column({
     // diz "solta aqui" sem mover nada — e sai o `will-change` permanente, que
     // mantinha uma camada de composição por coluna sem necessidade.
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node)
+        setColRef(node)
+      }}
+      style={{
+        transform: CSS.Translate.toString(colTransform),
+        transition: colTransition,
+        // A coluna arrastada sobe e apaga um pouco: sem isso, o vão que abre
+        // no destino não se distingue da coluna original.
+        opacity: colDragging ? 0.4 : 1,
+        zIndex: colDragging ? 30 : undefined,
+      }}
       className={cx(
         // 284 = card de 272 + 4px de padding lateral da lista + 2px de borda em cada
         // lado. É o que faz o card bater exatamente com os 272px do Jira.
@@ -1060,10 +1129,18 @@ function Column({
             : "border-transparent bg-paper-100/70 dark:bg-ink-900",
       )}
     >
-      {/* Header */}
-      <div className="group/head flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+      {/* Header. É por aqui que a coluna é arrastada — a área do corpo continua
+          sendo alvo de drop dos cards. */}
+      <div
+        {...(sortableId ? { ...colAttrs, ...colListeners } : {})}
+        className={cx(
+          "group/head flex items-center justify-between gap-2 px-3 pt-3 pb-2",
+          sortableId && "cursor-grab active:cursor-grabbing",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2">
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => toggleCollapse(key)}
             className="grid size-5 shrink-0 place-items-center rounded text-paper-400 hover:bg-paper-200 dark:hover:bg-ink-700 hover:text-ink"
             title="Recolher coluna"
@@ -1149,6 +1226,23 @@ function Column({
                 )}
                 {onMoveRight && (
                   <ColMenuItem icon={<ArrowRight className="size-3.5" />} label="Mover para a direita" onClick={() => { onMoveRight(); setMenu(false) }} />
+                )}
+                <div className="my-1 border-t border-paper-100 dark:border-ink-700" />
+                {onWorkingChange && (
+                  <label className="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-paper-100 dark:hover:bg-ink-700">
+                    <input
+                      type="checkbox"
+                      checked={isWorking}
+                      onChange={(e) => onWorkingChange(e.target.checked)}
+                      className="mt-0.5 size-3.5 accent-brand-500"
+                    />
+                    <span className="text-[12px] leading-tight text-ink dark:text-paper">
+                      Card aqui = em andamento
+                      <span className="mt-0.5 block text-[11px] text-paper-500">
+                        Senta seu boneco na mesa do Escritório e conta o tempo.
+                      </span>
+                    </span>
+                  </label>
                 )}
                 <div className="my-1 border-t border-paper-100 dark:border-ink-700" />
                 <div className="px-3 py-1.5">
@@ -1537,6 +1631,9 @@ const DraggableCard = forwardRef<HTMLDivElement, {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   })
+  // Criado nos últimos segundos = apareceu agora, merece entrada animada.
+  const recemCriado =
+    !!card.created_at && Date.now() - new Date(card.created_at).getTime() < 5000
   return (
     // Duas camadas de propósito. A de fora é do dnd-kit: só ela escreve
     // `transform`, que é o deslocamento abrindo espaço para o card em voo. A de
@@ -1552,9 +1649,13 @@ const DraggableCard = forwardRef<HTMLDivElement, {
       className="cursor-grab touch-none active:cursor-grabbing"
     >
     <motion.div
-      initial={{ opacity: 0 }}
+      // Só card RECÉM-CRIADO entra com fade. Mudar de coluna desmonta o card
+      // de uma lista e monta na outra: com fade dos dois lados, o movimento
+      // aparecia como o texto piscando no destino. O deslocamento em si já é
+      // contado pelo clone que voa no DragOverlay.
+      initial={recemCriado ? { opacity: 0 } : false}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, transition: { duration: 0 } }}
       transition={cardFade}
     >
       {/* Slot fantasma: o card sai de cena e fica o buraco do tamanho exato,

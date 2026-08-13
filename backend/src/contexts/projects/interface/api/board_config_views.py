@@ -88,6 +88,8 @@ def _ser_project(project: ProjectModel) -> dict:
         "default_assignee_id": (
             str(project.default_assignee_id) if project.default_assignee_id else None
         ),
+        "squad_id": str(project.squad_id) if project.squad_id else None,
+        "visibility": project.visibility,
     }
 
 
@@ -155,6 +157,26 @@ class ProjectDetailView(APIView):
         # a imagem e o projeto volta a exibir o par emoji+cor.
         if "avatar_image" in request.data:
             project.avatar_image = _clean_avatar(request.data["avatar_image"])
+
+        if "visibility" in request.data:
+            visibility = str(request.data["visibility"] or "restricted")
+            if visibility not in dict(ProjectModel.VISIBILITY_CHOICES):
+                raise ValidationError("Visibilidade inválida.")
+            project.visibility = visibility
+
+        # Squad dona: quem entra nela enxerga o board inteiro. Precisa ser do
+        # mesmo workspace — senão um projeto vazaria acesso pra outro time.
+        if "squad_id" in request.data:
+            squad_id = request.data["squad_id"] or None
+            if squad_id:
+                from contexts.estimation.infrastructure.django.models import SquadModel
+
+                pertence = SquadModel.objects.filter(
+                    id=squad_id, workspace_id=project.workspace_id
+                ).exists()
+                if not pertence:
+                    raise ValidationError("Squad não encontrada neste workspace.")
+            project.squad_id = squad_id
 
         project.save()
         return Response(_ser_project(project))

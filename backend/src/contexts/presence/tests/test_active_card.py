@@ -15,6 +15,7 @@ from contexts.projects.infrastructure.django.models import (
     CardHistoryModel,
     CardModel,
     ProjectModel,
+    WorkflowStatusModel,
 )
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
@@ -31,6 +32,12 @@ def scenario(db):
     MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
     MembershipModel.objects.create(workspace=ws, user=dev, role="member")
     project = ProjectModel.objects.create(workspace=ws, name="Mia", key="MIA")
+    # Qual coluna significa "trabalhando nisso" é configuração do quadro; sem
+    # ela marcada, nenhum card conta como ativo.
+    WorkflowStatusModel.objects.create(
+        project=project, name="Em andamento", slug="doing",
+        category="in_progress", order=1, is_working=True,
+    )
     return {"owner": owner, "dev": dev, "ws": ws, "project": project}
 
 
@@ -164,3 +171,44 @@ def test_card_ativo_de_outro_workspace_nao_vaza(scenario):
     result = get_active_card(workspace_id=str(ws_a.id), user_id=str(dev.id))
 
     assert result is None
+
+
+def test_coluna_marcada_manda_mesmo_com_outro_nome(scenario):
+    """A regra é a flag do quadro, não o slug "doing".
+
+    Um time que chame a coluna de "Fazendo" precisa acionar a presença igual;
+    antes isso era um literal no código e só funcionava com o nome exato.
+    """
+    projeto = scenario["project"]
+    WorkflowStatusModel.objects.filter(project=projeto, slug="doing").update(is_working=False)
+    WorkflowStatusModel.objects.create(
+        project=projeto, name="Fazendo agora", slug="fazendo",
+        category="in_progress", order=2, is_working=True,
+    )
+    card = CardModel.objects.create(
+        project=projeto, number=90, title="mão na massa",
+        assignee=scenario["dev"], status="fazendo",
+    )
+
+    resultado = get_active_card(
+        workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)
+    )
+    assert resultado and resultado["card"]["id"] == str(card.id)
+
+
+def test_coluna_sem_a_flag_nao_conta(scenario):
+    """Card em coluna de andamento NÃO marcada não senta ninguém — é o que
+    permite ter "Backend / integrar" e "Code Review" sem cravar presença."""
+    projeto = scenario["project"]
+    WorkflowStatusModel.objects.create(
+        project=projeto, name="Code Review", slug="review",
+        category="in_progress", order=3, is_working=False,
+    )
+    CardModel.objects.create(
+        project=projeto, number=91, title="em revisão",
+        assignee=scenario["dev"], status="review",
+    )
+
+    assert get_active_card(
+        workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)
+    ) is None

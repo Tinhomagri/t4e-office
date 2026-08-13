@@ -5,7 +5,7 @@ import type { PokerSession } from "./poker.types"
 
 function session(status: PokerSession["status"], id = "s1"): PokerSession {
   return {
-    id, workspace_id: "w1", project_id: "p1", created_by: "u1",
+    id, workspace_id: "w1", project_id: "p1", squad_id: null, created_by: "u1",
     name: "Sessão", status, current_card_id: null, card_ids: [],
     created_at: "2026-01-01T00:00:00Z", participants: [], votes: [],
   }

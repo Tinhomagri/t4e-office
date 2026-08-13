@@ -20,6 +20,16 @@ class CreateProjectSerializer(serializers.Serializer):
     template = serializers.ChoiceField(
         choices=["software", "campanha", "social", "conteudo"], default="software"
     )
+    # Quem enxerga o board, decidido na criação: a squad dona (todo o time
+    # entra de uma vez) e convidados avulsos. Sem nada disso, o board nasce
+    # visível só para owner/admin do workspace — que é o padrão fechado.
+    squad_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    member_ids = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
+    visibility = serializers.ChoiceField(
+        choices=["restricted", "workspace"], default="restricted"
+    )
 
 
 class ProjectSerializer(serializers.Serializer):
@@ -30,6 +40,8 @@ class ProjectSerializer(serializers.Serializer):
     key = serializers.CharField()
     workspace_id = serializers.CharField()
     template = serializers.CharField(default="software")
+    squad_id = serializers.CharField(allow_null=True, default=None)
+    visibility = serializers.CharField(default="restricted")
 
 
 _STATUS = [
