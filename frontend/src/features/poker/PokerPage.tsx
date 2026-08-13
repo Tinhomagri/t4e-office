@@ -242,7 +242,11 @@ function Seat({
   }, [revealed])
   return (
     <motion.div
-      className="absolute left-1/2 top-1/2 z-10"
+      // `transform`/`opacity` animados criam stacking context próprio: o menu
+      // de reação (z-20 lá dentro) fica preso a este teto. Sem elevar o
+      // ASSENTO inteiro quando o menu abre, a câmera (z-20 do overlay, MESMO
+      // contexto do pai) sempre ganha por estar fora dessa jaula.
+      className={`absolute left-1/2 top-1/2 ${barOpen || emoteOpen ? "z-30" : "z-10"}`}
       style={{ width: SEAT_W, marginLeft: -SEAT_W / 2, marginTop: -SEAT_H / 2 }}
       initial={{ x, y, scale: 0.6, opacity: 0 }}
       animate={{ x, y, scale: 1, opacity: 1 }}

@@ -64,7 +64,9 @@ export function Win98Desktop() {
           era o que tornava o PC impossível de usar de verdade. */}
       <div
         data-testid="win98-panel"
-        className="win98 win98-raised win98-wallpaper absolute inset-x-[3%] inset-y-[4%] flex flex-col overflow-hidden"
+        // z-30: acima das câmeras do Escritório (z-20) — o PC não fica aberto
+        // o tempo todo, então quando abre precisa cobrir quem está por trás.
+        className="win98 win98-raised win98-wallpaper absolute inset-x-[3%] inset-y-[4%] z-30 flex flex-col overflow-hidden"
       >
         <div ref={deskRef} className="relative flex-1 overflow-hidden">
           <DesktopIcons />
@@ -83,7 +85,7 @@ export function Win98Desktop() {
 
       {/* Camada expandida: fora do painel, tela cheia, sem transform. */}
       {expanded && (
-        <div data-testid="win98-expanded" className="win98-wallpaper absolute inset-0 z-20 flex flex-col">
+        <div data-testid="win98-expanded" className="win98-wallpaper absolute inset-0 z-30 flex flex-col">
           <div className="relative flex-1 overflow-hidden">
             <Win98Window
               win={expanded}
