@@ -66,9 +66,10 @@ describe("<MyCardPage />", () => {
   it("com card doing mostra título e textarea preenchida com a observação", () => {
     setup({
       active: true,
-      card: { id: "card-1", number: 5, title: "Ajustar layout", project: "MIA" },
-      doing_since: new Date().toISOString(),
-      working_note: "quase terminando",
+      cards: [{
+        id: "card-1", number: 5, title: "Ajustar layout", project: "MIA",
+        doing_since: new Date().toISOString(), working_note: "quase terminando",
+      }],
     })
     render(<MyCardPage />)
     expect(screen.getByText(/MIA-5/)).toBeInTheDocument()
@@ -79,9 +80,10 @@ describe("<MyCardPage />", () => {
   it("salvar chama a mutation com cardId e o texto digitado", async () => {
     setup({
       active: true,
-      card: { id: "card-1", number: 5, title: "Ajustar layout", project: "MIA" },
-      doing_since: new Date().toISOString(),
-      working_note: "",
+      cards: [{
+        id: "card-1", number: 5, title: "Ajustar layout", project: "MIA",
+        doing_since: new Date().toISOString(), working_note: "",
+      }],
     })
     render(<MyCardPage />)
     await userEvent.type(screen.getByRole("textbox"), "travado")
@@ -95,9 +97,10 @@ describe("<MyCardPage />", () => {
   it("mantém o texto digitado na textarea enquanto o salvamento ainda está pendente", async () => {
     setup({
       active: true,
-      card: { id: "card-1", number: 5, title: "Ajustar layout", project: "MIA" },
-      doing_since: new Date().toISOString(),
-      working_note: "nota antiga",
+      cards: [{
+        id: "card-1", number: 5, title: "Ajustar layout", project: "MIA",
+        doing_since: new Date().toISOString(), working_note: "nota antiga",
+      }],
     })
     // simula um save em andamento: mutate NÃO invoca onSuccess sincronamente
     mutate.mockImplementation(() => {})
@@ -112,9 +115,10 @@ describe("<MyCardPage />", () => {
   it("limpa o estado dirty quando o save realmente sucede (onSuccess invocado)", async () => {
     setup({
       active: true,
-      card: { id: "card-1", number: 5, title: "Ajustar layout", project: "MIA" },
-      doing_since: new Date().toISOString(),
-      working_note: "nota antiga",
+      cards: [{
+        id: "card-1", number: 5, title: "Ajustar layout", project: "MIA",
+        doing_since: new Date().toISOString(), working_note: "nota antiga",
+      }],
     })
     mutate.mockImplementation((_vars, opts) => {
       opts?.onSuccess?.()
@@ -133,9 +137,10 @@ describe("<MyCardPage />", () => {
     setup(
       {
         active: true,
-        card: { id: "card-1", number: 5, title: "Ajustar layout", project: "MIA" },
-        doing_since: new Date().toISOString(),
-        working_note: "nota",
+        cards: [{
+          id: "card-1", number: 5, title: "Ajustar layout", project: "MIA",
+          doing_since: new Date().toISOString(), working_note: "nota",
+        }],
       },
       { isError: true },
     )

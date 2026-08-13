@@ -1,10 +1,17 @@
 import { api } from "@/shared/api/client"
 
+export interface ActiveCardItem {
+  id: string
+  number: number
+  title: string
+  project: string
+  doing_since: string
+  working_note: string
+}
+
 export interface ActiveCard {
   active: boolean
-  card?: { id: string; number: number; title: string; project: string }
-  doing_since?: string
-  working_note?: string
+  cards?: ActiveCardItem[]
 }
 
 export async function getActiveCard(workspaceId: string, userId: string): Promise<ActiveCard> {

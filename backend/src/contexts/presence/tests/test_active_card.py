@@ -53,7 +53,7 @@ def test_sem_card_doing_retorna_none(scenario):
     assert get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)) is None
 
 
-def test_card_doing_mais_recente_vence(scenario):
+def test_card_doing_mais_recente_vem_primeiro(scenario):
     dev = scenario["dev"]
     project = scenario["project"]
     card_antigo = CardModel.objects.create(project=project, number=1, title="Antigo", assignee=dev)
@@ -65,18 +65,34 @@ def test_card_doing_mais_recente_vence(scenario):
 
     assert result is not None
     assert result["active"] is True
-    assert result["card"]["title"] == "Novo"
-    assert result["card"]["number"] == 2
-    assert result["card"]["project"] == "MIA"
-    assert result["working_note"] == ""
-    assert "doing_since" in result
+    assert [c["title"] for c in result["cards"]] == ["Novo", "Antigo"]
+    assert result["cards"][0]["number"] == 2
+    assert result["cards"][0]["project"] == "MIA"
+    assert result["cards"][0]["working_note"] == ""
+    assert "doing_since" in result["cards"][0]
+
+
+def test_todos_os_cards_em_doing_aparecem(scenario):
+    """Uma pessoa pode ter mais de um card em andamento ao mesmo tempo —
+    antes só o mais recente aparecia; agora a lista traz todos."""
+    dev = scenario["dev"]
+    project = scenario["project"]
+    card_a = CardModel.objects.create(project=project, number=1, title="Card A", assignee=dev)
+    card_b = CardModel.objects.create(project=project, number=2, title="Card B", assignee=dev)
+    _move_to_doing(card_a, dev)
+    _move_to_doing(card_b, dev)
+
+    result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
+
+    assert result is not None
+    assert {c["id"] for c in result["cards"]} == {str(card_a.id), str(card_b.id)}
 
 
 def test_ordem_de_transicao_vence_mesmo_com_ordem_de_criacao_invertida(scenario):
     """Prova que o código lê CardHistoryModel transition timestamps,
     não ordem de criação ou card id. Cria cards em uma ordem (a, b)
     mas transiciona para doing em ordem reversa (b primeiro, a segundo).
-    Card a deve vencer porque sua transição para doing é mais recente."""
+    Card a deve vir primeiro porque sua transição para doing é mais recente."""
     dev = scenario["dev"]
     project = scenario["project"]
     card_a = CardModel.objects.create(project=project, number=1, title="Card A", assignee=dev)
@@ -89,11 +105,11 @@ def test_ordem_de_transicao_vence_mesmo_com_ordem_de_criacao_invertida(scenario)
 
     assert result is not None
     assert result["active"] is True
-    assert result["card"]["title"] == "Card A"
-    assert result["card"]["number"] == 1
-    assert result["card"]["project"] == "MIA"
-    assert result["working_note"] == ""
-    assert "doing_since" in result
+    assert result["cards"][0]["title"] == "Card A"
+    assert result["cards"][0]["number"] == 1
+    assert result["cards"][0]["project"] == "MIA"
+    assert result["cards"][0]["working_note"] == ""
+    assert "doing_since" in result["cards"][0]
 
 
 def test_working_note_aparece_no_resultado(scenario):
@@ -106,7 +122,7 @@ def test_working_note_aparece_no_resultado(scenario):
 
     result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
 
-    assert result["working_note"] == "travado esperando review"
+    assert result["cards"][0]["working_note"] == "travado esperando review"
 
 
 def test_update_working_note_pelo_assignee_funciona(scenario):
@@ -193,7 +209,7 @@ def test_coluna_marcada_manda_mesmo_com_outro_nome(scenario):
     resultado = get_active_card(
         workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)
     )
-    assert resultado and resultado["card"]["id"] == str(card.id)
+    assert resultado and resultado["cards"][0]["id"] == str(card.id)
 
 
 def test_coluna_sem_a_flag_nao_conta(scenario):

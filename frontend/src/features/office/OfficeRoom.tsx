@@ -571,19 +571,22 @@ export function OfficeRoom({
             </div>
           )}
           {hoveredCard.active ? (
-            <>
-              <div className="font-semibold">
-                #{hoveredCard.card!.number} {hoveredCard.card!.title}
-              </div>
-              <div className="text-gray-300">
-                há {formatDoingSince(hoveredCard.doing_since!)} em andamento
-              </div>
-              {hoveredCard.working_note && (
-                <div className="mt-1 border-t border-gray-700 pt-1 text-gray-200">
-                  {hoveredCard.working_note}
+            hoveredCard.cards!.map((card, i) => (
+              <div
+                key={card.id}
+                className={i > 0 ? "mt-1.5 border-t border-gray-700 pt-1.5" : undefined}
+              >
+                <div className="font-semibold">
+                  #{card.number} {card.title}
                 </div>
-              )}
-            </>
+                <div className="text-gray-300">
+                  há {formatDoingSince(card.doing_since)} em andamento
+                </div>
+                {card.working_note && (
+                  <div className="mt-1 text-gray-200">{card.working_note}</div>
+                )}
+              </div>
+            ))
           ) : (
             <div className="text-gray-300">Sem card ativo</div>
           )}

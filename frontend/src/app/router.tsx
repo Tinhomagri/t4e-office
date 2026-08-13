@@ -85,6 +85,19 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+// Quem já tem uma sessão válida (ou recuperável pelo refresh token) não deve
+// voltar a enxergar o login só porque abriu um favorito antigo em `/login`.
+function RedirectAuthenticated({ children }: { children: ReactNode }) {
+  const access = useAuthStore((s) => s.accessToken)
+  const refresh = useAuthStore((s) => s.refreshToken)
+
+  if (access && (!isExpired(access) || !isExpired(refresh))) {
+    return <Navigate to="/app" replace />
+  }
+
+  return <>{children}</>
+}
+
 /**
  * Rotas de dentro do `/app` — o miolo do produto, sem o guarda de sessão.
  *
@@ -135,8 +148,22 @@ export const appRoutes: RouteObject[] = [
 ]
 
 export const router = createBrowserRouter([
-  { path: "/", element: <Navigate to="/login" replace /> },
-  { path: "/login", element: <LoginPage /> },
+  {
+    path: "/",
+    element: (
+      <RedirectAuthenticated>
+        <Navigate to="/login" replace />
+      </RedirectAuthenticated>
+    ),
+  },
+  {
+    path: "/login",
+    element: (
+      <RedirectAuthenticated>
+        <LoginPage />
+      </RedirectAuthenticated>
+    ),
+  },
   { path: "/register", element: <RegisterPage /> },
   { path: "/login/google/callback", element: <GoogleCallbackPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },

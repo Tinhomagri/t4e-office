@@ -72,17 +72,19 @@ const MOCK_ACTIVE_CARDS = new Map<string, ActiveCard>(
     member.user_id,
     {
       active: true,
-      card: {
-        id: `demo-card-${index + 1}`,
-        number: 120 + index,
-        title: PEOPLE[index]![1],
-        project: index % 2 === 0 ? "Produto" : "Operações",
-      },
-      doing_since: startedAt(index),
-      working_note:
-        index % 3 === 0
-          ? "Em andamento no ambiente de demonstração."
-          : undefined,
+      cards: [
+        {
+          id: `demo-card-${index + 1}`,
+          number: 120 + index,
+          title: PEOPLE[index]![1],
+          project: index % 2 === 0 ? "Produto" : "Operações",
+          doing_since: startedAt(index),
+          working_note:
+            index % 3 === 0
+              ? "Em andamento no ambiente de demonstração."
+              : "",
+        },
+      ],
     },
   ]),
 )

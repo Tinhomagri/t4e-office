@@ -57,9 +57,9 @@ def test_owner_ve_card_ativo_de_membro(scenario):
     )
     assert r.status_code == 200
     assert r.data["active"] is True
-    assert r.data["card"]["title"] == "Card ativo"
-    assert r.data["card"]["project"] == "MIA"
-    assert "doing_since" in r.data
+    assert r.data["cards"][0]["title"] == "Card ativo"
+    assert r.data["cards"][0]["project"] == "MIA"
+    assert "doing_since" in r.data["cards"][0]
 
 
 def test_member_comum_nao_pode_ver_card_de_outro(scenario):
@@ -79,7 +79,7 @@ def test_member_comum_ve_o_proprio_card(scenario):
     )
     assert r.status_code == 200
     assert r.data["active"] is True
-    assert r.data["card"]["title"] == "Card ativo"
+    assert r.data["cards"][0]["title"] == "Card ativo"
 
 
 def test_outsider_sem_membership_nao_ve_o_proprio_card(scenario):
