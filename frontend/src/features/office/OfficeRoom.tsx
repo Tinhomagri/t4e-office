@@ -110,6 +110,25 @@ export function OfficeRoom({
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
   const hoverPosRef = useRef<{ x: number; y: number } | null>(null)
+  // Fechamento com atraso: o balão flutua ACIMA do avatar, então o caminho do
+  // mouse até ele cruza canvas "vazio" no meio — sem isto o balão fechava
+  // antes de o cursor chegar (e fechava de novo ao tentar rolar a lista).
+  const hoverCloseTimerRef = useRef<number | null>(null)
+  const cancelHoverClose = useCallback(() => {
+    if (hoverCloseTimerRef.current !== null) {
+      window.clearTimeout(hoverCloseTimerRef.current)
+      hoverCloseTimerRef.current = null
+    }
+  }, [])
+  const scheduleHoverClose = useCallback(() => {
+    cancelHoverClose()
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      setHoverUserId(null)
+      hoverPosRef.current = null
+      setHoverPos(null)
+    }, 250)
+  }, [cancelHoverClose])
+  useEffect(() => cancelHoverClose, [cancelHoverClose])
   const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks && !mock)
   const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, !mock)
   const roomMembers = mock ? getMockRoom(floor) : room.data
@@ -453,28 +472,26 @@ export function OfficeRoom({
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
     const userId = engine.hoverSeatAt(localX, localY)
-    setHoverUserId(userId)
     // Mousemove dispara dezenas de vezes por segundo; sem limiar, cada pixel
     // re-renderizava a árvore toda. A ref espelha o último valor aplicado pra
     // comparar sem entrar nas deps do callback (que precisa ser estável).
     if (!userId) {
-      if (hoverPosRef.current !== null) {
-        hoverPosRef.current = null
-        setHoverPos(null)
-      }
+      // Não fecha na hora: pode ser só o trecho de canvas vazio entre o
+      // avatar e o balão (que fica acima dele), a caminho de rolar a lista.
+      scheduleHoverClose()
       return
     }
+    cancelHoverClose()
+    setHoverUserId(userId)
     const prev = hoverPosRef.current
     if (prev && Math.abs(prev.x - localX) <= 2 && Math.abs(prev.y - localY) <= 2) return
     hoverPosRef.current = { x: localX, y: localY }
     setHoverPos({ x: localX, y: localY })
-  }, [])
+  }, [cancelHoverClose, scheduleHoverClose])
 
   const onCanvasMouseLeave = useCallback(() => {
-    setHoverUserId(null)
-    hoverPosRef.current = null
-    setHoverPos(null)
-  }, [])
+    scheduleHoverClose()
+  }, [scheduleHoverClose])
 
   const sendChat = () => {
     const text = chatText.trim()
@@ -552,15 +569,20 @@ export function OfficeRoom({
 
       {canManageDesks && hoverUserId && hoverPos && hoveredCard && (
         <div
-          className="pointer-events-none absolute z-20 max-w-[220px] rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
+          className="pointer-events-auto absolute z-20 flex max-w-[220px] flex-col rounded-md border border-gray-700 bg-gray-900/95 px-3 py-2 text-xs text-white shadow-lg"
           /* Clamp no topo: sem isto, passar o mouse num avatar perto da borda
              de cima jogava o balão pra `top` negativo (cortado, invisível). */
-          style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4) }}
+          style={{ left: hoverPos.x, top: Math.max(hoverPos.y - 70, 4), maxHeight: 260 }}
+          // Balão interativo agora (tinha vários cards e nenhum jeito de rolar
+          // até o fim) — o hover com atraso em onCanvasMouseMove/MouseLeave é
+          // o que evita ele fechar sozinho ao tentar alcançá-lo ou rolar.
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
         >
           {/* Squad de quem está sob o cursor: identifica o time sem mudar nada
               do que a pessoa acessa. */}
           {squadDoHover && (
-            <div className="mb-1 flex items-center gap-1.5">
+            <div className="mb-1 flex shrink-0 items-center gap-1.5">
               <span
                 className="size-1.5 rounded-full"
                 style={{ backgroundColor: squadDoHover.color }}
@@ -571,22 +593,24 @@ export function OfficeRoom({
             </div>
           )}
           {hoveredCard.active ? (
-            hoveredCard.cards!.map((card, i) => (
-              <div
-                key={card.id}
-                className={i > 0 ? "mt-1.5 border-t border-gray-700 pt-1.5" : undefined}
-              >
-                <div className="font-semibold">
-                  #{card.number} {card.title}
+            <div className="overflow-y-auto">
+              {hoveredCard.cards!.map((card, i) => (
+                <div
+                  key={card.id}
+                  className={i > 0 ? "mt-1.5 border-t border-gray-700 pt-1.5" : undefined}
+                >
+                  <div className="font-semibold">
+                    #{card.number} {card.title}
+                  </div>
+                  <div className="text-gray-300">
+                    há {formatDoingSince(card.doing_since)} em andamento
+                  </div>
+                  {card.working_note && (
+                    <div className="mt-1 text-gray-200">{card.working_note}</div>
+                  )}
                 </div>
-                <div className="text-gray-300">
-                  há {formatDoingSince(card.doing_since)} em andamento
-                </div>
-                {card.working_note && (
-                  <div className="mt-1 text-gray-200">{card.working_note}</div>
-                )}
-              </div>
-            ))
+              ))}
+            </div>
           ) : (
             <div className="text-gray-300">Sem card ativo</div>
           )}
