@@ -593,7 +593,7 @@ export function OfficeRoom({
             </div>
           )}
           {hoveredCard.active ? (
-            <div className="overflow-y-auto">
+            <div className="scrollbar-slim-dark overflow-y-auto">
               {hoveredCard.cards!.map((card, i) => (
                 <div
                   key={card.id}
