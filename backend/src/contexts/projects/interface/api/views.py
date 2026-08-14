@@ -78,6 +78,9 @@ class ProjectListCreateView(APIView):
                     "template": result.template,
                     "squad_id": str(projeto.squad_id) if projeto.squad_id else None,
                     "visibility": projeto.visibility,
+                    "avatar_emoji": projeto.avatar_emoji,
+                    "avatar_color": projeto.avatar_color,
+                    "avatar_url": projeto.avatar_image or None,
                 }
             ).data,
             status=status.HTTP_201_CREATED,
@@ -123,6 +126,9 @@ class ProjectListCreateView(APIView):
                         else None
                     ),
                     "visibility": modelos[str(p.id)].visibility,
+                    "avatar_emoji": modelos[str(p.id)].avatar_emoji,
+                    "avatar_color": modelos[str(p.id)].avatar_color,
+                    "avatar_url": modelos[str(p.id)].avatar_image or None,
                 }
                 for p in projects
             ],

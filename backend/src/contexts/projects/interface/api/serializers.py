@@ -42,6 +42,9 @@ class ProjectSerializer(serializers.Serializer):
     template = serializers.CharField(default="software")
     squad_id = serializers.CharField(allow_null=True, default=None)
     visibility = serializers.CharField(default="restricted")
+    avatar_emoji = serializers.CharField(allow_blank=True, default="")
+    avatar_color = serializers.CharField(allow_blank=True, default="")
+    avatar_url = serializers.CharField(allow_null=True, default=None)
 
 
 _STATUS = [

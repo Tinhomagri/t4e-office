@@ -39,6 +39,9 @@ export interface Project {
   template?: ProjectTemplate
   squad_id: string | null
   visibility: ProjectVisibility
+  avatar_emoji: string
+  avatar_color: string
+  avatar_url: string | null
 }
 
 // /projects/<id>/ — projeto com os campos da aba "Geral" da configuração do quadro.

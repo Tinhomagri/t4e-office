@@ -1110,9 +1110,24 @@ function ProjectsNavLink({
                   to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
                   className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5"
                 >
-                  <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
-                    {p.key.slice(0, 2).toUpperCase()}
-                  </span>
+                  {p.avatar_url ? (
+                    <img
+                      src={p.avatar_url}
+                      alt=""
+                      className="size-[18px] shrink-0 rounded object-cover"
+                    />
+                  ) : p.avatar_emoji ? (
+                    <span
+                      className="grid size-[18px] shrink-0 place-items-center rounded text-[11px] leading-none"
+                      style={{ backgroundColor: p.avatar_color || undefined }}
+                    >
+                      {p.avatar_emoji}
+                    </span>
+                  ) : (
+                    <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
+                      {p.key.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
                   <span className="truncate">{p.name}</span>
                 </NavLink>
                 {/* Só no hover da linha — a lista de projetos não pode ficar

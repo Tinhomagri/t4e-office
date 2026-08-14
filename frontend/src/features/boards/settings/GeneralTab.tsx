@@ -1,14 +1,15 @@
 // Aba "Geral" — identidade do projeto: avatar, nome, chave, categoria, lead.
 import { useEffect, useRef, useState } from "react"
-import { Trash2, Upload } from "lucide-react"
+import { Globe2, Lock, Trash2, Upload } from "lucide-react"
 
+import { useSquads } from "@/features/poker/poker.hooks"
 import {
   useProject,
   useUpdateProject,
   useUpdateProjectAvatar,
 } from "@/features/workspace/workspace.hooks"
 import type { ProjectDetail } from "@/features/workspace/workspace.types"
-import { Button, Field, Input, Select, Spinner, Textarea } from "@/shared/ui/primitives"
+import { Button, Field, Input, Select, Spinner, Textarea, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 
 import { ColorPicker, SettingsCard } from "./board-settings.shared"
@@ -189,6 +190,8 @@ export function GeneralTab({
         </div>
       </SettingsCard>
 
+      <AccessCard project={project} canEdit={canEdit} update={update} />
+
       <SettingsCard title="Detalhes" description="Nome, chave e responsáveis do projeto.">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nome">
@@ -266,5 +269,92 @@ export function GeneralTab({
         )}
       </SettingsCard>
     </div>
+  )
+}
+
+// Squad dona + visibilidade — a mesma coisa que a criação de board já pede,
+// só que aqui edita um projeto que já existe. Sem isto, só dava pra declarar
+// squad/visibilidade no momento da criação; quem quisesse mudar depois não
+// achava onde (a única tela que fazia isso era Membros → Permissões).
+function AccessCard({
+  project,
+  canEdit,
+  update,
+}: {
+  project: ProjectDetail
+  canEdit: boolean
+  update: ReturnType<typeof useUpdateProject>
+}) {
+  const { data: squads = [] } = useSquads(project.workspace_id)
+
+  const setVisibility = (visibility: "restricted" | "workspace") => {
+    if (visibility === project.visibility) return
+    update.mutate(
+      { visibility },
+      { onError: () => toast.error("Não foi possível mudar a visibilidade.") },
+    )
+  }
+
+  const setSquad = (squadId: string) => {
+    update.mutate(
+      { squad_id: squadId || null },
+      { onError: () => toast.error("Não foi possível mudar a squad dona.") },
+    )
+  }
+
+  return (
+    <SettingsCard
+      title="Acesso ao board"
+      description="Quem enxerga este projeto: restrito (squad dona + convidados) ou aberto a todo o workspace."
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Visibilidade">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => setVisibility("restricted")}
+              className={cx(
+                "flex items-center gap-2 rounded-lg border p-2.5 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                project.visibility === "restricted"
+                  ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  : "border-paper-200 dark:border-ink-700 hover:border-brand-300",
+              )}
+            >
+              <Lock className="size-3.5 shrink-0" />
+              Restrito
+            </button>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => setVisibility("workspace")}
+              className={cx(
+                "flex items-center gap-2 rounded-lg border p-2.5 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                project.visibility === "workspace"
+                  ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  : "border-paper-200 dark:border-ink-700 hover:border-brand-300",
+              )}
+            >
+              <Globe2 className="size-3.5 shrink-0" />
+              Workspace
+            </button>
+          </div>
+        </Field>
+        <Field label="Squad dona" hint="Opcional — todo o time da squad ganha acesso.">
+          <Select
+            value={project.squad_id ?? ""}
+            disabled={!canEdit || project.visibility === "workspace"}
+            onChange={(e) => setSquad(e.target.value)}
+          >
+            <option value="">Nenhuma</option>
+            {squads.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+    </SettingsCard>
   )
 }

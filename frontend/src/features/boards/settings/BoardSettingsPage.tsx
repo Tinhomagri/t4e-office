@@ -102,8 +102,8 @@ export function BoardSettingsPage() {
                   className={cx(
                     "flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors focus-ring",
                     active === id
-                      ? "bg-brand-50 font-medium text-brand-700"
-                      : "text-paper-600 hover:bg-paper-100 dark:hover:bg-ink-800",
+                      ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                      : "text-paper-600 hover:bg-paper-100 hover:text-ink dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-paper",
                   )}
                 >
                   <Icon className="size-3.5 shrink-0" />
