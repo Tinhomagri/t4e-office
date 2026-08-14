@@ -75,6 +75,12 @@ ISSUES = [
         assignee=_pessoa("sumiu@outra.com", "Alguém de Fora"),
     ),
     _issue("GES-40", "Bug", "Parcela errada", "Itens pendentes", "new"),
+    # Jira sem e-mail no campo (privacidade escondida pela pessoa): só o nome
+    # chega, e ele bate exato com uma conta existente.
+    _issue(
+        "GES-42", "Bug", "Sem e-mail no Jira", "Itens pendentes", "new",
+        assignee=_pessoa(None, "Dev Sem Email"),
+    ),
     _issue("GES-41", "Tarefa", "Fechar caixa", "Concluído", "done",
            resolution={"name": "Concluído"},
            resolutiondate="2026-06-01T10:00:00.000-0300",
@@ -111,6 +117,9 @@ def workspace(db):
     )
     UserModel.objects.create_user(
         email="dev@t4egroup.com.br", password="x", full_name="Dev Conhecido", is_active=True
+    )
+    UserModel.objects.create_user(
+        email="sememail@t4egroup.com.br", password="x", full_name="Dev Sem Email", is_active=True
     )
     return WorkspaceModel.objects.create(name="T4E", slug="t4e", owner=dono)
 
@@ -165,6 +174,18 @@ def test_responsavel_sem_conta_nao_some(jira_falso, workspace):
     de_fora = CardModel.objects.get(external_key="GES-38")
     assert de_fora.assignee is None
     assert de_fora.external_assignee == "Alguém de Fora"
+
+
+@pytest.mark.django_db
+def test_responsavel_sem_email_casa_por_nome_exato(jira_falso, workspace):
+    """Jira Cloud some com o e-mail do assignee quando a pessoa marca "esconder
+    e-mail" nas preferências — mesmo tendo conta aqui, o casamento por e-mail
+    nunca bateria. O nome exato é o único sinal que sobra."""
+    call_command("import_jira", workspace="t4e")
+
+    card = CardModel.objects.get(external_key="GES-42")
+    assert card.assignee and card.assignee.email == "sememail@t4egroup.com.br"
+    assert card.external_assignee == ""
 
 
 @pytest.mark.django_db

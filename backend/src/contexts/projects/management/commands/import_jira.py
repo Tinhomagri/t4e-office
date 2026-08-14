@@ -215,13 +215,17 @@ class Command(BaseCommand):
     # ── Mapeamentos ─────────────────────────────────────────────────────────
 
     def _user(self, person: dict | None) -> tuple[UserModel | None, str]:
-        """Casa por e-mail. Sem conta aqui, devolve o nome para não perdê-lo."""
+        """Casa por e-mail; sem e-mail (privacidade escondida no Jira) tenta
+        por nome exato. Sem conta nenhuma, devolve o nome para não perdê-lo."""
         if not person:
             return None, ""
         email = (person.get("emailAddress") or "").strip().lower()
         name = person.get("displayName") or ""
         if email and email in self.users:
             return self.users[email], ""
+        by_name = self.users_by_name.get(name.strip().lower())
+        if by_name:
+            return by_name, ""
         return None, name
 
     def _resolution(self, fields: dict) -> tuple[str, Any]:
@@ -307,6 +311,20 @@ class Command(BaseCommand):
             raise CommandError(f"Workspace '{options['workspace']}' não existe.") from exc
 
         self.users = {u.email.lower(): u for u in UserModel.objects.all()}
+        # Fallback por nome: no Jira Cloud, e-mail no campo assignee some quando
+        # a pessoa marca "esconder e-mail" nas preferências — o e-mail bate
+        # normal pra maioria, mas quem escondeu não casa nunca por essa via,
+        # mesmo tendo conta aqui. Só usa se o nome for único (nome repetido não
+        # dá pra saber qual é quem, aí cai pro texto puro como antes).
+        contagem_nomes: dict[str, int] = {}
+        por_nome: dict[str, UserModel] = {}
+        for u in UserModel.objects.all():
+            chave = u.full_name.strip().lower()
+            if not chave:
+                continue
+            contagem_nomes[chave] = contagem_nomes.get(chave, 0) + 1
+            por_nome[chave] = u
+        self.users_by_name = {k: v for k, v in por_nome.items() if contagem_nomes[k] == 1}
         self.statuses: dict[tuple, WorkflowStatusModel] = {}
         self.sprints: dict[str, SprintModel] = {}
         dry = options["dry_run"]
