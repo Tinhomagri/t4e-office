@@ -242,21 +242,97 @@ class Command(BaseCommand):
             date = parse_datetime(fields.get("updated") or "") or timezone.now()
         return code, date
 
+    # Pista de nome que marca "trabalhando nisso agora" — mesmo espelhando o
+    # Jira exatamente, quem entrega o board (Escritório, presença automática)
+    # continua precisando saber qual coluna é essa. Revisão/backend/teste são
+    # fases vizinhas, não "estou fazendo agora".
+    def _parece_em_andamento(self, nome: str) -> bool:
+        baixo = nome.strip().lower()
+        return any(pista in baixo for pista in ("andamento", "iniciad"))
+
+    def _slugify(self, nome: str) -> str:
+        return nome.strip().lower().replace(" ", "-")[:50]
+
+    def _board_columns(self, project_key: str) -> list[dict] | None:
+        """Colunas do quadro Jira na ordem configurada lá, cada uma com o
+        conjunto de status ids que ela agrupa. `None` quando o projeto não tem
+        quadro clássico acessível (comum em times/permissões diferentes) —
+        nesse caso cai no fallback de uma coluna por status.
+        """
+        try:
+            boards = self._get(
+                "/rest/agile/1.0/board", projectKeyOrId=project_key, maxResults=1
+            ).get("values", [])
+        except CommandError:
+            return None
+        if not boards:
+            return None
+        try:
+            config = self._get(f"/rest/agile/1.0/board/{boards[0]['id']}/configuration")
+        except CommandError:
+            return None
+
+        colunas = []
+        for col in config.get("columnConfig", {}).get("columns", []):
+            status_ids = {str(s["id"]) for s in col.get("statuses", []) if s.get("id")}
+            if status_ids:
+                colunas.append({"name": col.get("name") or "Coluna", "status_ids": status_ids})
+        return colunas or None
+
+    def _status_categories(self, project_key: str) -> dict[str, str]:
+        """status id -> chave de categoria do Jira (new/indeterminate/done)."""
+        out: dict[str, str] = {}
+        for tipo in self._get(f"{API}/project/{project_key}/statuses"):
+            for status in tipo.get("statuses", []):
+                out[str(status["id"])] = (status.get("statusCategory") or {}).get("key", "new")
+        return out
+
+    def _prepara_colunas(self, project: ProjectModel) -> dict[str, str] | None:
+        """Cria/atualiza as WorkflowStatusModel espelhando o quadro do Jira e
+        devolve {status_id: slug}. `None` se não achou quadro (usa fallback)."""
+        colunas = self._board_columns(project.external_key)
+        if colunas is None:
+            return None
+        categorias = self._status_categories(project.external_key)
+
+        status_para_slug: dict[str, str] = {}
+        for i, col in enumerate(colunas):
+            slug = self._slugify(col["name"])
+            # Categoria da coluna: a do primeiro status que ela agrupa — o
+            # Jira já lista os status de cada coluna em ordem coerente.
+            primeiro_status = next(iter(col["status_ids"]), None)
+            categoria = CATEGORY_MAP.get(categorias.get(primeiro_status or "", "new"), "todo")
+            WorkflowStatusModel.objects.update_or_create(
+                project=project,
+                slug=slug,
+                defaults={
+                    "name": col["name"][:80],
+                    "category": categoria,
+                    "order": i,
+                    "is_working": self._parece_em_andamento(col["name"]),
+                },
+            )
+            for sid in col["status_ids"]:
+                status_para_slug[sid] = slug
+        return status_para_slug
+
     def _status_slug(self, project: ProjectModel, status: dict) -> str:
+        """Fallback sem quadro: uma coluna por status, na ordem de chegada."""
         name = status.get("name", "A fazer")
         category = CATEGORY_MAP.get(
             (status.get("statusCategory") or {}).get("key", "new"), "todo"
         )
-        slug = name.lower().replace(" ", "-")[:50]
+        slug = self._slugify(name)
         key = (project.id, slug)
         if key not in self.statuses:
-            obj, _ = WorkflowStatusModel.objects.get_or_create(
+            obj, _ = WorkflowStatusModel.objects.update_or_create(
                 project=project,
                 slug=slug,
                 defaults={
                     "name": name[:80],
                     "category": category,
                     "order": len(self.statuses),
+                    "is_working": self._parece_em_andamento(name),
                 },
             )
             self.statuses[key] = obj
@@ -377,7 +453,13 @@ class Command(BaseCommand):
             "resolution", "resolutiondate", "timeoriginalestimate",
             *sprint_fields, *points_fields,
         ]
-        issues = self._search(f'project = "{key}" ORDER BY created ASC', fields)
+        # Rank é a ordem visual real do card na coluna do Jira — sem isto, o
+        # card nascia na posição que o `created ASC` desse, sem relação com
+        # onde o time o deixou no board de origem.
+        try:
+            issues = self._search(f'project = "{key}" ORDER BY Rank ASC', fields)
+        except CommandError:
+            issues = self._search(f'project = "{key}" ORDER BY created ASC', fields)
         self.stdout.write(f"  {key} ({jira_project['name']}): {len(issues)} issue(s)")
         if dry:
             return len(issues)
@@ -394,9 +476,14 @@ class Command(BaseCommand):
                     "description": jira_project.get("description", "") or "",
                 },
             )
+            status_para_slug = self._prepara_colunas(project)
 
             by_external: dict[str, CardModel] = {}
             parents: dict[str, str] = {}
+            # Posição dentro da coluna, na ordem de chegada (que já é a ordem
+            # de Rank do Jira) — mantém os cards na mesma sequência visual de
+            # lá sem precisar renumerar nada além disto.
+            ordem_na_coluna: dict[str, int] = {}
 
             for issue in issues:
                 f = issue["fields"]
@@ -408,6 +495,16 @@ class Command(BaseCommand):
                     (f[c] for c in points_fields if isinstance(f.get(c), (int, float))), None
                 )
                 resolution, resolved_at = self._resolution(f)
+                status_field = f.get("status") or {}
+                slug = (
+                    status_para_slug.get(str(status_field.get("id", "")))
+                    if status_para_slug is not None
+                    else None
+                )
+                if slug is None:
+                    slug = self._status_slug(project, status_field)
+                posicao = ordem_na_coluna.get(slug, 0)
+                ordem_na_coluna[slug] = posicao + 1
 
                 card, _ = CardModel.objects.update_or_create(
                     project=project,
@@ -417,7 +514,8 @@ class Command(BaseCommand):
                         "number": int(issue["key"].rsplit("-", 1)[-1]),
                         "title": (f.get("summary") or "Sem título")[:200],
                         "description": adf_to_text(f.get("description")).strip(),
-                        "status": self._status_slug(project, f.get("status") or {}),
+                        "status": slug,
+                        "order": posicao,
                         "type": TYPE_MAP.get(type_name, "chore"),
                         "priority": PRIORITY_MAP.get(priority_name, "medium"),
                         "points": int(points) if isinstance(points, (int, float)) else None,
@@ -460,6 +558,20 @@ class Command(BaseCommand):
                 else:
                     child.parent = parent_card
                 child.save(update_fields=["epic", "parent"])
+
+            # Quadro Jira mudou de coluna pra outra desde a última importação
+            # (ou passamos a espelhar o quadro pela primeira vez): a coluna
+            # velha fica sem NENHUM card do Jira apontando pra ela. Só apaga
+            # se também não sobrar card nenhum (nem manual) usando o slug —
+            # um card criado direto aqui, fora do Jira, não pode perder a
+            # própria coluna.
+            if status_para_slug is not None:
+                usados = set(status_para_slug.values()) | set(ordem_na_coluna.keys())
+                for orfa in WorkflowStatusModel.objects.filter(project=project).exclude(
+                    slug__in=usados
+                ):
+                    if not CardModel.objects.filter(project=project, status=orfa.slug).exists():
+                        orfa.delete()
 
         return len(issues)
 

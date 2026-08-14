@@ -101,6 +101,10 @@ def jira_falso(monkeypatch):
             return {"values": [{"key": "GES", "name": "Gestum", "description": "ERP"}]}
         if path.endswith("/comment"):
             return {"comments": []}
+        # Sem quadro configurado nestes testes — cai no fallback de uma
+        # coluna por status, que é o comportamento que eles já verificam.
+        if path.endswith("/board"):
+            return {"values": []}
         raise AssertionError(f"endpoint inesperado: {path}")
 
     monkeypatch.setattr(import_jira.Command, "_get", fake_get)
@@ -358,3 +362,124 @@ def test_reimportar_corrige_dado_gravado_errado(jira_falso, workspace):
     sprint.refresh_from_db()
     assert sprint.status == "closed"
     assert sprint.name == "GES Sprint 0"
+
+
+# ── Colunas espelhando o quadro do Jira ──────────────────────────────────────
+
+def _board_issue(key: str, titulo: str, status_id: str, status_nome: str, categoria: str) -> dict:
+    """Igual a `_issue`, mas com `id` no status — é por `id` que o import
+    resolve a coluna do quadro (o nome sozinho não é confiável no Jira)."""
+    issue = _issue(key, "Tarefa", titulo, status_nome, categoria)
+    issue["fields"]["status"]["id"] = status_id
+    return issue
+
+
+BOARD_ISSUES = [
+    _board_issue("PIT-1", "Primeiro da fila", "1", "A Fazer", "new"),
+    _board_issue("PIT-2", "Segundo da fila", "1", "A Fazer", "new"),
+    _board_issue("PIT-3", "Trabalhando nisso", "2", "Em andamento", "indeterminate"),
+    _board_issue("PIT-4", "Revisando", "3", "Code Review", "indeterminate"),
+]
+
+
+@pytest.fixture
+def jira_falso_com_board(monkeypatch):
+    def fake_get(self, path, **params):
+        if path.endswith("/field"):
+            return []
+        if path.endswith("/project/search"):
+            return {"values": [{"key": "PIT", "name": "PitStopRH", "description": ""}]}
+        if path.endswith("/project/PIT/statuses"):
+            return [
+                {"statuses": [
+                    {"id": "1", "statusCategory": {"key": "new"}},
+                    {"id": "2", "statusCategory": {"key": "indeterminate"}},
+                    {"id": "3", "statusCategory": {"key": "indeterminate"}},
+                ]},
+            ]
+        if path.endswith("/board"):
+            return {"values": [{"id": 42}]}
+        if path.endswith("/board/42/configuration"):
+            return {
+                "columnConfig": {
+                    "columns": [
+                        {"name": "Fila", "statuses": [{"id": "1"}]},
+                        {"name": "Em andamento", "statuses": [{"id": "2"}]},
+                        {"name": "Code Review", "statuses": [{"id": "3"}]},
+                    ]
+                }
+            }
+        raise AssertionError(f"endpoint inesperado: {path}")
+
+    monkeypatch.setattr(import_jira.Command, "_get", fake_get)
+    monkeypatch.setattr(import_jira.Command, "_search", lambda self, jql, fields: BOARD_ISSUES)
+    monkeypatch.setenv("JIRA_URL", "https://exemplo.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "eu@t4egroup.com.br")
+    monkeypatch.setenv("JIRA_API_TOKEN", "token")
+
+
+@pytest.mark.django_db
+def test_colunas_espelham_nome_e_ordem_do_quadro_jira(jira_falso_com_board, workspace):
+    call_command("import_jira", workspace="t4e")
+
+    colunas = list(WorkflowStatusModel.objects.filter(project__external_key="PIT").order_by("order"))
+    assert [c.name for c in colunas] == ["Fila", "Em andamento", "Code Review"]
+    assert [c.order for c in colunas] == [0, 1, 2]
+
+
+@pytest.mark.django_db
+def test_is_working_liga_so_na_coluna_de_andamento_nao_em_review(jira_falso_com_board, workspace):
+    call_command("import_jira", workspace="t4e")
+
+    por_nome = {
+        c.name: c.is_working
+        for c in WorkflowStatusModel.objects.filter(project__external_key="PIT")
+    }
+    assert por_nome["Em andamento"] is True
+    assert por_nome["Fila"] is False
+    assert por_nome["Code Review"] is False
+
+
+@pytest.mark.django_db
+def test_cards_mantem_a_ordem_do_rank_do_jira_dentro_da_coluna(jira_falso_com_board, workspace):
+    call_command("import_jira", workspace="t4e")
+
+    fila = list(
+        CardModel.objects.filter(project__external_key="PIT", status="fila").order_by("order")
+    )
+    assert [c.external_key for c in fila] == ["PIT-1", "PIT-2"]
+    assert [c.order for c in fila] == [0, 1]
+
+
+@pytest.mark.django_db
+def test_coluna_orfa_sem_card_nenhum_e_removida(jira_falso_com_board, workspace):
+    """Quadro do Jira mudou de coluna (ou a gente passou a espelhar ele agora
+    pela primeira vez): a coluna antiga, sem card nenhum apontando pra ela,
+    não pode sobrar fantasma no board."""
+    call_command("import_jira", workspace="t4e")
+    projeto = ProjectModel.objects.get(external_key="PIT")
+    WorkflowStatusModel.objects.create(
+        project=projeto, name="Coluna Antiga", slug="coluna-antiga",
+        category="doing", order=99,
+    )
+
+    call_command("import_jira", workspace="t4e")
+
+    assert not WorkflowStatusModel.objects.filter(project=projeto, slug="coluna-antiga").exists()
+
+
+@pytest.mark.django_db
+def test_coluna_com_card_manual_nao_e_apagada(jira_falso_com_board, workspace):
+    """Card criado direto no T4E Office (fora do Jira) fica numa coluna que o
+    quadro do Jira não conhece — reimportar não pode apagar essa coluna e
+    deixar o card sem lugar nenhum pra aparecer."""
+    call_command("import_jira", workspace="t4e")
+    projeto = ProjectModel.objects.get(external_key="PIT")
+    WorkflowStatusModel.objects.create(
+        project=projeto, name="Ideias", slug="ideias", category="todo", order=99,
+    )
+    CardModel.objects.create(project=projeto, number=500, title="Card manual", status="ideias")
+
+    call_command("import_jira", workspace="t4e")
+
+    assert WorkflowStatusModel.objects.filter(project=projeto, slug="ideias").exists()
