@@ -986,6 +986,11 @@ function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: Sp
   )
 }
 
+// Nº de projetos mostrados direto na sidebar antes de virar "Ver todos" — como
+// o bloco "Recente" do Jira, que corta em poucos itens e manda o resto pro
+// modal de espaços em vez de empurrar a lista inteira pro menu.
+const INLINE_PROJECTS_LIMIT = 6
+
 // Item de projetos com submenu — como a lista de projetos do Jira embaixo do
 // item "Projects". Filtra por tipo de projeto: software (Boards) x marketing
 // (Campanhas), dando a cada tipo seu próprio menu.
@@ -1026,6 +1031,9 @@ function ProjectsNavLink({
   // sozinho apenas quando um projeto do grupo já está aberto, senão o item
   // ativo ficaria escondido dentro de um grupo fechado.
   const [open, setOpen] = useState(childActive)
+  const [allOpen, setAllOpen] = useState(false)
+  const visibleProjects = projects.slice(0, INLINE_PROJECTS_LIMIT)
+  const hiddenCount = projects.length - visibleProjects.length
 
   if (collapsed) {
     return (
@@ -1090,62 +1098,153 @@ function ProjectsNavLink({
 
       {open && projects.length > 0 && (
         <div className="ml-[27px] flex flex-col gap-0.5 border-l border-paper-100 pl-2 dark:border-ink-700">
-          {projects.map((p) => {
-            const active = p.id === activeProjectId
-            return (
-              // Fundo de hover mora AQUI (na linha inteira), não no NavLink de
-              // dentro — antes o NavLink só cobria parte da largura (sobrava
-              // espaço pra engrenagem) e o hover "encolhia" em vez de preencher
-              // a linha toda.
-              <div
-                key={p.id}
-                className={cx(
-                  "group/proj flex w-full items-center gap-0.5 rounded-lg text-[13px] transition-colors",
-                  active
-                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                    : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
-                )}
-              >
-                <NavLink
-                  to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
-                  className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5"
-                >
-                  {p.avatar_url ? (
-                    <img
-                      src={p.avatar_url}
-                      alt=""
-                      className="size-[18px] shrink-0 rounded object-cover"
-                    />
-                  ) : p.avatar_emoji ? (
-                    <span
-                      className="grid size-[18px] shrink-0 place-items-center rounded text-[11px] leading-none"
-                      style={{ backgroundColor: p.avatar_color || undefined }}
-                    >
-                      {p.avatar_emoji}
-                    </span>
-                  ) : (
-                    <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
-                      {p.key.slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                  <span className="truncate">{p.name}</span>
-                </NavLink>
-                {/* Só no hover da linha — a lista de projetos não pode ficar
-                    poluída de botões quando ninguém está mexendo nela. */}
-                <NavLink
-                  to={`/app/boards/${p.id}/settings`}
-                  title="Configurações do quadro"
-                  aria-label={`Configurações do quadro ${p.name}`}
-                  className="mr-1 grid size-6 shrink-0 place-items-center rounded-md opacity-0 transition-opacity hover:bg-paper-200 group-hover/proj:opacity-100 dark:hover:bg-ink-700"
-                >
-                  <Settings className="size-3.5" />
-                </NavLink>
-              </div>
-            )
-          })}
+          {visibleProjects.map((p) => (
+            <ProjectRow key={p.id} project={p} active={p.id === activeProjectId} isMarketing={isMarketing} />
+          ))}
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setAllOpen(true)}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-paper-400 transition-colors hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper"
+            >
+              <span className="grid size-[18px] shrink-0 place-items-center text-paper-400">···</span>
+              <span>Ver todos ({projects.length})</span>
+            </button>
+          )}
         </div>
       )}
+
+      <AllProjectsModal
+        open={allOpen}
+        onClose={() => setAllOpen(false)}
+        projects={projects}
+        isMarketing={isMarketing}
+        activeProjectId={activeProjectId}
+        label={label}
+      />
     </div>
+  )
+}
+
+// Linha de projeto — reaproveitada na lista inline (corte de
+// INLINE_PROJECTS_LIMIT) e dentro do modal "Ver todos".
+function ProjectRow({
+  project: p,
+  active,
+  isMarketing,
+  onNavigate,
+}: {
+  project: { id: string; name: string; key: string; avatar_url?: string | null; avatar_emoji?: string | null; avatar_color?: string | null }
+  active: boolean
+  isMarketing: boolean
+  onNavigate?: () => void
+}) {
+  return (
+    // Fundo de hover mora AQUI (na linha inteira), não no NavLink de dentro —
+    // antes o NavLink só cobria parte da largura (sobrava espaço pra
+    // engrenagem) e o hover "encolhia" em vez de preencher a linha toda.
+    <div
+      className={cx(
+        "group/proj flex w-full items-center gap-0.5 rounded-lg text-[13px] transition-colors",
+        active
+          ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+          : "text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper",
+      )}
+    >
+      <NavLink
+        to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
+        onClick={onNavigate}
+        className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5"
+      >
+        {p.avatar_url ? (
+          <img src={p.avatar_url} alt="" className="size-[18px] shrink-0 rounded object-cover" />
+        ) : p.avatar_emoji ? (
+          <span
+            className="grid size-[18px] shrink-0 place-items-center rounded text-[11px] leading-none"
+            style={{ backgroundColor: p.avatar_color || undefined }}
+          >
+            {p.avatar_emoji}
+          </span>
+        ) : (
+          <span className="grid size-[18px] shrink-0 place-items-center rounded bg-brand-500/15 text-[9px] font-bold text-brand-700 dark:text-brand-300">
+            {p.key.slice(0, 2).toUpperCase()}
+          </span>
+        )}
+        <span className="truncate">{p.name}</span>
+      </NavLink>
+      {/* Só no hover da linha — a lista de projetos não pode ficar poluída de
+          botões quando ninguém está mexendo nela. */}
+      <NavLink
+        to={`/app/boards/${p.id}/settings`}
+        onClick={onNavigate}
+        title="Configurações do quadro"
+        aria-label={`Configurações do quadro ${p.name}`}
+        className="mr-1 grid size-6 shrink-0 place-items-center rounded-md opacity-0 transition-opacity hover:bg-paper-200 group-hover/proj:opacity-100 dark:hover:bg-ink-700"
+      >
+        <Settings className="size-3.5" />
+      </NavLink>
+    </div>
+  )
+}
+
+// Modal "Ver todos" — igual ao "Mais espaços" do Jira: busca + lista completa,
+// pra sidebar não precisar carregar dezenas de projetos abertos o tempo todo.
+function AllProjectsModal({
+  open,
+  onClose,
+  projects,
+  isMarketing,
+  activeProjectId,
+  label,
+}: {
+  open: boolean
+  onClose: () => void
+  projects: Array<{ id: string; name: string; key: string; avatar_url?: string | null; avatar_emoji?: string | null; avatar_color?: string | null }>
+  isMarketing: boolean
+  activeProjectId: string | null
+  label: string
+}) {
+  const [query, setQuery] = useState("")
+
+  useEffect(() => {
+    if (open) setQuery("")
+  }, [open])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return projects
+    return projects.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q),
+    )
+  }, [projects, query])
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Todos os ${label.toLowerCase()}`} size="lg">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-paper-400" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar projeto..."
+          autoFocus
+          className="pl-9"
+        />
+      </div>
+      <div className="mt-3 flex max-h-[50vh] flex-col gap-0.5 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="px-2 py-6 text-center text-sm text-paper-400">Nenhum projeto encontrado.</p>
+        ) : (
+          filtered.map((p) => (
+            <ProjectRow
+              key={p.id}
+              project={p}
+              active={p.id === activeProjectId}
+              isMarketing={isMarketing}
+              onNavigate={onClose}
+            />
+          ))
+        )}
+      </div>
+    </Modal>
   )
 }
 

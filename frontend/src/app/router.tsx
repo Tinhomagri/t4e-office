@@ -27,6 +27,7 @@ import { OfficePage } from "@/features/office/OfficePage"
 import { PokerPage } from "@/features/poker/PokerPage"
 import { PortfolioPage } from "@/features/portfolio/PortfolioPage"
 import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
+import { ProjectsPage } from "@/features/workspace/ProjectsPage"
 import { RegisterPage } from "@/features/auth/RegisterPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage"
@@ -108,6 +109,7 @@ function RedirectAuthenticated({ children }: { children: ReactNode }) {
 export const appRoutes: RouteObject[] = [
   { index: true, element: <MyDayPage /> },
   { path: "boards", element: <BoardsPage /> },
+  { path: "projects", element: <ProjectsPage /> },
   { path: "boards/:projectId/settings", element: <BoardSettingsPage /> },
   { path: "members", element: <MembersPage /> },
   { path: "poker", element: <PokerPage /> },
