@@ -8,7 +8,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react"
-import { Loader2, X } from "lucide-react"
+import { ChevronDown, Loader2, X } from "lucide-react"
 
 import type { PresenceStatus } from "@/features/workspace/workspace.types"
 
@@ -272,7 +272,7 @@ export function Field({
 }
 
 const CONTROL =
-  "w-full rounded-xl border border-paper-300 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
+  "w-full rounded-xl border border-paper-300 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
 
 export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cx(CONTROL, className)} {...rest} />
@@ -291,9 +291,15 @@ export function Select({
   ...rest
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cx(CONTROL, "cursor-pointer pr-8", className)} {...rest}>
-      {children}
-    </select>
+    <span className={cx("relative block w-full", className)}>
+      <select
+        className={cx(CONTROL, "h-full w-full cursor-pointer appearance-none pr-8")}
+        {...rest}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-paper-400" />
+    </span>
   )
 }
 
