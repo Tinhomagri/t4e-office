@@ -7,10 +7,12 @@ import {
   Clock,
   ExternalLink,
   Flag,
+  Gauge,
   Layers,
   ListChecks,
   Loader2,
   Mail,
+  PieChart,
   Tags,
   TrendingUp,
   Zap,
@@ -40,6 +42,12 @@ import { MiniDonut, SectionHeader, ThroughputArea, weeklyThroughput } from "./ch
 const PRIORITY_COLOR: Record<CardPriority, string> = {
   low: "#8590A2", medium: "#8270DB", high: "#E2B203", urgent: "#E2483D",
 }
+const TYPE_HEX: Record<CardType, string> = {
+  feature: "#8270DB", bug: "#E2483D", debt: "#E56910", spike: "#2898BD", chore: "#8590A2", epic: "#CD519D",
+  post: "#8270DB", peca: "#8590A2", campanha: "#CD519D", artigo: "#E56910", email: "#E2B203",
+}
+const CATEGORY_LABEL = { done: "Concluído", in_progress: "Em andamento", todo: "A fazer" } as const
+const CATEGORY_COLOR = { done: "#1F845A", in_progress: "#8270DB", todo: "#8590A2" } as const
 
 const PAGE_SIZE = 20
 
@@ -84,10 +92,10 @@ export function MemberPortfolioPage() {
       enabled: involvedProjectIds.length > 0,
     })),
   })
-  const statusMeta = new Map<string, { name: string; color: string }>()
+  const statusMeta = new Map<string, { name: string; color: string; category: string }>()
   involvedProjectIds.forEach((pid, i) => {
     for (const s of statusQueries[i]?.data ?? []) {
-      statusMeta.set(`${pid}:${s.slug}`, { name: s.name, color: s.color })
+      statusMeta.set(`${pid}:${s.slug}`, { name: s.name, color: s.color, category: s.category })
     }
   })
 
@@ -147,6 +155,29 @@ export function MemberPortfolioPage() {
     .filter((t) => t.count > 0)
   const throughput = weeklyThroughput(mine)
 
+  // Distribuição por categoria de status (concluído/em andamento/a fazer) —
+  // a única forma de agregar status entre projetos com workflows diferentes,
+  // já que a categoria é o único vocabulário comum entre eles.
+  const categoryOf = (c: BoardCard) =>
+    c.resolution === "done" ? "done" : statusMeta.get(`${c.project_id}:${c.status}`)?.category ?? "todo"
+  const categoryCounts = (["done", "in_progress", "todo"] as const).map((cat) => ({
+    key: cat, label: CATEGORY_LABEL[cat], color: CATEGORY_COLOR[cat],
+    count: mine.filter((c) => categoryOf(c) === cat).length,
+  }))
+
+  // Tempo médio de resolução — quantos dias, em média, do card criado até
+  // entregue. Métrica clássica de relatório de desempenho que faltava.
+  const resolvedCards = mine.filter((c) => c.resolution === "done" && c.created_at && (c.resolved_at ?? c.updated_at))
+  const avgCycleDays = resolvedCards.length
+    ? Math.round(
+        resolvedCards.reduce((s, c) => {
+          const start = new Date(c.created_at!).getTime()
+          const end = new Date((c.resolved_at ?? c.updated_at)!).getTime()
+          return s + Math.max(0, end - start) / 86_400_000
+        }, 0) / resolvedCards.length,
+      )
+    : null
+
   const openCards = mine
     .filter((c) => c.resolution !== "done")
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
@@ -203,17 +234,85 @@ export function MemberPortfolioPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard icon={Layers} label="Total de cards" value={total} />
         <StatCard icon={CheckCircle2} label="Concluídos" value={done} tone="success" />
         <StatCard icon={Zap} label="Peso (feito/total)" value={`${pointsDone}/${pointsTotal}`} />
         <StatCard icon={Building2} label="Projetos" value={projectRows.length} />
+        <StatCard icon={Gauge} label="Tempo médio" value={avgCycleDays != null ? `${avgCycleDays}d` : "—"} />
         <StatCard
           icon={AlertTriangle}
           label="Atrasados"
           value={overdue.length}
           tone={overdue.length > 0 ? "danger" : undefined}
         />
+      </div>
+
+      {/* Faixa de dashboard — 3 donuts lado a lado */}
+      <div className="grid gap-5 sm:grid-cols-3">
+        <section className="surface p-5">
+          <SectionHeader icon={PieChart} title="Por status" />
+          <div className="flex items-center gap-4">
+            <MiniDonut size={112} total={total} centerLabel="cards" rows={categoryCounts} />
+            <ul className="min-w-0 flex-1 space-y-1.5">
+              {categoryCounts.filter((c) => c.count > 0).map((c) => (
+                <li key={c.key} className="flex items-center gap-2 text-xs">
+                  <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: c.color }} />
+                  <span className="min-w-0 flex-1 truncate text-paper-500">{c.label}</span>
+                  <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{c.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="surface p-5">
+          <SectionHeader icon={Flag} title="Por prioridade" />
+          <div className="flex items-center gap-4">
+            <MiniDonut
+              size={112}
+              total={total}
+              centerLabel="cards"
+              rows={priorityCounts.map(({ priority, count }) => ({
+                label: PRIORITY_LABEL[priority], color: PRIORITY_COLOR[priority], count,
+              }))}
+            />
+            <ul className="min-w-0 flex-1 space-y-1.5">
+              {priorityCounts.filter((p) => p.count > 0).map(({ priority, count }) => (
+                <li key={priority} className="flex items-center gap-2 text-xs">
+                  <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: PRIORITY_COLOR[priority] }} />
+                  <span className="min-w-0 flex-1 truncate text-paper-500">{PRIORITY_LABEL[priority]}</span>
+                  <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="surface p-5">
+          <SectionHeader icon={Tags} title="Por tipo" />
+          {typeCounts.length === 0 ? (
+            <p className="text-sm text-paper-400">Sem cards.</p>
+          ) : (
+            <div className="flex items-center gap-4">
+              <MiniDonut
+                size={112}
+                total={total}
+                centerLabel="cards"
+                rows={typeCounts.map(({ type, count }) => ({ label: TYPE_LABEL[type], color: TYPE_HEX[type], count }))}
+              />
+              <ul className="min-w-0 flex-1 space-y-1.5">
+                {typeCounts.map(({ type, count }) => (
+                  <li key={type} className="flex items-center gap-2 text-xs">
+                    <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: TYPE_HEX[type] }} />
+                    <span className="min-w-0 flex-1 truncate text-paper-500">{TYPE_LABEL[type]}</span>
+                    <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -361,47 +460,6 @@ export function MemberPortfolioPage() {
               </ul>
             )}
           </section>
-
-          {/* Por prioridade */}
-          <section className="surface p-5">
-            <SectionHeader icon={Flag} title="Por prioridade" />
-            <div className="flex items-center gap-4">
-              <MiniDonut
-                size={104}
-                total={total}
-                centerLabel="cards"
-                rows={priorityCounts.map(({ priority, count }) => ({
-                  label: PRIORITY_LABEL[priority], color: PRIORITY_COLOR[priority], count,
-                }))}
-              />
-              <ul className="min-w-0 flex-1 space-y-1.5">
-                {priorityCounts.filter((p) => p.count > 0).map(({ priority, count }) => (
-                  <li key={priority} className="flex items-center gap-2 text-xs">
-                    <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: PRIORITY_COLOR[priority] }} />
-                    <span className="min-w-0 flex-1 truncate text-paper-500">{PRIORITY_LABEL[priority]}</span>
-                    <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{count}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-
-          {/* Por tipo */}
-          {typeCounts.length > 0 && (
-            <section className="surface p-5">
-              <SectionHeader icon={Tags} title="Por tipo" />
-              <div className="flex flex-wrap gap-2">
-                {typeCounts.map(({ type, count }) => (
-                  <span
-                    key={type}
-                    className={cx("rounded-full px-3 py-1 text-xs font-medium", TYPE_COLOR[type])}
-                  >
-                    {TYPE_LABEL[type]} · {count}
-                  </span>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Atrasados */}
           {overdue.length > 0 && (
