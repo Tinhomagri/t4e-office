@@ -6,9 +6,13 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Flag,
   Layers,
+  ListChecks,
   Loader2,
   Mail,
+  Tags,
+  TrendingUp,
   Zap,
 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -31,7 +35,7 @@ import {
 import * as wsApi from "@/features/workspace/workspace.api"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { cx } from "@/shared/ui/primitives"
-import { MiniDonut, ThroughputArea, weeklyThroughput } from "./charts"
+import { MiniDonut, SectionHeader, ThroughputArea, weeklyThroughput } from "./charts"
 
 const PRIORITY_COLOR: Record<CardPriority, string> = {
   low: "#8590A2", medium: "#8270DB", high: "#E2B203", urgent: "#E2483D",
@@ -216,7 +220,7 @@ export function MemberPortfolioPage() {
         <div className="space-y-6 xl:col-span-2">
           {/* Carga por projeto */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Carga por projeto</h2>
+            <SectionHeader icon={Building2} title="Carga por projeto" />
             {projectRows.length === 0 ? (
               <p className="mt-3 text-sm text-paper-400">Nenhum card atribuído.</p>
             ) : (
@@ -253,10 +257,7 @@ export function MemberPortfolioPage() {
 
           {/* Vazão semanal */}
           <section className="surface p-5">
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink dark:text-paper">Vazão semanal</h2>
-              <span className="text-[11px] text-paper-400">últimas 8 semanas</span>
-            </div>
+            <SectionHeader icon={TrendingUp} title="Vazão semanal" sub="últimas 8 semanas" />
             <ThroughputArea data={throughput} />
             <div className="mt-2 flex items-center gap-4 text-[11px] text-paper-500">
               <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#9F8FEF" }} /> Criados</span>
@@ -266,9 +267,7 @@ export function MemberPortfolioPage() {
 
           {/* Em aberto */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">
-              Em aberto ({openCards.length})
-            </h2>
+            <SectionHeader icon={ListChecks} title={`Em aberto (${openCards.length})`} />
             {openCards.length === 0 ? (
               <p className="mt-3 text-sm text-paper-400">Nenhum card em aberto. 🎉</p>
             ) : (
@@ -338,13 +337,11 @@ export function MemberPortfolioPage() {
         <div className="space-y-6">
           {/* Atividade recente */}
           <section className="surface p-5">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink dark:text-paper">
-              <Clock className="size-4 text-brand-500" /> Atividade recente
-            </h2>
+            <SectionHeader icon={Clock} title="Atividade recente" />
             {recent.length === 0 ? (
-              <p className="mt-3 text-sm text-paper-400">Sem atividade registrada.</p>
+              <p className="text-sm text-paper-400">Sem atividade registrada.</p>
             ) : (
-              <ul className="mt-3 space-y-2.5">
+              <ul className="space-y-2.5">
                 {recent.map((c) => (
                   <li key={c.id} className="flex items-start gap-2 text-xs">
                     <span
@@ -367,8 +364,8 @@ export function MemberPortfolioPage() {
 
           {/* Por prioridade */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Por prioridade</h2>
-            <div className="mt-4 flex items-center gap-4">
+            <SectionHeader icon={Flag} title="Por prioridade" />
+            <div className="flex items-center gap-4">
               <MiniDonut
                 size={104}
                 total={total}
@@ -392,8 +389,8 @@ export function MemberPortfolioPage() {
           {/* Por tipo */}
           {typeCounts.length > 0 && (
             <section className="surface p-5">
-              <h2 className="text-sm font-semibold text-ink dark:text-paper">Por tipo</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <SectionHeader icon={Tags} title="Por tipo" />
+              <div className="flex flex-wrap gap-2">
                 {typeCounts.map(({ type, count }) => (
                   <span
                     key={type}

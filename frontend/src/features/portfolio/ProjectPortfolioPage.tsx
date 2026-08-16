@@ -5,9 +5,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Flag,
   Layers,
+  ListChecks,
   Loader2,
+  PieChart,
+  Tags,
   TrendingUp,
+  Users,
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
@@ -29,7 +34,7 @@ import {
 } from "@/features/workspace/workspace.hooks"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { Badge, cx } from "@/shared/ui/primitives"
-import { BRAND, MiniDonut, ThroughputArea, WorkloadBars, weeklyThroughput } from "./charts"
+import { BRAND, MiniDonut, SectionHeader, ThroughputArea, WorkloadBars, weeklyThroughput } from "./charts"
 import { HEALTH_LABEL, HEALTH_TONE, computeHealth } from "./portfolio.shared"
 
 export function ProjectPortfolioPage() {
@@ -175,14 +180,15 @@ export function ProjectPortfolioPage() {
         <div className="space-y-6 xl:col-span-2">
           {/* Status distribution */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Distribuição por status</h2>
-            <div className="mt-4 flex items-center gap-5">
+            <SectionHeader icon={PieChart} title="Distribuição por status" />
+            <div className="flex items-center gap-8 max-w-md">
               <MiniDonut
+                size={148}
                 rows={statusBreakdown.map((s) => ({ label: s.label, color: s.color, count: s.count }))}
                 total={row.total}
                 centerLabel="cards"
               />
-              <ul className="min-w-0 flex-1 space-y-1.5">
+              <ul className="min-w-0 flex-1 space-y-2">
                 {statusBreakdown.filter((s) => s.count > 0).map((s) => (
                   <li key={s.slug} className="flex items-center gap-2 text-xs">
                     <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
@@ -199,10 +205,7 @@ export function ProjectPortfolioPage() {
 
           {/* Vazão semanal */}
           <section className="surface p-5">
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink dark:text-paper">Vazão semanal</h2>
-              <span className="text-[11px] text-paper-400">últimas 8 semanas</span>
-            </div>
+            <SectionHeader icon={TrendingUp} title="Vazão semanal" sub="últimas 8 semanas" />
             <ThroughputArea data={throughput} />
             <div className="mt-2 flex items-center gap-4 text-[11px] text-paper-500">
               <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#9F8FEF" }} /> Criados</span>
@@ -212,9 +215,7 @@ export function ProjectPortfolioPage() {
 
           {/* Open cards list */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">
-              Em aberto ({openCards.length})
-            </h2>
+            <SectionHeader icon={ListChecks} title={`Em aberto (${openCards.length})`} />
             {openCards.length === 0 ? (
               <p className="mt-3 text-sm text-paper-400">Nenhum card em aberto. 🎉</p>
             ) : (
@@ -278,15 +279,14 @@ export function ProjectPortfolioPage() {
         <div className="space-y-6">
           {/* Carga da equipe */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Carga da equipe</h2>
-            <p className="mb-3 text-[11px] text-paper-400">peso atribuído por pessoa</p>
+            <SectionHeader icon={Users} title="Carga da equipe" sub="peso por pessoa" />
             <WorkloadBars rows={workloadRows} />
           </section>
 
           {/* Priority breakdown */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Por prioridade</h2>
-            <div className="mt-4 space-y-3">
+            <SectionHeader icon={Flag} title="Por prioridade" />
+            <div className="space-y-3">
               {priorityCounts.map(({ priority, count }) => (
                 <div key={priority}>
                   <div className="mb-1 flex items-center justify-between text-xs">
@@ -307,8 +307,8 @@ export function ProjectPortfolioPage() {
           {/* Type breakdown */}
           {typeCounts.length > 0 && (
             <section className="surface p-5">
-              <h2 className="text-sm font-semibold text-ink dark:text-paper">Por tipo</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <SectionHeader icon={Tags} title="Por tipo" />
+              <div className="flex flex-wrap gap-2">
                 {typeCounts.map(({ type, count }) => (
                   <span
                     key={type}

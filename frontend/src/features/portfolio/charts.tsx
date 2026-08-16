@@ -2,6 +2,8 @@
 // integrante do Portfólio — mesma linguagem visual do Central de Relatórios
 // (paleta estilo Power BI), em componentes pequenos o bastante pra caber num
 // card de sidebar.
+import type { LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
 import {
   Area,
   AreaChart,
@@ -18,6 +20,32 @@ import {
 } from "recharts"
 
 export const BRAND = "#8270DB"
+
+// Cabeçalho padrão de card de dashboard — ícone + título, no mesmo molde do
+// ChartCard do Central de Relatórios. Sem isso os cards do Portfólio ficavam
+// com títulos soltos, destoando do resto do app.
+export function SectionHeader({
+  icon: Icon,
+  title,
+  action,
+  sub,
+}: {
+  icon: LucideIcon
+  title: string
+  action?: ReactNode
+  sub?: string
+}) {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 text-brand-500" strokeWidth={2} />
+        <h2 className="text-sm font-semibold text-ink dark:text-paper">{title}</h2>
+        {sub && <span className="text-[11px] text-paper-400">{sub}</span>}
+      </div>
+      {action}
+    </div>
+  )
+}
 
 export function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
