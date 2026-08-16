@@ -2,11 +2,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Layers,
   Loader2,
   TrendingUp,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 
 import {
@@ -36,6 +39,10 @@ export function ProjectPortfolioPage() {
   const { data: members } = useMembers(activeWorkspaceId)
   const { data: statuses } = useWorkflowStatuses(projectId ?? null)
   useProjects(activeWorkspaceId) // mantém cache aquecido p/ navegação entre projetos
+
+  const PAGE_SIZE = 20
+  const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [projectId])
 
   if (isLoading) {
     return (
@@ -76,6 +83,8 @@ export function ProjectPortfolioPage() {
   const openCards = row.cards
     .filter((c) => c.resolution !== "done")
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+  const totalPages = Math.max(1, Math.ceil(openCards.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
 
   const priorityCounts = (["urgent", "high", "medium", "low"] as CardPriority[]).map((p) => ({
     priority: p,
@@ -177,7 +186,7 @@ export function ProjectPortfolioPage() {
               <p className="mt-3 text-sm text-paper-400">Nenhum card em aberto. 🎉</p>
             ) : (
               <ul className="mt-3 divide-y divide-paper-100 dark:divide-ink-800">
-                {openCards.map((c: BoardCard) => (
+                {openCards.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE).map((c: BoardCard) => (
                   <li key={c.id} className="flex items-center gap-3 py-2.5">
                     <span className={cx("h-6 w-1 shrink-0 rounded-full", PRIORITY_BAR[c.priority])} />
                     <span className="min-w-0 flex-1">
@@ -205,6 +214,30 @@ export function ProjectPortfolioPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between border-t border-paper-100 pt-3 dark:border-ink-800">
+                <p className="text-xs text-paper-400">
+                  Página <span className="font-medium text-ink dark:text-paper tabular">{pageClamped}</span> de{" "}
+                  <span className="tabular">{totalPages}</span>
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={pageClamped === 1}
+                    className="grid size-7 place-items-center rounded-lg border border-paper-200 bg-paper text-paper-500 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-ink-700 dark:bg-ink-900 dark:hover:bg-ink-800"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={pageClamped === totalPages}
+                    className="grid size-7 place-items-center rounded-lg border border-paper-200 bg-paper text-paper-500 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-ink-700 dark:bg-ink-900 dark:hover:bg-ink-800"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                </div>
+              </div>
             )}
           </section>
         </div>
