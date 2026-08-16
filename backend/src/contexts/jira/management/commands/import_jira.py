@@ -31,6 +31,7 @@ from contexts.jira.infrastructure.mapping import (
     map_priority,
     map_resolution,
     map_status_category,
+    status_color,
 )
 from contexts.projects.infrastructure.django.models import (
     CardCommentModel,
@@ -173,9 +174,10 @@ class _Importer:
         if cache_key in self._status_cache:
             return self._status_cache[cache_key]
         category_key = (jira_status.get("statusCategory") or {}).get("key")
+        category = map_status_category(category_key)
         status, _ = WorkflowStatusModel.objects.get_or_create(
             project=project, slug=slug,
-            defaults={"name": name, "category": map_status_category(category_key)},
+            defaults={"name": name, "category": category, "color": status_color(name, category)},
         )
         self._status_cache[cache_key] = status
         return status
