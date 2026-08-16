@@ -29,6 +29,7 @@ import {
 } from "@/features/workspace/workspace.hooks"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { Badge, cx } from "@/shared/ui/primitives"
+import { BRAND, MiniDonut, ThroughputArea, WorkloadBars, weeklyThroughput } from "./charts"
 import { HEALTH_LABEL, HEALTH_TONE, computeHealth } from "./portfolio.shared"
 
 export function ProjectPortfolioPage() {
@@ -94,6 +95,28 @@ export function ProjectPortfolioPage() {
     .map((t) => ({ type: t, count: row.cards.filter((c) => c.type === t).length }))
     .filter((t) => t.count > 0)
 
+  // Carga por responsável — quem está segurando o projeto, por peso entregue.
+  const assigneeMap = new Map<string, { count: number; points: number }>()
+  for (const c of row.cards) {
+    const k = c.assignee_id ?? "__none__"
+    const cur = assigneeMap.get(k) ?? { count: 0, points: 0 }
+    cur.count += 1
+    cur.points += c.points ?? 0
+    assigneeMap.set(k, cur)
+  }
+  const workloadRows = [...assigneeMap.entries()]
+    .map(([id, v]) => ({
+      key: id,
+      label: id === "__none__" ? "Não atribuído" : memberName(id) ?? "—",
+      value: v.points,
+      color: BRAND,
+      sub: `· ${v.count} cards`,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
+
+  const throughput = weeklyThroughput(row.cards)
+
   return (
     <div className="space-y-6 pb-10">
       <Link
@@ -153,27 +176,37 @@ export function ProjectPortfolioPage() {
           {/* Status distribution */}
           <section className="surface p-5">
             <h2 className="text-sm font-semibold text-ink dark:text-paper">Distribuição por status</h2>
-            <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
-              {statusBreakdown.map((s) =>
-                s.count > 0 ? (
-                  <div
-                    key={s.slug}
-                    style={{ width: `${(s.count / row.total) * 100}%`, backgroundColor: s.color }}
-                    title={`${s.label}: ${s.count}`}
-                  />
-                ) : null,
-              )}
+            <div className="mt-4 flex items-center gap-5">
+              <MiniDonut
+                rows={statusBreakdown.map((s) => ({ label: s.label, color: s.color, count: s.count }))}
+                total={row.total}
+                centerLabel="cards"
+              />
+              <ul className="min-w-0 flex-1 space-y-1.5">
+                {statusBreakdown.filter((s) => s.count > 0).map((s) => (
+                  <li key={s.slug} className="flex items-center gap-2 text-xs">
+                    <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-paper-500">{s.label}</span>
+                    <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{s.count}</span>
+                    <span className="w-9 shrink-0 text-right text-[10px] text-paper-400 tabular">
+                      {row.total > 0 ? Math.round((s.count / row.total) * 100) : 0}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {statusBreakdown.map((s) => (
-                <div key={s.slug} className="rounded-lg bg-paper-50 dark:bg-ink-900 p-3 text-center">
-                  <p className="flex items-center justify-center gap-1.5 text-lg font-bold text-ink dark:text-paper tabular">
-                    <span className="size-2 rounded-full" style={{ backgroundColor: s.color }} />
-                    {s.count}
-                  </p>
-                  <p className="mt-1 text-[11px] text-paper-500">{s.label}</p>
-                </div>
-              ))}
+          </section>
+
+          {/* Vazão semanal */}
+          <section className="surface p-5">
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink dark:text-paper">Vazão semanal</h2>
+              <span className="text-[11px] text-paper-400">últimas 8 semanas</span>
+            </div>
+            <ThroughputArea data={throughput} />
+            <div className="mt-2 flex items-center gap-4 text-[11px] text-paper-500">
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#9F8FEF" }} /> Criados</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#1F845A" }} /> Concluídos</span>
             </div>
           </section>
 
@@ -243,6 +276,13 @@ export function ProjectPortfolioPage() {
         </div>
 
         <div className="space-y-6">
+          {/* Carga da equipe */}
+          <section className="surface p-5">
+            <h2 className="text-sm font-semibold text-ink dark:text-paper">Carga da equipe</h2>
+            <p className="mb-3 text-[11px] text-paper-400">peso atribuído por pessoa</p>
+            <WorkloadBars rows={workloadRows} />
+          </section>
+
           {/* Priority breakdown */}
           <section className="surface p-5">
             <h2 className="text-sm font-semibold text-ink dark:text-paper">Por prioridade</h2>

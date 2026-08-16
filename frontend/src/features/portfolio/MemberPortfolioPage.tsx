@@ -31,6 +31,11 @@ import {
 import * as wsApi from "@/features/workspace/workspace.api"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { cx } from "@/shared/ui/primitives"
+import { MiniDonut, ThroughputArea, weeklyThroughput } from "./charts"
+
+const PRIORITY_COLOR: Record<CardPriority, string> = {
+  low: "#8590A2", medium: "#8270DB", high: "#E2B203", urgent: "#E2483D",
+}
 
 const PAGE_SIZE = 20
 
@@ -136,6 +141,7 @@ export function MemberPortfolioPage() {
   const typeCounts = (Object.keys(TYPE_LABEL) as CardType[])
     .map((t) => ({ type: t, count: mine.filter((c) => c.type === t).length }))
     .filter((t) => t.count > 0)
+  const throughput = weeklyThroughput(mine)
 
   const openCards = mine
     .filter((c) => c.resolution !== "done")
@@ -245,6 +251,19 @@ export function MemberPortfolioPage() {
             )}
           </section>
 
+          {/* Vazão semanal */}
+          <section className="surface p-5">
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink dark:text-paper">Vazão semanal</h2>
+              <span className="text-[11px] text-paper-400">últimas 8 semanas</span>
+            </div>
+            <ThroughputArea data={throughput} />
+            <div className="mt-2 flex items-center gap-4 text-[11px] text-paper-500">
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#9F8FEF" }} /> Criados</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#1F845A" }} /> Concluídos</span>
+            </div>
+          </section>
+
           {/* Em aberto */}
           <section className="surface p-5">
             <h2 className="text-sm font-semibold text-ink dark:text-paper">
@@ -349,21 +368,24 @@ export function MemberPortfolioPage() {
           {/* Por prioridade */}
           <section className="surface p-5">
             <h2 className="text-sm font-semibold text-ink dark:text-paper">Por prioridade</h2>
-            <div className="mt-4 space-y-3">
-              {priorityCounts.map(({ priority, count }) => (
-                <div key={priority}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-paper-500">{PRIORITY_LABEL[priority]}</span>
-                    <span className="font-medium text-ink dark:text-paper tabular">{count}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
-                    <div
-                      className={cx("h-full rounded-full", PRIORITY_BAR[priority])}
-                      style={{ width: total > 0 ? `${(count / total) * 100}%` : "0%" }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="mt-4 flex items-center gap-4">
+              <MiniDonut
+                size={104}
+                total={total}
+                centerLabel="cards"
+                rows={priorityCounts.map(({ priority, count }) => ({
+                  label: PRIORITY_LABEL[priority], color: PRIORITY_COLOR[priority], count,
+                }))}
+              />
+              <ul className="min-w-0 flex-1 space-y-1.5">
+                {priorityCounts.filter((p) => p.count > 0).map(({ priority, count }) => (
+                  <li key={priority} className="flex items-center gap-2 text-xs">
+                    <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: PRIORITY_COLOR[priority] }} />
+                    <span className="min-w-0 flex-1 truncate text-paper-500">{PRIORITY_LABEL[priority]}</span>
+                    <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{count}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
 
