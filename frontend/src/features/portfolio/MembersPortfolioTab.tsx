@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Layers, Sparkles, Zap } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { ColoredAvatar } from "@/features/boards/board.shared"
 import type { BoardCard } from "@/features/workspace/workspace.hooks"
@@ -119,7 +120,10 @@ export function MembersPortfolioTab({ members, cards }: { members: Member[]; car
 function MemberCard({ row }: { row: MemberPortfolio }) {
   const { member, total, done, donePct, pointsTotal, pointsDone, overdue, projects } = row
   return (
-    <div className="surface relative overflow-hidden p-5">
+    <Link
+      to={`/app/portfolio/membro/${member.user_id}`}
+      className="surface relative block overflow-hidden p-5 transition-all hover:-translate-y-0.5 hover:shadow-panel"
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 to-brand-700"
@@ -181,7 +185,7 @@ function MemberCard({ row }: { row: MemberPortfolio }) {
           </div>
         </div>
       )}
-    </div>
+    </Link>
   )
 }
 

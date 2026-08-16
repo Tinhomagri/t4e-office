@@ -25,6 +25,7 @@ import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
 import { MyCardPage } from "@/features/office/mycard/MyCardPage"
 import { OfficePage } from "@/features/office/OfficePage"
 import { PokerPage } from "@/features/poker/PokerPage"
+import { MemberPortfolioPage } from "@/features/portfolio/MemberPortfolioPage"
 import { PortfolioPage } from "@/features/portfolio/PortfolioPage"
 import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
 import { ProjectsPage } from "@/features/workspace/ProjectsPage"
@@ -131,6 +132,7 @@ export const appRoutes: RouteObject[] = [
   },
   { path: "reports", element: <ReportsPage /> },
   { path: "portfolio", element: <PortfolioPage /> },
+  { path: "portfolio/membro/:userId", element: <MemberPortfolioPage /> },
   { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
   { path: "integrations", element: <IntegrationsPage /> },
   { path: "reunioes", element: <MeetingsPage /> },
