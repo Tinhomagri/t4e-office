@@ -19,20 +19,14 @@ import {
 import {
   useMembers,
   useProjects,
+  useWorkflowStatuses,
   useWorkspaceCards,
   useWorkspaces,
   type BoardCard,
 } from "@/features/workspace/workspace.hooks"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { Badge, cx } from "@/shared/ui/primitives"
-import {
-  HEALTH_LABEL,
-  HEALTH_TONE,
-  STATUS_BAR,
-  STATUS_LABEL,
-  STATUS_ORDER,
-  computeHealth,
-} from "./portfolio.shared"
+import { HEALTH_LABEL, HEALTH_TONE, computeHealth } from "./portfolio.shared"
 
 export function ProjectPortfolioPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -40,6 +34,7 @@ export function ProjectPortfolioPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const { projects, cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
   const { data: members } = useMembers(activeWorkspaceId)
+  const { data: statuses } = useWorkflowStatuses(projectId ?? null)
   useProjects(activeWorkspaceId) // mantém cache aquecido p/ navegação entre projetos
 
   if (isLoading) {
@@ -70,8 +65,16 @@ export function ProjectPortfolioPage() {
   const pct = Math.round(row.progress * 100)
   const memberName = (id: string | null) => members?.find((m) => m.user_id === id)?.name ?? null
 
+  // Colunas reais do projeto — a lista fixa de 5 status não bate com workflows
+  // customizados (ex.: importados do Jira), o que zerava esta distribuição.
+  const statusMeta = new Map((statuses ?? []).map((s) => [s.slug, s]))
+  const statusBreakdown = (statuses ?? []).map((s) => ({
+    slug: s.slug, label: s.name, color: s.color,
+    count: row.cards.filter((c) => c.status === s.slug).length,
+  }))
+
   const openCards = row.cards
-    .filter((c) => c.status !== "done")
+    .filter((c) => c.resolution !== "done")
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
 
   const priorityCounts = (["urgent", "high", "medium", "low"] as CardPriority[]).map((p) => ({
@@ -142,25 +145,24 @@ export function ProjectPortfolioPage() {
           <section className="surface p-5">
             <h2 className="text-sm font-semibold text-ink dark:text-paper">Distribuição por status</h2>
             <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
-              {STATUS_ORDER.map((s) =>
-                row.statusCounts[s] > 0 ? (
+              {statusBreakdown.map((s) =>
+                s.count > 0 ? (
                   <div
-                    key={s}
-                    className={STATUS_BAR[s]}
-                    style={{ width: `${(row.statusCounts[s] / row.total) * 100}%` }}
-                    title={`${STATUS_LABEL[s]}: ${row.statusCounts[s]}`}
+                    key={s.slug}
+                    style={{ width: `${(s.count / row.total) * 100}%`, backgroundColor: s.color }}
+                    title={`${s.label}: ${s.count}`}
                   />
                 ) : null,
               )}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {STATUS_ORDER.map((s) => (
-                <div key={s} className="rounded-lg bg-paper-50 dark:bg-ink-900 p-3 text-center">
+              {statusBreakdown.map((s) => (
+                <div key={s.slug} className="rounded-lg bg-paper-50 dark:bg-ink-900 p-3 text-center">
                   <p className="flex items-center justify-center gap-1.5 text-lg font-bold text-ink dark:text-paper tabular">
-                    <span className={cx("size-2 rounded-full", STATUS_BAR[s])} />
-                    {row.statusCounts[s]}
+                    <span className="size-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    {s.count}
                   </p>
-                  <p className="mt-1 text-[11px] text-paper-500">{STATUS_LABEL[s]}</p>
+                  <p className="mt-1 text-[11px] text-paper-500">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -186,8 +188,11 @@ export function ProjectPortfolioPage() {
                           {TYPE_LABEL[c.type]}
                         </span>
                         <span className="flex items-center gap-1">
-                          <span className={cx("size-1.5 rounded-full", STATUS_BAR[c.status])} />
-                          {STATUS_LABEL[c.status]}
+                          <span
+                            className="size-1.5 rounded-full"
+                            style={{ backgroundColor: statusMeta.get(c.status)?.color ?? "#8590A2" }}
+                          />
+                          {statusMeta.get(c.status)?.name ?? c.status}
                         </span>
                       </p>
                     </span>
