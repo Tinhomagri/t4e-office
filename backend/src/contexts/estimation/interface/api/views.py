@@ -559,8 +559,10 @@ class PokerCardsView(APIView):
     mesma reunião estima vários produtos. Só o que ainda não tem pontos —
     numa sessão de estimativa ninguém repontua o que já foi estimado.
 
-    `?q=` filtra por título ou referência (com 2400 cards, a busca é o caminho
-    principal) e `?project=` restringe a um projeto.
+    `?q=` filtra por título, referência OU projeto (chave/nome) — com 2400
+    cards espalhados em 33 projetos, buscar "pit" pra achar tudo do PitStopRH
+    é o caminho principal, não só o título do card. `?project=` restringe a
+    um projeto específico.
     """
     permission_classes = [IsAuthenticated]
 
@@ -582,7 +584,12 @@ class PokerCardsView(APIView):
             cards = cards.filter(project_id=projeto)
         busca = (request.query_params.get("q") or "").strip()
         if busca:
-            cards = cards.filter(Q(title__icontains=busca) | Q(number__icontains=busca))
+            cards = cards.filter(
+                Q(title__icontains=busca)
+                | Q(number__icontains=busca)
+                | Q(project__key__icontains=busca)
+                | Q(project__name__icontains=busca)
+            )
         # Já escolhidos continuam visíveis: o host precisa enxergar a fila que
         # montou mesmo depois de eles saírem do filtro de "sem pontos".
         cards = cards.order_by("project__key", "rank", "number")[:200]

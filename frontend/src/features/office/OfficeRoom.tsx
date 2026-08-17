@@ -120,14 +120,16 @@ export function OfficeRoom({
       hoverCloseTimerRef.current = null
     }
   }, [])
+  const closeHoverNow = useCallback(() => {
+    cancelHoverClose()
+    setHoverUserId(null)
+    hoverPosRef.current = null
+    setHoverPos(null)
+  }, [cancelHoverClose])
   const scheduleHoverClose = useCallback(() => {
     cancelHoverClose()
-    hoverCloseTimerRef.current = window.setTimeout(() => {
-      setHoverUserId(null)
-      hoverPosRef.current = null
-      setHoverPos(null)
-    }, 250)
-  }, [cancelHoverClose])
+    hoverCloseTimerRef.current = window.setTimeout(closeHoverNow, 100)
+  }, [cancelHoverClose, closeHoverNow])
   useEffect(() => cancelHoverClose, [cancelHoverClose])
   const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks && !mock)
   const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, !mock)
@@ -577,7 +579,7 @@ export function OfficeRoom({
           // até o fim) — o hover com atraso em onCanvasMouseMove/MouseLeave é
           // o que evita ele fechar sozinho ao tentar alcançá-lo ou rolar.
           onMouseEnter={cancelHoverClose}
-          onMouseLeave={scheduleHoverClose}
+          onMouseLeave={closeHoverNow}
         >
           {/* Squad de quem está sob o cursor: identifica o time sem mudar nada
               do que a pessoa acessa. */}

@@ -143,6 +143,19 @@ def test_fila_filtra_por_busca_e_por_projeto(cenario):
 
 
 @pytest.mark.django_db
+def test_fila_busca_tambem_por_chave_do_projeto(cenario):
+    """Buscar "alf" tem que trazer TODOS os cards do projeto ALF, não só os
+    que têm essa palavra no título — com dezenas de projetos, é assim que o
+    host encontra o board certo."""
+    squad = SquadModel.objects.create(workspace=cenario["ws"], name="Squad Alfa")
+    sessao = PokerSessionModel.objects.create(
+        workspace=cenario["ws"], squad=squad, created_by=cenario["dono"], name="s"
+    )
+    r = _cli(cenario["dono"]).get(reverse("poker-cards", args=[str(sessao.id)]), {"q": "alf"})
+    assert [c["ref"] for c in r.json()] == ["ALF-1"]
+
+
+@pytest.mark.django_db
 def test_apagar_squad_preserva_o_historico_de_sessoes(cenario):
     squad = SquadModel.objects.create(workspace=cenario["ws"], name="Squad Alfa")
     SquadMemberModel.objects.create(squad=squad, user=cenario["dev"])

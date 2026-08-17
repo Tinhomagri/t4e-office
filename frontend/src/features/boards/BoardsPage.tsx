@@ -62,6 +62,7 @@ import {
   useMembers,
   useProjects,
   useSprints,
+  useWorkflowStatuses,
   useWorkspaces,
 } from "@/features/workspace/workspace.hooks"
 import type {
@@ -307,11 +308,19 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   const { data: cards, isLoading } = useCards(projectId)
   const { data: sprints } = useSprints(projectId)
   const { data: members } = useMembers(workspaceId)
+  const { data: workflowStatuses } = useWorkflowStatuses(projectId)
 
   const [newCard, setNewCard] = useState<{ status: CardStatus; sprintId: string | null } | null>(null)
   const [openCard, setOpenCard] = useState<Card | null>(null)
   const setNewCardStatus = (status: CardStatus | null, sprintId: string | null = null) =>
     setNewCard(status ? { status, sprintId } : null)
+
+  // Primeira coluna DESTE board, não "todo" cravado — projeto importado do
+  // Jira (ou com colunas renomeadas/reordenadas) pode nem ter uma coluna
+  // "todo"; criar sem escolher coluna sempre caía nela mesmo assim, e o card
+  // sumia (status sem coluna nenhuma no board).
+  const firstColumnStatus =
+    (workflowStatuses ?? []).slice().sort((a, b) => a.order - b.order)[0]?.slug ?? "todo"
 
   // Atalhos de teclado estilo Jira: "c" cria card, "/" foca a busca.
   useEffect(() => {
@@ -324,7 +333,7 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === "c") {
         e.preventDefault()
-        setNewCardStatus("todo")
+        setNewCardStatus(firstColumnStatus as CardStatus)
       } else if (e.key === "/") {
         e.preventDefault()
         document.querySelector<HTMLInputElement>("[data-jql-search]")?.focus()
@@ -332,20 +341,22 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstColumnStatus])
 
   // Botão "Criar" na top bar dispara este evento (AppShell) em vez de duplicar
   // o modal — mesmo fluxo do atalho "c".
   useEffect(() => {
-    const onCreate = () => setNewCardStatus("todo")
+    const onCreate = () => setNewCardStatus(firstColumnStatus as CardStatus)
     window.addEventListener("app:create-card", onCreate)
     return () => window.removeEventListener("app:create-card", onCreate)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstColumnStatus])
 
   if (isLoading) return <BoardSkeleton />
 
   const allCards = cards ?? []
-  const openNewCard = () => setNewCardStatus("todo")
+  const openNewCard = () => setNewCardStatus(firstColumnStatus as CardStatus)
 
   // Drawer + modal de criação sempre montados, compartilhados por todas as views.
   const sharedModals = (

@@ -1593,7 +1593,7 @@ function SessionListView({
   }
 
   return (
-    <div className="w-full px-6 py-7">
+    <div className="scrollbar-slim h-full min-h-0 w-full flex-1 overflow-y-auto px-6 py-7">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-ink dark:text-paper">Planning Poker</h1>
@@ -2307,6 +2307,7 @@ export function PokerPage() {
       ) : (
         <motion.div
           key="lobby"
+          className="h-full min-h-0"
           initial={{ opacity: 0, scale: 0.99 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.99 }}
