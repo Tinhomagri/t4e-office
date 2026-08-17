@@ -56,6 +56,31 @@ def test_cria_reuniao_com_meet_e_salva_ref():
     assert refs.saved[0].google_event_id == "evt-1"
 
 
+def test_reuniao_vinculada_a_projeto_guarda_project_id_titulo_e_fim():
+    """Sem isto o polling de transcrição não sabe em qual projeto salvar o
+    Documento nem qual o nome do evento pra procurar no Drive."""
+    conns = _connected_repo()
+    refs = FakeMeetingRefRepository()
+    start = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
+    end = start + timedelta(minutes=30)
+    CreateMeeting(
+        calendar_gateway=FakeCalendarGateway(),
+        get_valid_credentials=_creds(conns),
+        meeting_ref_repository=refs,
+    ).execute(
+        user_id="u1",
+        title="Reunião com cliente",
+        start=start,
+        end=end,
+        attendees=["a@x.com"],
+        project_id="proj-1",
+    )
+    saved = refs.saved[0]
+    assert saved.project_id == "proj-1"
+    assert saved.title == "Reunião com cliente"
+    assert saved.meeting_end == end
+
+
 def test_lista_eventos_proximos():
     conns = _connected_repo()
     evt = CalendarEvent(

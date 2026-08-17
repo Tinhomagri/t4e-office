@@ -60,11 +60,12 @@ def test_catalogo_cobre_todos_os_dominios_sem_colisao(scenario):
         "sales_pipeline_summary",
         "mkt_editorial_calendar",
         "cal_upcoming_events",
+        "drive_search_files",
         "gh_list_pull_requests",
         "dlv_delivery_metrics",
     ):
         assert expected in names
-    assert tools.domains == ["projects", "sales", "mkt", "cal", "gh", "dlv"]
+    assert tools.domains == ["projects", "sales", "mkt", "cal", "drive", "gh", "dlv"]
 
 
 def test_nomes_de_ferramenta_sao_validos_para_os_provedores(scenario):

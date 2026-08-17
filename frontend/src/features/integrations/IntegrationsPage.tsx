@@ -8,6 +8,7 @@ import {
   Check,
   Clock,
   ExternalLink,
+  Folder,
   Link2,
   Mail,
   Repeat,
@@ -29,6 +30,7 @@ import {
   PageHeader,
   Spinner,
 } from "@/shared/ui/primitives"
+import { useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   useConnectGoogle,
   useCreateMeeting,
@@ -348,11 +350,14 @@ function parseAttendees(raw: string): string[] {
 
 function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateMeeting()
+  const { activeWorkspaceId } = useWorkspaces()
+  const { data: projects } = useProjects(activeWorkspaceId)
   const [title, setTitle] = useState("")
   const [start, setStart] = useState("")
   const [durationMin, setDurationMin] = useState(30)
   const [attendees, setAttendees] = useState("")
   const [description, setDescription] = useState("")
+  const [projectId, setProjectId] = useState("")
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>("none")
   const [recurrenceCount, setRecurrenceCount] = useState(8)
   const [error, setError] = useState<string | null>(null)
@@ -367,6 +372,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
     setDurationMin(30)
     setAttendees("")
     setDescription("")
+    setProjectId("")
     setRecurrenceFreq("none")
     setRecurrenceCount(8)
     setError(null)
@@ -389,6 +395,7 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
         end: endDate.toISOString(),
         attendees: attendeeList,
         description,
+        project_id: projectId || null,
         recurrence: buildRecurrence(recurrenceFreq, recurrenceCount),
       })
       setDone(result.meet_link ?? result.html_link)
@@ -569,6 +576,25 @@ function ScheduleMeetingModal({ open, onClose }: { open: boolean; onClose: () =>
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  <LiveField
+                    icon={Folder}
+                    label="Projeto"
+                    hint="Opcional — a transcrição vira Documento dele quando o Meet a soltar no Drive"
+                  >
+                    <select
+                      value={projectId}
+                      onChange={(e) => setProjectId(e.target.value)}
+                      className="w-full cursor-pointer border-none bg-transparent text-[15px] text-ink outline-none dark:text-paper"
+                    >
+                      <option value="">Nenhum</option>
+                      {(projects ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.key} · {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </LiveField>
 
                   <LiveField icon={Mail} label="Descrição" hint="Opcional">
                     <textarea

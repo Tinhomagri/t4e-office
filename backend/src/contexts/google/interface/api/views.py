@@ -163,6 +163,7 @@ class MeetingCreateView(APIView):
                 attendees=data["attendees"],
                 description=data.get("description", ""),
                 card_id=str(data["card_id"]) if data.get("card_id") else None,
+                project_id=str(data["project_id"]) if data.get("project_id") else None,
                 recurrence=data.get("recurrence"),
             )
         except CalendarError:

@@ -10,6 +10,12 @@ class MeetingRef:
     google_event_id: str
     user_id: str
     card_id: str | None = None
+    # Projeto dono da reunião — presente, o polling de transcrição (Drive)
+    # salva o resultado como Documento deste projeto.
+    project_id: str | None = None
+    title: str = ""
+    meeting_end: datetime | None = None
+    transcript_saved_at: datetime | None = None
     id: str | None = None
 
 

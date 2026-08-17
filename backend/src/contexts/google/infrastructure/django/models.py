@@ -77,6 +77,23 @@ class MeetingRefModel(models.Model):
     )
     google_event_id = models.CharField(max_length=256, db_index=True)
     card_id = models.UUIDField(null=True, blank=True)
+    # Projeto vinculado: quando presente, a transcrição da reunião (que o Meet
+    # solta no Drive só depois, sem hora certa) vira Documento deste projeto —
+    # ver management command `check_meeting_transcripts`.
+    project = models.ForeignKey(
+        "projects.ProjectModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="google_meetings",
+    )
+    # Guardados na criação pra o polling não precisar voltar no Calendar só
+    # pra saber o nome do evento e a janela de busca no Drive.
+    title = models.CharField(max_length=300, blank=True, default="")
+    meeting_end = models.DateTimeField(null=True, blank=True)
+    # Preenchido quando a transcrição já foi achada e virou Documento — sem
+    # isto o polling ficaria procurando pra sempre, toda vez que rodasse.
+    transcript_saved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

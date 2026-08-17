@@ -71,6 +71,7 @@ else:
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -116,6 +117,11 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+# WhiteNoise serve o CSS/JS coletado direto do Daphne — sem isto o /admin
+# roteava até o Django, mas o arquivo estático em si nunca tinha quem
+# devolvesse (404 em produção, sem servidor de estático próprio na frente).
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # Uploads (anexos de card, avatar de projeto). Sem MEDIA_URL o Django devolve
 # em `FileField.url` só o caminho relativo, e a imagem quebra no navegador.

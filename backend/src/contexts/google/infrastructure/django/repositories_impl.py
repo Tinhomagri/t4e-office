@@ -83,10 +83,16 @@ class DjangoMeetingRefRepository(MeetingRefRepository):
             user_id=ref.user_id,
             google_event_id=ref.google_event_id,
             card_id=ref.card_id,
+            project_id=ref.project_id,
+            title=ref.title,
+            meeting_end=ref.meeting_end,
         )
         return MeetingRef(
             id=str(row.id),
             user_id=str(row.user_id),
             google_event_id=row.google_event_id,
             card_id=str(row.card_id) if row.card_id else None,
+            project_id=str(row.project_id) if row.project_id else None,
+            title=row.title,
+            meeting_end=row.meeting_end,
         )

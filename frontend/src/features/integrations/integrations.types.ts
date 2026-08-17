@@ -34,6 +34,9 @@ export interface CreateMeetingInput {
   attendees: string[]
   description?: string
   card_id?: string | null
+  // Projeto dono da reunião — quando presente, a transcrição (Meet solta no
+  // Drive um tempo depois de terminar) vira Documento deste projeto.
+  project_id?: string | null
   recurrence?: string[] | null
 }
 

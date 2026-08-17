@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from contexts.copilot.infrastructure.agent.providers.calendar import CalendarProvider
 from contexts.copilot.infrastructure.agent.providers.delivery import DeliveryProvider
+from contexts.copilot.infrastructure.agent.providers.drive import DriveProvider
 from contexts.copilot.infrastructure.agent.providers.github import GithubProvider
 from contexts.copilot.infrastructure.agent.providers.marketing import MarketingProvider
 from contexts.copilot.infrastructure.agent.providers.projects import ProjectsProvider
@@ -50,6 +51,7 @@ class AgentTools:
             SalesProvider(**common),
             MarketingProvider(**common, projects=projects),
             CalendarProvider(**common),
+            DriveProvider(**common),
             GithubProvider(**common, projects=projects),
             DeliveryProvider(**common, projects=projects),
         ]

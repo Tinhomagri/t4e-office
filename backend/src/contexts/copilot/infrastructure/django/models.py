@@ -85,6 +85,7 @@ class WorkspaceAiConfigModel(models.Model):
     PROVIDER_CHOICES = [
         ("anthropic", "Anthropic (Claude)"),
         ("openai", "OpenAI"),
+        ("google", "Google (Gemini)"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

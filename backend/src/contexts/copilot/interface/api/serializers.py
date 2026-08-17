@@ -71,7 +71,7 @@ class AgentExecuteSerializer(serializers.Serializer):
 class AiConfigWriteSerializer(serializers.Serializer):
     """Escrita — api_key é opcional (vazio mantém a chave já salva)."""
 
-    provider = serializers.ChoiceField(choices=["anthropic", "openai"])
+    provider = serializers.ChoiceField(choices=["anthropic", "openai", "google"])
     model = serializers.CharField(required=False, allow_blank=True, default="")
     api_key = serializers.CharField(required=False, allow_blank=True, default="")
     is_active = serializers.BooleanField(required=False, default=True)

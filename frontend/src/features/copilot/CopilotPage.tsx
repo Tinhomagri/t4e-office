@@ -58,6 +58,7 @@ import {
 const PROVIDERS: { value: AiProvider; label: string; defaultModel: string; models: string[] }[] = [
   { value: "anthropic", label: "Anthropic (Claude)", defaultModel: "claude-opus-4-8", models: ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"] },
   { value: "openai", label: "OpenAI", defaultModel: "gpt-4o", models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1"] },
+  { value: "google", label: "Google (Gemini)", defaultModel: "gemini-2.5-pro", models: ["gemini-2.5-pro", "gemini-2.5-flash"] },
 ]
 
 const KIND_LABEL: Record<string, string> = {

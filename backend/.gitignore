@@ -13,3 +13,4 @@ __pycache__/
 media/
 attachments/
 project-avatars/
+staticfiles/

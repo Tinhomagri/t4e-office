@@ -227,7 +227,7 @@ export async function disconnectSocialAccount(
 }
 
 // ── Integração de IA por workspace ──────────────────────────────────────────
-export type AiProvider = "anthropic" | "openai"
+export type AiProvider = "anthropic" | "openai" | "google"
 
 export interface AiConfig {
   provider: AiProvider

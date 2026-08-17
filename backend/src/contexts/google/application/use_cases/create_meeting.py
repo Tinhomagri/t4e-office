@@ -35,6 +35,7 @@ class CreateMeeting:
         attendees: list[str],
         description: str = "",
         card_id: str | None = None,
+        project_id: str | None = None,
         recurrence: list[str] | None = None,
     ) -> CreatedMeeting:
         access_token = self.get_valid_credentials.execute(user_id=user_id)
@@ -53,6 +54,9 @@ class CreateMeeting:
                 google_event_id=created.event_id,
                 user_id=user_id,
                 card_id=card_id,
+                project_id=project_id,
+                title=title,
+                meeting_end=end,
             )
         )
         return created

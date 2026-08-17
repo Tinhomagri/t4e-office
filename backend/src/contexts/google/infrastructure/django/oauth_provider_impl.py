@@ -41,6 +41,12 @@ SCOPES = [
     # rejeita como inválido) — o certo pra resolver colega do mesmo Workspace
     # via people.getBatchGet é directory.readonly.
     "https://www.googleapis.com/auth/directory.readonly",
+    # Drive somente leitura — o Copiloto busca e lê documentos (ex.:
+    # transcrição de reunião) pra propor card a partir do conteúdo. A própria
+    # API do Drive exporta Google Docs como texto (`files.export`), então este
+    # escopo sozinho já cobre metadados + conteúdo, sem precisar da API do
+    # Docs à parte.
+    "https://www.googleapis.com/auth/drive.readonly",
     "openid",
 ]
 

@@ -11,6 +11,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "django-environ>=0.11",
     "django-cors-headers>=4.4",
+    # Serve o CSS/JS do admin do Django em produção — sem isto o /admin fica
+    # sem estilo nenhum (404 em /static/, ninguém serve o arquivo).
+    "whitenoise>=6.7",
     # Infra real-time/filas: presente no ambiente, uso adiado para Presença/Poker
     "celery>=5.4",
     "redis>=5.0",

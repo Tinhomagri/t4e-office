@@ -8,12 +8,14 @@ from contexts.copilot.infrastructure import ai_prompt
 from contexts.copilot.infrastructure.anthropic_analyzer import AnthropicAnalyzer
 from contexts.copilot.infrastructure.django import crypto
 from contexts.copilot.infrastructure.django.models import WorkspaceAiConfigModel
+from contexts.copilot.infrastructure.gemini_analyzer import GeminiAnalyzer
 from contexts.copilot.infrastructure.openai_analyzer import OpenAiAnalyzer
 from shared.domain.errors import ValidationError
 
 PROVIDERS = {
     "anthropic": {"label": "Anthropic (Claude)", "default_model": "claude-opus-4-8"},
     "openai": {"label": "OpenAI", "default_model": "gpt-4o"},
+    "google": {"label": "Google (Gemini)", "default_model": "gemini-2.5-pro"},
 }
 
 
@@ -83,6 +85,8 @@ def build_analyzer(cfg: WorkspaceAiConfigModel) -> AiAnalyzer:
     api_key = crypto.decrypt(cfg.api_key_encrypted)
     if cfg.provider == "openai":
         return OpenAiAnalyzer(api_key=api_key, model=cfg.model)
+    if cfg.provider == "google":
+        return GeminiAnalyzer(api_key=api_key, model=cfg.model)
     return AnthropicAnalyzer(api_key=api_key, model=cfg.model)
 
 

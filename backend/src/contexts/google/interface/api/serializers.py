@@ -29,6 +29,10 @@ class CreateMeetingSerializer(serializers.Serializer):
         required=False, allow_blank=True, default=""
     )
     card_id = serializers.UUIDField(required=False, allow_null=True)
+    # Projeto vinculado — quando presente, a transcrição da reunião vira
+    # Documento dele assim que o Meet a soltar no Drive (ver management
+    # command `check_meeting_transcripts`).
+    project_id = serializers.UUIDField(required=False, allow_null=True)
     # Linha(s) RRULE cruas (RFC 5545) — o frontend monta a regra a partir da
     # UI de recorrência, o backend só repassa pro Google.
     recurrence = serializers.ListField(
