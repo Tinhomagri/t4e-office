@@ -37,10 +37,11 @@ import {
   useProjectReports,
   useProjects,
   useCards,
+  useWorkflowStatuses,
   useWorkspaces,
 } from "@/features/workspace/workspace.hooks"
 import type { ProjectReports } from "@/features/workspace/workspace.api"
-import type { Card, CardPriority, CardStatus, CardType, Member } from "@/features/workspace/workspace.types"
+import type { Card, CardPriority, CardType, Member, WorkflowStatus } from "@/features/workspace/workspace.types"
 import { Button, PageHeader, Select, Spinner, cx } from "@/shared/ui/primitives"
 
 // ── Paleta (estilo Power BI) ────────────────────────────────────────────────
@@ -54,17 +55,6 @@ const EMPTY_REPORTS: ProjectReports = {
   cfd: [],
 }
 
-const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"]
-const STATUS_LABEL: Record<CardStatus, string> = {
-  backlog: "Backlog", todo: "A fazer", doing: "Em andamento", review: "Em revisão", done: "Concluído",
-  briefing: "Briefing", criacao: "Criação", aprovacao: "Aprovação", agendado: "Agendado", publicado: "Publicado",
-}
-// Tons das escalas do tailwind.config (Atlassian). Antes eram valores padrão do
-// Tailwind, que não existem no design system e destoavam do resto do app.
-const STATUS_COLOR: Record<CardStatus, string> = {
-  backlog: "#8590A2", todo: "#9F8FEF", doing: "#8270DB", review: "#CD519D", done: "#1F845A",
-  briefing: "#6E5DC6", criacao: "#8270DB", aprovacao: "#E2B203", agendado: "#2898BD", publicado: "#1F845A",
-}
 const TYPE_LABEL: Record<CardType, string> = {
   feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Épico",
   post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
@@ -97,10 +87,24 @@ function fmtDay(iso: string): string {
   return iso.slice(5).replace("-", "/")
 }
 function isOverdue(c: Card): boolean {
-  if (!c.due_date || c.status === "done") return false
+  if (!c.due_date || c.resolution === "done") return false
   const d = new Date(c.due_date + "T00:00:00")
   const today = new Date(); today.setHours(0, 0, 0, 0)
   return d.getTime() < today.getTime()
+}
+
+// Status são customizáveis por projeto (ex.: colunas importadas do Jira não
+// batem com nenhum slug fixo) — resolvemos label/cor a partir das colunas reais
+// do projeto (`useWorkflowStatuses`), com fallback pro slug cru se faltar.
+function statusMetaMap(statuses: WorkflowStatus[]) {
+  const label = new Map(statuses.map((s) => [s.slug, s.name]))
+  const color = new Map(statuses.map((s) => [s.slug, s.color]))
+  const category = new Map(statuses.map((s) => [s.slug, s.category]))
+  return {
+    label: (slug: string) => label.get(slug) ?? slug,
+    color: (slug: string) => color.get(slug) ?? "#8590A2",
+    category: (slug: string) => category.get(slug),
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -113,6 +117,7 @@ export function ReportsPage() {
 
   const { data: reports, isLoading: reportsLoading } = useProjectReports(pid)
   const { data: cards, isLoading: cardsLoading } = useCards(pid)
+  const { data: statuses } = useWorkflowStatuses(pid)
 
   const project = projects?.find((p) => p.id === pid) ?? null
   // Sem projeto: os hooks de reports/cards ficam desabilitados (enabled: !!pid) e
@@ -145,7 +150,7 @@ export function ReportsPage() {
           )}
           <Button
             variant="ghost"
-            onClick={() => cardsData && project && exportCsv(cardsData, project.key, memberName)}
+            onClick={() => cardsData && project && exportCsv(cardsData, project.key, memberName, statusMetaMap(statuses ?? []))}
             disabled={!cardsData?.length}
           >
             <Download className="size-4" /> CSV
@@ -165,7 +170,7 @@ export function ReportsPage() {
       {isLoading || !reportsData || !cardsData ? (
         <div className="flex justify-center py-24"><Spinner className="size-6" /></div>
       ) : (
-        <ReportBody reports={reportsData} cards={cardsData} memberName={memberName} />
+        <ReportBody reports={reportsData} cards={cardsData} memberName={memberName} statuses={statuses ?? []} />
       )}
     </div>
   )
@@ -176,12 +181,15 @@ function ReportBody({
   reports,
   cards,
   memberName,
+  statuses,
 }: {
   reports: ProjectReports
   cards: Card[]
   memberName: (id: string | null) => string
+  statuses: WorkflowStatus[]
 }) {
-  const m = useMemo(() => computeMetrics(reports, cards), [reports, cards])
+  const m = useMemo(() => computeMetrics(reports, cards, statuses), [reports, cards, statuses])
+  const meta = useMemo(() => statusMetaMap(statuses), [statuses])
 
   return (
     <div className="space-y-5">
@@ -219,26 +227,29 @@ function ReportBody({
       </div>
 
       {/* ── Cards em risco ── */}
-      <RiskTable cards={m.risk} memberName={memberName} />
+      <RiskTable cards={m.risk} memberName={memberName} statusLabel={meta.label} />
     </div>
   )
 }
 
 // ── Cálculo central de métricas ────────────────────────────────────────────────
-function computeMetrics(reports: ProjectReports, cards: Card[]) {
+function computeMetrics(reports: ProjectReports, cards: Card[], statuses: WorkflowStatus[]) {
+  const meta = statusMetaMap(statuses)
   const total = cards.length
-  const done = cards.filter((c) => c.status === "done").length
-  const wip = cards.filter((c) => c.status === "doing" || c.status === "review").length
+  const done = cards.filter((c) => c.resolution === "done").length
+  const wip = cards.filter((c) => c.resolution !== "done" && meta.category(c.status) === "in_progress").length
   const overdue = cards.filter(isOverdue).length
   const totalPoints = cards.reduce((s, c) => s + (c.points ?? 0), 0)
-  const donePoints = cards.filter((c) => c.status === "done").reduce((s, c) => s + (c.points ?? 0), 0)
+  const donePoints = cards.filter((c) => c.resolution === "done").reduce((s, c) => s + (c.points ?? 0), 0)
   const avgVel = reports.velocity.length
     ? Math.round(reports.velocity.reduce((s, d) => s + d.delivered, 0) / reports.velocity.length)
     : 0
 
-  const byStatus = STATUS_ORDER.map((s) => ({
-    key: s, label: STATUS_LABEL[s], color: STATUS_COLOR[s],
-    count: cards.filter((c) => c.status === s).length,
+  // Colunas reais do projeto (a lista fixa de 5 status não existe pra projetos
+  // com workflow customizado, ex.: importados do Jira).
+  const byStatus = statuses.map((s) => ({
+    key: s.slug, label: s.name, color: s.color,
+    count: cards.filter((c) => c.status === s.slug).length,
   }))
   const byType = (Object.keys(TYPE_LABEL) as CardType[])
     .map((t) => ({ key: t, label: TYPE_LABEL[t], color: TYPE_COLOR[t], count: cards.filter((c) => c.type === t).length }))
@@ -255,7 +266,7 @@ function computeMetrics(reports: ProjectReports, cards: Card[]) {
     const cur = assigneeMap.get(k) ?? { id: c.assignee_id, count: 0, points: 0, done: 0 }
     cur.count += 1
     cur.points += c.points ?? 0
-    if (c.status === "done") cur.done += 1
+    if (c.resolution === "done") cur.done += 1
     assigneeMap.set(k, cur)
   }
   const byAssignee = [...assigneeMap.values()]
@@ -280,8 +291,8 @@ function computeMetrics(reports: ProjectReports, cards: Card[]) {
       const w = weekStart(c.created_at)
       created.set(w, (created.get(w) ?? 0) + 1)
     }
-    if (c.status === "done" && c.updated_at) {
-      const w = weekStart(c.updated_at)
+    if (c.resolution === "done" && (c.resolved_at ?? c.updated_at)) {
+      const w = weekStart((c.resolved_at ?? c.updated_at) as string)
       completed.set(w, (completed.get(w) ?? 0) + 1)
     }
   }
@@ -291,7 +302,7 @@ function computeMetrics(reports: ProjectReports, cards: Card[]) {
 
   // Cards em risco: vencidos ou sem estimativa (não concluídos) — priorizados
   const risk = cards
-    .filter((c) => c.status !== "done" && (isOverdue(c) || c.points == null || c.points === 0))
+    .filter((c) => c.resolution !== "done" && (isOverdue(c) || c.points == null || c.points === 0))
     .sort((a, b) => (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0))
     .slice(0, 12)
 
@@ -610,7 +621,9 @@ function WorkloadChart({ data, memberName }: {
 }
 
 // ── Tabela de risco ────────────────────────────────────────────────────────────
-function RiskTable({ cards, memberName }: { cards: Card[]; memberName: (id: string | null) => string }) {
+function RiskTable({ cards, memberName, statusLabel }: {
+  cards: Card[]; memberName: (id: string | null) => string; statusLabel: (slug: string) => string
+}) {
   return (
     <ChartCard title="Cards que precisam de atenção" icon={AlertTriangle}
       action={<span className="text-[11px] text-paper-400">vencidos ou sem estimativa</span>}>
@@ -648,7 +661,7 @@ function RiskTable({ cards, memberName }: { cards: Card[]; memberName: (id: stri
                         {TYPE_LABEL[c.type]}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-xs text-paper-500">{STATUS_LABEL[c.status]}</td>
+                    <td className="px-3 py-2 text-xs text-paper-500">{statusLabel(c.status)}</td>
                     <td className="px-3 py-2 text-xs text-paper-500">{memberName(c.assignee_id)}</td>
                     <td className="px-3 py-2 text-right">
                       {noEst
@@ -688,11 +701,16 @@ function Legend({ items }: { items: { color: string; label: string; dashed?: boo
 }
 
 // ── Export CSV ───────────────────────────────────────────────────────────────
-function exportCsv(cards: Card[], projectKey: string, memberName: (id: string | null) => string) {
+function exportCsv(
+  cards: Card[],
+  projectKey: string,
+  memberName: (id: string | null) => string,
+  meta: ReturnType<typeof statusMetaMap>,
+) {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
   const header = ["Ref", "Título", "Tipo", "Status", "Prioridade", "Peso", "Responsável", "Prazo", "Criado em"]
   const rows = cards.map((c) => [
-    c.ref, c.title, TYPE_LABEL[c.type], STATUS_LABEL[c.status], PRIORITY_LABEL[c.priority],
+    c.ref, c.title, TYPE_LABEL[c.type], meta.label(c.status), PRIORITY_LABEL[c.priority],
     c.points ?? "", memberName(c.assignee_id), c.due_date ?? "", c.created_at?.slice(0, 10) ?? "",
   ].map(esc).join(","))
   const csv = [header.map(esc).join(","), ...rows].join("\n")

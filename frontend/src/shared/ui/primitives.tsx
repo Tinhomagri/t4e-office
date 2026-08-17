@@ -4,11 +4,13 @@
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
+  ReactElement,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react"
-import { Loader2, X } from "lucide-react"
+import { Children, isValidElement, useEffect, useRef, useState } from "react"
+import { ChevronDown, Loader2, X } from "lucide-react"
 
 import type { PresenceStatus } from "@/features/workspace/workspace.types"
 
@@ -272,7 +274,7 @@ export function Field({
 }
 
 const CONTROL =
-  "w-full rounded-xl border border-paper-300 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
+  "w-full rounded-xl border border-paper-300 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 transition-colors focus-ring focus:border-brand-400"
 
 export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cx(CONTROL, className)} {...rest} />
@@ -285,15 +287,99 @@ export function Textarea({
   return <textarea className={cx(CONTROL, "resize-y", className)} {...rest} />
 }
 
+// Select customizado: a lista aberta de um <select> nativo é pintada pelo SO
+// (Windows/GTK/macOS), nunca segue o CSS da página — por isso o menu abria
+// sempre claro/feio mesmo com o tema escuro certo na caixa fechada. Mantém
+// um <select> nativo oculto só pra emitir o evento `change` real (mesma API
+// de sempre: value/onChange/<option>), e desenha o botão + lista abertos do
+// zero, temados.
 export function Select({
   className = "",
   children,
+  value,
+  onChange,
+  disabled,
+  "aria-label": ariaLabel,
   ...rest
 }: SelectHTMLAttributes<HTMLSelectElement>) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLSpanElement>(null)
+  const selectRef = useRef<HTMLSelectElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointerDown(e: PointerEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("pointerdown", onDocPointerDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", onDocPointerDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [open])
+
+  const options = Children.toArray(children).filter(isValidElement) as ReactElement<{
+    value?: string | number
+    children?: ReactNode
+  }>[]
+  const current = options.find((o) => String(o.props.value ?? "") === String(value ?? ""))
+
+  function pick(v: string) {
+    const el = selectRef.current
+    if (el) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!
+      setter.call(el, v)
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    setOpen(false)
+  }
+
   return (
-    <select className={cx(CONTROL, "cursor-pointer pr-8", className)} {...rest}>
-      {children}
-    </select>
+    <span ref={wrapperRef} className={cx("relative block", className || "w-full")}>
+      <select ref={selectRef} value={value} onChange={onChange} className="sr-only" tabIndex={-1} aria-hidden {...rest}>
+        {children}
+      </select>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cx(
+          CONTROL,
+          "flex h-full w-full cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60",
+        )}
+      >
+        <span className="truncate">{current?.props.children}</span>
+        <ChevronDown className={cx("size-3.5 shrink-0 text-paper-400 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <ul className="absolute z-50 mt-1.5 max-h-64 w-full min-w-max overflow-auto rounded-xl border border-paper-200 bg-paper py-1 shadow-panel dark:border-ink-700 dark:bg-ink-900">
+          {options.map((o, i) => {
+            const v = String(o.props.value ?? "")
+            const active = v === String(value ?? "")
+            return (
+              <li key={v || i}>
+                <button
+                  type="button"
+                  onClick={() => pick(v)}
+                  className={cx(
+                    "flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-paper-100 dark:hover:bg-ink-800",
+                    active ? "font-medium text-brand-600 dark:text-brand-400" : "text-ink dark:text-paper",
+                  )}
+                >
+                  {o.props.children}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </span>
   )
 }
 

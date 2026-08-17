@@ -7,7 +7,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.projects.domain.entities.card import CardResolution
-from contexts.projects.infrastructure.django.models import CardModel, SprintModel
+from contexts.projects.infrastructure.django.models import (
+    CardModel,
+    SprintModel,
+    WorkflowStatusModel,
+)
 from contexts.projects.interface.api.permissions import assert_project_member
 
 
@@ -23,10 +27,14 @@ class ProjectReportsView(APIView):
         )
         cards = list(CardModel.objects.filter(project=project_id))
 
+        workflow_statuses = list(
+            WorkflowStatusModel.objects.filter(project_id=project_id).order_by("order")
+        )
+
         return Response({
             "burndown": _burndown(sprints, cards),
             "velocity": _velocity(sprints, cards),
-            "cfd": _cfd(cards),
+            "cfd": _cfd(cards, workflow_statuses),
         })
 
 
@@ -118,11 +126,18 @@ def _velocity(sprints: list, cards: list) -> list:
 
 # ── CFD — Cumulative Flow Diagram ─────────────────────────────────────────────
 
-def _cfd(cards: list) -> list:
-    """Distribuição de cards por status (snapshot atual)."""
-    statuses = ["backlog", "todo", "doing", "review", "done"]
-    counts = {s: 0 for s in statuses}
+def _cfd(cards: list, workflow_statuses: list) -> list:
+    """Distribuição de cards por status (snapshot atual).
+
+    Usa as colunas reais do projeto (`WorkflowStatusModel`), não uma lista fixa
+    — projetos importados do Jira têm status próprios e nunca batiam com os 5
+    slugs canônicos, o que zerava o gráfico mesmo com cards de verdade.
+    """
+    counts: dict[str, int] = {ws.slug: 0 for ws in workflow_statuses}
     for c in cards:
         if c.status in counts:
             counts[c.status] += 1
-    return [{"status": s, "count": counts[s]} for s in statuses]
+    return [
+        {"status": ws.slug, "label": ws.name, "count": counts[ws.slug]}
+        for ws in workflow_statuses
+    ]

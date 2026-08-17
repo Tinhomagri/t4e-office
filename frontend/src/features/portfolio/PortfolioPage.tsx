@@ -1,8 +1,11 @@
-import { AlertTriangle, Building2, CheckCircle2, Layers, Loader2, Sparkles, Target } from "lucide-react"
+import { AlertTriangle, Building2, CheckCircle2, Layers, Loader2, Sparkles, Target, Users } from "lucide-react"
+import { useState } from "react"
 import { Link } from "react-router-dom"
 
-import { useWorkspaceCards, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useMembers, useWorkspaceCards, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { TabBar, type TabDef } from "@/features/workspace/members/shared"
 import { Badge, PageHeader, cx } from "@/shared/ui/primitives"
+import { MembersPortfolioTab } from "./MembersPortfolioTab"
 import {
   HEALTH_BAR,
   HEALTH_LABEL,
@@ -13,9 +16,17 @@ import {
   type ProjectHealth,
 } from "./portfolio.shared"
 
+type PortfolioTab = "projects" | "members"
+const TABS: TabDef<PortfolioTab>[] = [
+  { id: "projects", label: "Projetos", icon: <Building2 className="size-4" /> },
+  { id: "members", label: "Integrantes", icon: <Users className="size-4" /> },
+]
+
 export function PortfolioPage() {
+  const [tab, setTab] = useState<PortfolioTab>("projects")
   const { activeWorkspaceId } = useWorkspaces()
   const { projects, cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
+  const { data: members } = useMembers(activeWorkspaceId)
 
   const rows = projects
     .map((p) => computeHealth(p, cards.filter((c) => c.project_id === p.id)))
@@ -39,15 +50,23 @@ export function PortfolioPage() {
               <span>Portfólio</span>
             </>
           }
-          title="Saúde dos projetos"
-          subtitle="Visão de alto nível calculada a partir dos cards reais de cada projeto."
+          title={tab === "projects" ? "Saúde dos projetos" : "Carga por integrante"}
+          subtitle={
+            tab === "projects"
+              ? "Visão de alto nível calculada a partir dos cards reais de cada projeto."
+              : "Cards, progresso e projetos de cada pessoa no workspace."
+          }
         />
       </div>
+
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {isLoading ? (
         <div className="grid place-items-center py-20">
           <Loader2 className="size-6 animate-spin text-paper-400" />
         </div>
+      ) : tab === "members" ? (
+        <MembersPortfolioTab members={members ?? []} cards={cards} />
       ) : rows.length === 0 ? (
         <Empty />
       ) : (

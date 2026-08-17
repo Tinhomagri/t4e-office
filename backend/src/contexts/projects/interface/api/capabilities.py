@@ -103,7 +103,18 @@ def effective_role(project: ProjectModel, user_id: str) -> str | None:
     """Papel efetivo do usuário no projeto, ou None se sem acesso."""
     if not can_browse(project, user_id):
         return None
-    # 1) Atribuição explícita (maior poder vence).
+    membership = MembershipModel.objects.filter(
+        workspace_id=project.workspace_id, user_id=user_id
+    ).first()
+    if membership is None:
+        return None
+    # Owner/admin do workspace administram tudo — uma atribuição explícita
+    # mais fraca no projeto (ex.: viewer) não pode rebaixar quem administra o
+    # workspace inteiro.
+    if membership.role in ("owner", "admin"):
+        return "admin"
+
+    # Atribuição explícita (maior poder vence).
     assigned = list(
         ProjectRoleMemberModel.objects.filter(
             role__project_id=project.id, user_id=user_id
@@ -116,12 +127,6 @@ def effective_role(project: ProjectModel, user_id: str) -> str | None:
                 return slug
         return assigned[0]
 
-    # 2) Deriva do papel de workspace.
-    membership = MembershipModel.objects.filter(
-        workspace_id=project.workspace_id, user_id=user_id
-    ).first()
-    if membership is None:
-        return None
     return _WORKSPACE_TO_PROJECT_ROLE.get(membership.role, "developer")
 
 

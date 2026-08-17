@@ -2,11 +2,19 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
+  Flag,
   Layers,
+  ListChecks,
   Loader2,
+  PieChart,
+  Tags,
   TrendingUp,
+  Users,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 
 import {
@@ -19,20 +27,15 @@ import {
 import {
   useMembers,
   useProjects,
+  useWorkflowStatuses,
   useWorkspaceCards,
   useWorkspaces,
   type BoardCard,
 } from "@/features/workspace/workspace.hooks"
 import type { CardPriority, CardType } from "@/features/workspace/workspace.types"
 import { Badge, cx } from "@/shared/ui/primitives"
-import {
-  HEALTH_LABEL,
-  HEALTH_TONE,
-  STATUS_BAR,
-  STATUS_LABEL,
-  STATUS_ORDER,
-  computeHealth,
-} from "./portfolio.shared"
+import { BRAND, MiniDonut, SectionHeader, ThroughputArea, WorkloadBars, weeklyThroughput } from "./charts"
+import { HEALTH_LABEL, HEALTH_TONE, computeHealth } from "./portfolio.shared"
 
 export function ProjectPortfolioPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -40,7 +43,12 @@ export function ProjectPortfolioPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const { projects, cards, isLoading } = useWorkspaceCards(activeWorkspaceId)
   const { data: members } = useMembers(activeWorkspaceId)
+  const { data: statuses } = useWorkflowStatuses(projectId ?? null)
   useProjects(activeWorkspaceId) // mantém cache aquecido p/ navegação entre projetos
+
+  const PAGE_SIZE = 20
+  const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [projectId])
 
   if (isLoading) {
     return (
@@ -70,9 +78,19 @@ export function ProjectPortfolioPage() {
   const pct = Math.round(row.progress * 100)
   const memberName = (id: string | null) => members?.find((m) => m.user_id === id)?.name ?? null
 
+  // Colunas reais do projeto — a lista fixa de 5 status não bate com workflows
+  // customizados (ex.: importados do Jira), o que zerava esta distribuição.
+  const statusMeta = new Map((statuses ?? []).map((s) => [s.slug, s]))
+  const statusBreakdown = (statuses ?? []).map((s) => ({
+    slug: s.slug, label: s.name, color: s.color,
+    count: row.cards.filter((c) => c.status === s.slug).length,
+  }))
+
   const openCards = row.cards
-    .filter((c) => c.status !== "done")
+    .filter((c) => c.resolution !== "done")
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+  const totalPages = Math.max(1, Math.ceil(openCards.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
 
   const priorityCounts = (["urgent", "high", "medium", "low"] as CardPriority[]).map((p) => ({
     priority: p,
@@ -81,6 +99,28 @@ export function ProjectPortfolioPage() {
   const typeCounts = (["feature", "bug", "debt", "spike", "chore", "epic"] as CardType[])
     .map((t) => ({ type: t, count: row.cards.filter((c) => c.type === t).length }))
     .filter((t) => t.count > 0)
+
+  // Carga por responsável — quem está segurando o projeto, por peso entregue.
+  const assigneeMap = new Map<string, { count: number; points: number }>()
+  for (const c of row.cards) {
+    const k = c.assignee_id ?? "__none__"
+    const cur = assigneeMap.get(k) ?? { count: 0, points: 0 }
+    cur.count += 1
+    cur.points += c.points ?? 0
+    assigneeMap.set(k, cur)
+  }
+  const workloadRows = [...assigneeMap.entries()]
+    .map(([id, v]) => ({
+      key: id,
+      label: id === "__none__" ? "Não atribuído" : memberName(id) ?? "—",
+      value: v.points,
+      color: BRAND,
+      sub: `· ${v.count} cards`,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
+
+  const throughput = weeklyThroughput(row.cards)
 
   return (
     <div className="space-y-6 pb-10">
@@ -140,42 +180,47 @@ export function ProjectPortfolioPage() {
         <div className="space-y-6 xl:col-span-2">
           {/* Status distribution */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Distribuição por status</h2>
-            <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
-              {STATUS_ORDER.map((s) =>
-                row.statusCounts[s] > 0 ? (
-                  <div
-                    key={s}
-                    className={STATUS_BAR[s]}
-                    style={{ width: `${(row.statusCounts[s] / row.total) * 100}%` }}
-                    title={`${STATUS_LABEL[s]}: ${row.statusCounts[s]}`}
-                  />
-                ) : null,
-              )}
+            <SectionHeader icon={PieChart} title="Distribuição por status" />
+            <div className="flex items-center gap-8 max-w-md">
+              <MiniDonut
+                size={148}
+                rows={statusBreakdown.map((s) => ({ label: s.label, color: s.color, count: s.count }))}
+                total={row.total}
+                centerLabel="cards"
+              />
+              <ul className="min-w-0 flex-1 space-y-2">
+                {statusBreakdown.filter((s) => s.count > 0).map((s) => (
+                  <li key={s.slug} className="flex items-center gap-2 text-xs">
+                    <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-paper-500">{s.label}</span>
+                    <span className="shrink-0 font-semibold tabular text-ink dark:text-paper">{s.count}</span>
+                    <span className="w-9 shrink-0 text-right text-[10px] text-paper-400 tabular">
+                      {row.total > 0 ? Math.round((s.count / row.total) * 100) : 0}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {STATUS_ORDER.map((s) => (
-                <div key={s} className="rounded-lg bg-paper-50 dark:bg-ink-900 p-3 text-center">
-                  <p className="flex items-center justify-center gap-1.5 text-lg font-bold text-ink dark:text-paper tabular">
-                    <span className={cx("size-2 rounded-full", STATUS_BAR[s])} />
-                    {row.statusCounts[s]}
-                  </p>
-                  <p className="mt-1 text-[11px] text-paper-500">{STATUS_LABEL[s]}</p>
-                </div>
-              ))}
+          </section>
+
+          {/* Vazão semanal */}
+          <section className="surface p-5">
+            <SectionHeader icon={TrendingUp} title="Vazão semanal" sub="últimas 8 semanas" />
+            <ThroughputArea data={throughput} />
+            <div className="mt-2 flex items-center gap-4 text-[11px] text-paper-500">
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#9F8FEF" }} /> Criados</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: "#1F845A" }} /> Concluídos</span>
             </div>
           </section>
 
           {/* Open cards list */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">
-              Em aberto ({openCards.length})
-            </h2>
+            <SectionHeader icon={ListChecks} title={`Em aberto (${openCards.length})`} />
             {openCards.length === 0 ? (
               <p className="mt-3 text-sm text-paper-400">Nenhum card em aberto. 🎉</p>
             ) : (
               <ul className="mt-3 divide-y divide-paper-100 dark:divide-ink-800">
-                {openCards.map((c: BoardCard) => (
+                {openCards.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE).map((c: BoardCard) => (
                   <li key={c.id} className="flex items-center gap-3 py-2.5">
                     <span className={cx("h-6 w-1 shrink-0 rounded-full", PRIORITY_BAR[c.priority])} />
                     <span className="min-w-0 flex-1">
@@ -186,8 +231,11 @@ export function ProjectPortfolioPage() {
                           {TYPE_LABEL[c.type]}
                         </span>
                         <span className="flex items-center gap-1">
-                          <span className={cx("size-1.5 rounded-full", STATUS_BAR[c.status])} />
-                          {STATUS_LABEL[c.status]}
+                          <span
+                            className="size-1.5 rounded-full"
+                            style={{ backgroundColor: statusMeta.get(c.status)?.color ?? "#8590A2" }}
+                          />
+                          {statusMeta.get(c.status)?.name ?? c.status}
                         </span>
                       </p>
                     </span>
@@ -201,14 +249,44 @@ export function ProjectPortfolioPage() {
                 ))}
               </ul>
             )}
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between border-t border-paper-100 pt-3 dark:border-ink-800">
+                <p className="text-xs text-paper-400">
+                  Página <span className="font-medium text-ink dark:text-paper tabular">{pageClamped}</span> de{" "}
+                  <span className="tabular">{totalPages}</span>
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={pageClamped === 1}
+                    className="grid size-7 place-items-center rounded-lg border border-paper-200 bg-paper text-paper-500 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-ink-700 dark:bg-ink-900 dark:hover:bg-ink-800"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={pageClamped === totalPages}
+                    className="grid size-7 place-items-center rounded-lg border border-paper-200 bg-paper text-paper-500 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-ink-700 dark:bg-ink-900 dark:hover:bg-ink-800"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </div>
 
         <div className="space-y-6">
+          {/* Carga da equipe */}
+          <section className="surface p-5">
+            <SectionHeader icon={Users} title="Carga da equipe" sub="peso por pessoa" />
+            <WorkloadBars rows={workloadRows} />
+          </section>
+
           {/* Priority breakdown */}
           <section className="surface p-5">
-            <h2 className="text-sm font-semibold text-ink dark:text-paper">Por prioridade</h2>
-            <div className="mt-4 space-y-3">
+            <SectionHeader icon={Flag} title="Por prioridade" />
+            <div className="space-y-3">
               {priorityCounts.map(({ priority, count }) => (
                 <div key={priority}>
                   <div className="mb-1 flex items-center justify-between text-xs">
@@ -229,8 +307,8 @@ export function ProjectPortfolioPage() {
           {/* Type breakdown */}
           {typeCounts.length > 0 && (
             <section className="surface p-5">
-              <h2 className="text-sm font-semibold text-ink dark:text-paper">Por tipo</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <SectionHeader icon={Tags} title="Por tipo" />
+              <div className="flex flex-wrap gap-2">
                 {typeCounts.map(({ type, count }) => (
                   <span
                     key={type}

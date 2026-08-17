@@ -1,5 +1,5 @@
 import type { BoardCard } from "@/features/workspace/workspace.hooks"
-import type { CardStatus, Project } from "@/features/workspace/workspace.types"
+import type { Project } from "@/features/workspace/workspace.types"
 
 export type Health = "on-track" | "at-risk" | "off-track"
 
@@ -13,35 +13,6 @@ export interface ProjectHealth {
   reviewAging: number // cards parados em revisão
   progress: number // 0..1 por peso (cai p/ contagem se não houver peso)
   health: Health
-  statusCounts: Record<CardStatus, number>
-}
-
-export const STATUS_ORDER: CardStatus[] = ["backlog", "todo", "doing", "review", "done"]
-
-export const STATUS_LABEL: Record<CardStatus, string> = {
-  backlog: "Backlog",
-  todo: "A fazer",
-  doing: "Em andamento",
-  review: "Revisão",
-  done: "Concluído",
-  briefing: "Briefing",
-  criacao: "Criação",
-  aprovacao: "Aprovação",
-  agendado: "Agendado",
-  publicado: "Publicado",
-}
-
-export const STATUS_BAR: Record<CardStatus, string> = {
-  backlog: "bg-paper-300 dark:bg-ink-600",
-  todo: "bg-ink-400",
-  doing: "bg-brand-500",
-  review: "bg-warning",
-  done: "bg-success",
-  briefing: "bg-violet-500",
-  criacao: "bg-brand-500",
-  aprovacao: "bg-warning",
-  agendado: "bg-cyan-500",
-  publicado: "bg-success",
 }
 
 export const HEALTH_LABEL: Record<Health, string> = {
@@ -72,11 +43,16 @@ export const HEALTH_RANK: Record<Health, number> = {
 
 export function computeHealth(project: Project, cards: BoardCard[]): ProjectHealth {
   const total = cards.length
-  const done = cards.filter((c) => c.status === "done").length
+  // "done" é o desfecho (`resolution`), não a coluna — projetos com workflow
+  // customizado (ex.: importados do Jira) nunca têm coluna com slug "done", e
+  // comparar pelo status literal zerava a saúde inteira do portfólio.
+  const done = cards.filter((c) => c.resolution === "done").length
   const pointsTotal = cards.reduce((s, c) => s + (c.points ?? 0), 0)
   const pointsDone = cards
-    .filter((c) => c.status === "done")
+    .filter((c) => c.resolution === "done")
     .reduce((s, c) => s + (c.points ?? 0), 0)
+  // Best-effort: só detecta gargalo de revisão em projetos com a coluna
+  // padrão "review". Workflows customizados não têm essa granularidade.
   const reviewAging = cards.filter((c) => c.status === "review").length
   const progress = pointsTotal > 0 ? pointsDone / pointsTotal : total > 0 ? done / total : 0
 
@@ -86,21 +62,5 @@ export function computeHealth(project: Project, cards: BoardCard[]): ProjectHeal
   else if (reviewAging >= 3 || progress < 0.3) health = "off-track"
   else if (reviewAging >= 1 || progress < 0.6) health = "at-risk"
 
-  const statusCounts = STATUS_ORDER.reduce(
-    (acc, s) => ({ ...acc, [s]: cards.filter((c) => c.status === s).length }),
-    {} as Record<CardStatus, number>,
-  )
-
-  return {
-    project,
-    cards,
-    total,
-    done,
-    pointsTotal,
-    pointsDone,
-    reviewAging,
-    progress,
-    health,
-    statusCounts,
-  }
+  return { project, cards, total, done, pointsTotal, pointsDone, reviewAging, progress, health }
 }
