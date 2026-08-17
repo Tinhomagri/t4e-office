@@ -440,6 +440,61 @@ def test_is_working_liga_so_na_coluna_de_andamento_nao_em_review(jira_falso_com_
     assert por_nome["Code Review"] is False
 
 
+@pytest.fixture
+def jira_falso_com_coluna_concluida(monkeypatch):
+    issues = [
+        _board_issue("PIT-1", "Entregue", "9", "Concluído", "done"),
+        _board_issue("PIT-2", "Não vai fazer", "10", "Cancelado", "done"),
+    ]
+
+    def fake_get(self, path, **params):
+        if path.endswith("/field"):
+            return []
+        if path.endswith("/project/search"):
+            return {"values": [{"key": "PIT", "name": "PitStopRH", "description": ""}]}
+        if path.endswith("/project/PIT/statuses"):
+            return [
+                {"statuses": [
+                    {"id": "9", "statusCategory": {"key": "done"}},
+                    {"id": "10", "statusCategory": {"key": "done"}},
+                ]},
+            ]
+        if path.endswith("/board"):
+            return {"values": [{"id": 42}]}
+        if path.endswith("/board/42/configuration"):
+            return {
+                "columnConfig": {
+                    "columns": [
+                        {"name": "Concluído", "statuses": [{"id": "9"}]},
+                        {"name": "Cancelado", "statuses": [{"id": "10"}]},
+                    ]
+                }
+            }
+        raise AssertionError(f"endpoint inesperado: {path}")
+
+    monkeypatch.setattr(import_jira.Command, "_get", fake_get)
+    monkeypatch.setattr(import_jira.Command, "_search", lambda self, jql, fields: issues)
+    monkeypatch.setenv("JIRA_URL", "https://exemplo.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "eu@t4egroup.com.br")
+    monkeypatch.setenv("JIRA_API_TOKEN", "token")
+
+
+@pytest.mark.django_db
+def test_is_done_liga_so_na_coluna_de_conclusao_nao_em_cancelado(
+    jira_falso_com_coluna_concluida, workspace
+):
+    """Categoria "done" do Jira sozinha não bastava: "Cancelado" também cai
+    nela, e o atalho de concluir card não pode achar que ali é entrega."""
+    call_command("import_jira", workspace="t4e")
+
+    por_nome = {
+        c.name: c.is_done
+        for c in WorkflowStatusModel.objects.filter(project__external_key="PIT")
+    }
+    assert por_nome["Concluído"] is True
+    assert por_nome["Cancelado"] is False
+
+
 @pytest.mark.django_db
 def test_cards_mantem_a_ordem_do_rank_do_jira_dentro_da_coluna(jira_falso_com_board, workspace):
     call_command("import_jira", workspace="t4e")

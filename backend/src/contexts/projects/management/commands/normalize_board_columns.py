@@ -129,6 +129,8 @@ class Command(BaseCommand):
                         "color": d["color"],
                         "order": d["order"],
                         "is_default": True,
+                        "is_working": d.get("is_working", False),
+                        "is_done": d.get("is_done", False),
                     },
                 )
             for origem, destino in rotas.items():

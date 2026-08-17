@@ -367,7 +367,8 @@ DEFAULT_STATUSES = [
     {"name": "Em andamento", "slug": "doing", "category": "in_progress", "color": "#3b82f6", "order": 1, "is_working": True},
     {"name": "Backend / integrar", "slug": "backend", "category": "in_progress", "color": "#8b5cf6", "order": 2},
     {"name": "Code Review", "slug": "review", "category": "in_progress", "color": "#f59e0b", "order": 3},
-    {"name": "Concluídos", "slug": "done", "category": "done", "color": "#10b981", "order": 4},
+    # `is_done`: some da lista de pendências, conta como entregue nas métricas.
+    {"name": "Concluídos", "slug": "done", "category": "done", "color": "#10b981", "order": 4, "is_done": True},
 ]
 
 # Workflow dos templates de marketing (Campanha / Social Media / Conteúdo)
@@ -376,7 +377,7 @@ MARKETING_STATUSES = [
     {"name": "Criação", "slug": "criacao", "category": "in_progress", "color": "#3b82f6", "order": 1},
     {"name": "Aprovação", "slug": "aprovacao", "category": "in_progress", "color": "#f59e0b", "order": 2},
     {"name": "Agendado", "slug": "agendado", "category": "in_progress", "color": "#06b6d4", "order": 3},
-    {"name": "Publicado", "slug": "publicado", "category": "done", "color": "#10b981", "order": 4},
+    {"name": "Publicado", "slug": "publicado", "category": "done", "color": "#10b981", "order": 4, "is_done": True},
 ]
 
 TEMPLATE_STATUSES = {
@@ -402,6 +403,7 @@ def _ser_ws(ws: WorkflowStatusModel) -> dict:
         "category": ws.category, "color": ws.color,
         "order": ws.order, "is_default": ws.is_default,
         "wip_limit": ws.wip_limit, "is_working": ws.is_working,
+        "is_done": ws.is_done,
     }
 
 
@@ -451,6 +453,8 @@ class WorkflowStatusDetailView(APIView):
                 setattr(ws, f, request.data[f])
         if "is_working" in request.data:
             ws.is_working = bool(request.data["is_working"])
+        if "is_done" in request.data:
+            ws.is_done = bool(request.data["is_done"])
         # 0/"" /null no wip_limit significam "sem limite", não zero cards.
         if "wip_limit" in request.data:
             raw = request.data["wip_limit"]

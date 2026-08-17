@@ -250,6 +250,15 @@ class Command(BaseCommand):
         baixo = nome.strip().lower()
         return any(pista in baixo for pista in ("andamento", "iniciad"))
 
+    # Mesma ideia, pro fim do fluxo: a categoria "done" do Jira sozinha não
+    # basta porque "Cancelado"/"Não vai fazer" também caem nela — sem uma
+    # pista de nome, o atalho de concluir card podia acertar a coluna errada.
+    def _parece_concluido(self, nome: str) -> bool:
+        baixo = nome.strip().lower()
+        return any(
+            pista in baixo for pista in ("conclu", "finaliz", "entregue", "publicad", "done")
+        )
+
     def _slugify(self, nome: str) -> str:
         return nome.strip().lower().replace(" ", "-")[:50]
 
@@ -310,6 +319,7 @@ class Command(BaseCommand):
                     "category": categoria,
                     "order": i,
                     "is_working": self._parece_em_andamento(col["name"]),
+                    "is_done": self._parece_concluido(col["name"]),
                 },
             )
             for sid in col["status_ids"]:
@@ -333,6 +343,7 @@ class Command(BaseCommand):
                     "category": category,
                     "order": len(self.statuses),
                     "is_working": self._parece_em_andamento(name),
+                    "is_done": self._parece_concluido(name),
                 },
             )
             self.statuses[key] = obj

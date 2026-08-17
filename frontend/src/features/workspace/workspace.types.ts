@@ -255,6 +255,9 @@ export interface WorkflowStatus {
   /** Card nesta coluna significa "estou trabalhando nisso agora": senta o
    *  boneco na mesa da pessoa no Escritório e conta o tempo desde a entrada. */
   is_working: boolean
+  /** Card nesta coluna significa "foi entregue" — usado pelo atalho de
+   *  concluir card em vez de assumir o slug "done". */
+  is_done: boolean
 }
 
 export interface CreateWorkflowStatusInput {
@@ -271,6 +274,7 @@ export interface UpdateWorkflowStatusInput {
   order?: number
   wip_limit?: number | null
   is_working?: boolean
+  is_done?: boolean
 }
 
 // ---- Configuração do quadro (swimlanes, layout do card, cores) ----

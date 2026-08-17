@@ -537,6 +537,11 @@ class WorkflowStatusModel(models.Model):
     # nome de coluna simplesmente não acionava nada. Como configuração, cada
     # time escolhe a própria coluna — e pode ter mais de uma.
     is_working = models.BooleanField(default=False)
+    # "Card aqui significa que foi entregue." Mesma ideia do `is_working`, mas
+    # pro fim do fluxo: a categoria Jira ("done") sozinha não basta, porque
+    # "Cancelado"/"Não vai fazer" também cai nela — sem uma flag própria, o
+    # atalho de concluir card podia cair na coluna errada.
+    is_done = models.BooleanField(default=False)
 
     class Meta:
         db_table = "projects_workflow_status"

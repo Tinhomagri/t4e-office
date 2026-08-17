@@ -162,6 +162,12 @@ export function KanbanView({
     [workflowStatuses],
   )
 
+  // Coluna "concluído" DESTE board — a flag `is_done` primeiro (configurável
+  // por coluna, igual `is_working`), categoria "done" como fallback pra
+  // board ainda sem nenhuma marcada (ex.: template de marketing).
+  const doneStatus =
+    columns.find((c) => c.is_done)?.slug ?? columns.find((c) => c.category === "done")?.slug ?? "done"
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   // O voo do clone é uma animação WAAPI de duração fixa, fora do alcance do
   // framer: sem este guarda ele ignoraria `prefers-reduced-motion`.
@@ -491,7 +497,7 @@ export function KanbanView({
                   sprintId={currentSprintId}
                   onAddDetailed={onNewCard}
                   onOpen={onOpen}
-                  onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
+                  onDone={(cardId) => updateCard.mutate({ cardId, input: { status: doneStatus as CardStatus } })}
                   onAssign={(cardId, assigneeId) =>
                     updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
                   }
@@ -524,9 +530,13 @@ export function KanbanView({
                       onWorkingChange={(is_working) =>
                         updateWorkflowStatus.mutate({ statusId: ws.id, input: { is_working } })
                       }
+                      isDone={ws.is_done}
+                      onDoneChange={(is_done) =>
+                        updateWorkflowStatus.mutate({ statusId: ws.id, input: { is_done } })
+                      }
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
-                      onDone={(cardId) => updateCard.mutate({ cardId, input: { status: "done" } })}
+                      onDone={(cardId) => updateCard.mutate({ cardId, input: { status: doneStatus as CardStatus } })}
                   onAssign={(cardId, assigneeId) =>
                     updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
                   }
@@ -1044,6 +1054,8 @@ function Column({
   onWipChange,
   isWorking = false,
   onWorkingChange,
+  isDone = false,
+  onDoneChange,
   sortableId,
   compact = false,
 }: {
@@ -1060,6 +1072,8 @@ function Column({
   /** Ausente nas swimlanes, onde a coluna é só exibição. */
   isWorking?: boolean
   onWorkingChange?: (value: boolean) => void
+  isDone?: boolean
+  onDoneChange?: (value: boolean) => void
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
@@ -1275,6 +1289,22 @@ function Column({
                       Card aqui = em andamento
                       <span className="mt-0.5 block text-[11px] text-paper-500">
                         Senta seu boneco na mesa do Escritório e conta o tempo.
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {onDoneChange && (
+                  <label className="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-paper-100 dark:hover:bg-ink-700">
+                    <input
+                      type="checkbox"
+                      checked={isDone}
+                      onChange={(e) => onDoneChange(e.target.checked)}
+                      className="mt-0.5 size-3.5 accent-brand-500"
+                    />
+                    <span className="text-[12px] leading-tight text-ink dark:text-paper">
+                      Card aqui = concluído
+                      <span className="mt-0.5 block text-[11px] text-paper-500">
+                        É pra onde o atalho de concluir card manda.
                       </span>
                     </span>
                   </label>
