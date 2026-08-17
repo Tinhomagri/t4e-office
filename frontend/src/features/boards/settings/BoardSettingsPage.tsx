@@ -87,7 +87,7 @@ export function BoardSettingsPage() {
         <span className="text-xs text-paper-500">
           {project.key} · {project.name}
         </span>
-        {!canAdminister && <Badge tone="outline">Somente leitura</Badge>}
+        {!canAdminister && !canManageWorkflow && <Badge tone="outline">Somente leitura</Badge>}
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row">
@@ -122,7 +122,7 @@ export function BoardSettingsPage() {
             <ColumnsTab projectId={projectId} canEdit={canManageWorkflow} />
           )}
           {active === "quadro" && (
-            <BoardTab projectId={projectId} canEdit={canAdminister} />
+            <BoardTab projectId={projectId} canEdit={canManageWorkflow} />
           )}
         </div>
       </div>

@@ -279,13 +279,38 @@ def test_reorder_rejeita_lista_vazia(scenario):
 
 # ── Permissões ────────────────────────────────────────────────────────────────
 
-def test_membro_le_config_mas_nao_edita(scenario):
+def test_developer_le_e_edita_config_do_quadro(scenario):
+    """`member` de workspace vira `developer` no projeto: tem MANAGE_WORKFLOW,
+    então edita swimlane/layout/cores — só não a identidade do projeto (aba
+    Geral, essa sim ADMINISTER_PROJECT) nem quem pode deletar card."""
     project = scenario["project"]
     viewer_client = scenario["viewer_client"]
 
     assert viewer_client.get(f"/api/projects/{project.id}/board-config/").status_code == 200
 
-    # `member` de workspace vira `developer` no projeto — sem ADMINISTER_PROJECT.
+    ok = viewer_client.patch(
+        f"/api/projects/{project.id}/board-config/",
+        {"swimlane_mode": "epic"},
+        format="json",
+    )
+    assert ok.status_code == 200
+    assert ok.data["swimlane_mode"] == "epic"
+
+
+def test_viewer_de_projeto_nao_edita_config_do_quadro(scenario):
+    """Papel `viewer` explícito no projeto não tem MANAGE_WORKFLOW."""
+    from contexts.projects.infrastructure.django.models import (
+        ProjectRoleMemberModel,
+        ProjectRoleModel,
+    )
+
+    project = scenario["project"]
+    viewer_client = scenario["viewer_client"]
+    viewer_role = ProjectRoleModel.objects.create(
+        project=project, name="Visualizador", slug="viewer"
+    )
+    ProjectRoleMemberModel.objects.create(role=viewer_role, user_id=scenario["viewer"].id)
+
     blocked = viewer_client.patch(
         f"/api/projects/{project.id}/board-config/",
         {"swimlane_mode": "epic"},

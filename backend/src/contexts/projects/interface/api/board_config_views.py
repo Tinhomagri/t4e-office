@@ -5,8 +5,9 @@ Três recursos:
   - BoardConfigView         → abas "Swimlanes", "Layout do card" e "Cores de card"
   - WorkflowStatusReorderView → drag-and-drop das colunas em uma única chamada
 
-Leitura exige apenas ser membro do projeto; qualquer escrita exige
-ADMINISTER_PROJECT (Geral/BoardConfig) ou MANAGE_WORKFLOW (reordenação de colunas).
+Leitura exige apenas ser membro do projeto. Escrita: ADMINISTER_PROJECT para
+ProjectDetailView (identidade do projeto); MANAGE_WORKFLOW para BoardConfigView
+e WorkflowStatusReorderView (config do quadro em si — coluna, swimlane, layout).
 """
 from __future__ import annotations
 
@@ -194,10 +195,14 @@ class BoardConfigView(APIView):
         return Response(_ser_board_config(get_or_create_board_config(str(project_id))))
 
     def patch(self, request: Request, project_id: str) -> Response:
+        # MANAGE_WORKFLOW, não ADMINISTER_PROJECT: isto é config do QUADRO
+        # (swimlane, layout, cores), a mesma capacidade que já libera colunas —
+        # não a identidade do projeto (nome/visibilidade/squad), que fica só
+        # com admin.
         assert_project_capability(
             project_id=str(project_id),
             user_id=_uid(request),
-            capability=caps.ADMINISTER_PROJECT,
+            capability=caps.MANAGE_WORKFLOW,
         )
         config = get_or_create_board_config(str(project_id))
 
