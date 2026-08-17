@@ -7,6 +7,7 @@ import type {
   AutomationRule,
   AutomationRunLog,
   BoardConfig,
+  BoardMessage,
   ProjectDetail,
   UpdateBoardConfigInput,
   UpdateProjectInput,
@@ -563,6 +564,17 @@ export async function updateDocument(documentId: string, payload: UpdateDocument
 
 export async function deleteDocument(documentId: string): Promise<void> {
   await api.delete(`/documents/${documentId}/`)
+}
+
+// ---- Mural do board (mesma mensagem que aparece no link público) ----
+export async function listBoardMessages(projectId: string): Promise<BoardMessage[]> {
+  const { data } = await api.get<BoardMessage[]>(`/projects/${projectId}/board-messages/`)
+  return data
+}
+
+export async function createBoardMessage(projectId: string, body: string): Promise<BoardMessage> {
+  const { data } = await api.post<BoardMessage>(`/projects/${projectId}/board-messages/`, { body })
+  return data
 }
 
 export async function deleteSavedFilter(filterId: string): Promise<void> {

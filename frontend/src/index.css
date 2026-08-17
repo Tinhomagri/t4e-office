@@ -165,6 +165,7 @@
   }
   .scrollbar-slim-dark::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
   }
   .scrollbar-slim-dark::-webkit-scrollbar-thumb {
     background-color: rgb(255 255 255 / 0.14);

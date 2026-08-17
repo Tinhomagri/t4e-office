@@ -54,6 +54,13 @@ export interface ProjectDetail extends Project {
   avatar_url: string | null
   lead_id: string | null
   default_assignee_id: string | null
+  // Link público de acompanhamento (sem login). Nulo = desativado.
+  public_token: string | null
+  public_allow_create: boolean
+  // Código de acesso ao board público — a primeira vez que alguém abre o
+  // link pede este código; depois o navegador lembra. Nulo = link sozinho
+  // já libera (sem portão).
+  public_access_code: string | null
 }
 
 export interface UpdateProjectInput {
@@ -67,6 +74,18 @@ export interface UpdateProjectInput {
   default_assignee_id?: string | null
   squad_id?: string | null
   visibility?: ProjectVisibility
+  public_allow_create?: boolean
+  // Só o servidor decide o valor do token — isto só pede a ação.
+  public_token_action?: "generate" | "revoke"
+  public_access_code_action?: "generate" | "revoke"
+}
+
+export interface BoardMessage {
+  id: string
+  author_name: string
+  body: string
+  from_team: boolean
+  created_at: string
 }
 
 export interface Card {

@@ -61,6 +61,21 @@ class ProjectModel(models.Model):
     # Projeto arquivado sai das listas e do seletor, mas continua acessível por
     # link direto — deletar perdia todo o histórico de decisão junto.
     archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # Link público de acompanhamento: token vazio = link desativado. Quem tem
+    # o link vê o board inteiro (cards, descrição, comentários) SEM LOGIN —
+    # é um espelho read-only do sistema. `public_allow_create` libera só a
+    # criação de card novo; nunca a alteração dos que já existem.
+    # NULL (não string vazia) quando desativado — assim vários projetos sem
+    # link não colidem na constraint de unicidade (Postgres permite múltiplos
+    # NULL, mas só uma linha com "").
+    public_token = models.CharField(max_length=48, unique=True, null=True, blank=True, default=None)
+    public_allow_create = models.BooleanField(default=False)
+    # Código de acesso ao board público: link sozinho não basta pra ver nada
+    # — a PRIMEIRA vez pede este código também, compartilhado por um canal
+    # separado (WhatsApp, e-mail). Uma vez validado, o navegador lembra (não
+    # pede de novo). Sem código configurado, o link sozinho já libera (como
+    # era antes). Sem `unique`: o escopo já é o projeto (chega via token).
+    public_access_code = models.CharField(max_length=16, null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -597,6 +612,27 @@ class DocumentModel(models.Model):
         return f"{self.project.key} / {self.title}"
 
 
+class BoardMessageModel(models.Model):
+    """Mural do board: lembrete/aviso de mão dupla entre time e quem só tem o
+    link público — sem login do lado de fora, sem card/comentário no meio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        ProjectModel, on_delete=models.CASCADE, related_name="board_messages"
+    )
+    # Texto livre, não FK: quem escreve de fora não tem conta pra apontar.
+    author_name = models.CharField(max_length=80, blank=True, default="")
+    body = models.TextField()
+    # Distingue quem postou sem precisar decifrar o nome — a bolha da UI
+    # espelha em lados diferentes conforme isto.
+    from_team = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "projects_board_message"
+        ordering = ["created_at"]
+
+
 class NotificationModel(models.Model):
     """Notificação em tempo real para um usuário."""
 
@@ -608,6 +644,7 @@ class NotificationModel(models.Model):
         ("automation_ran", "Automação executada"),
         ("sprint_started", "Sprint iniciada"),
         ("meeting_reminder", "Lembrete de reunião"),
+        ("board_message", "Mensagem no mural"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

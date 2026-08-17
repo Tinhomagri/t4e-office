@@ -681,6 +681,25 @@ export function useActivity(projectId: string | null) {
 }
 
 // ---- Documents (aba Documentos — colaborativo, persistido no servidor) ----
+export function useBoardMessages(projectId: string | null) {
+  return useQuery({
+    queryKey: ["board-messages", projectId],
+    queryFn: () => wsApi.listBoardMessages(projectId!),
+    enabled: !!projectId,
+    // Cliente pode postar pelo link público a qualquer momento — reconsulta
+    // sozinho pra não exigir F5 pra ver a mensagem nova.
+    refetchInterval: 10_000,
+  })
+}
+
+export function useCreateBoardMessage(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) => wsApi.createBoardMessage(projectId!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["board-messages", projectId] }),
+  })
+}
+
 export function useDocuments(projectId: string | null) {
   return useQuery({
     queryKey: ["documents", projectId],

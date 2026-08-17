@@ -368,8 +368,6 @@ function DeleteProjectModal({
 
 // Squad dona + visibilidade — a mesma coisa que a criação de board já pede,
 // só que aqui edita um projeto que já existe. Sem isto, só dava pra declarar
-// squad/visibilidade no momento da criação; quem quisesse mudar depois não
-// achava onde (a única tela que fazia isso era Membros → Permissões).
 function AccessCard({
   project,
   canEdit,

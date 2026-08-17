@@ -11,6 +11,8 @@ e WorkflowStatusReorderView (config do quadro em si — coluna, swimlane, layout
 """
 from __future__ import annotations
 
+import secrets
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -91,6 +93,9 @@ def _ser_project(project: ProjectModel) -> dict:
         ),
         "squad_id": str(project.squad_id) if project.squad_id else None,
         "visibility": project.visibility,
+        "public_token": project.public_token,
+        "public_allow_create": project.public_allow_create,
+        "public_access_code": project.public_access_code,
     }
 
 
@@ -178,6 +183,28 @@ class ProjectDetailView(APIView):
                 if not pertence:
                     raise ValidationError("Squad não encontrada neste workspace.")
             project.squad_id = squad_id
+
+        if "public_allow_create" in request.data:
+            project.public_allow_create = bool(request.data["public_allow_create"])
+
+        # Gerar/revogar o link público — nunca aceita um token vindo do
+        # cliente: só o servidor decide o valor, senão dava pra "escolher"
+        # um token de outro projeto.
+        action = request.data.get("public_token_action")
+        if action == "generate":
+            project.public_token = secrets.token_urlsafe(24)
+        elif action == "revoke":
+            project.public_token = None
+
+        # Código de acesso ao board: curto de propósito — alguém vai DIGITAR
+        # isto, não colar de um link. Alfabeto sem 0/O/1/I/L pra não confundir
+        # ao ouvir por telefone ou ler numa captura de tela.
+        code_action = request.data.get("public_access_code_action")
+        if code_action == "generate":
+            alfabeto = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+            project.public_access_code = "".join(secrets.choice(alfabeto) for _ in range(6))
+        elif code_action == "revoke":
+            project.public_access_code = None
 
         project.save()
         return Response(_ser_project(project))

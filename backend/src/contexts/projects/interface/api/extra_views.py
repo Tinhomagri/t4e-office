@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 
 from contexts.projects.infrastructure.django.models import (
     AttachmentModel,
+    BoardMessageModel,
     CardComponentModel,
     CardHistoryModel,
     CardVersionModel,
@@ -562,6 +563,41 @@ class DocumentListCreateView(APIView):
             updated_by=uid,
         )
         return Response(_ser_doc(doc), status=status.HTTP_201_CREATED)
+
+
+def _ser_board_message(m: BoardMessageModel) -> dict:
+    return {
+        "id": str(m.id),
+        "author_name": m.author_name,
+        "body": m.body,
+        "from_team": m.from_team,
+        "created_at": m.created_at.isoformat(),
+    }
+
+
+class BoardMessageListCreateView(APIView):
+    """Mural do board, visto de dentro do app — mesma mensagem que aparece
+    no link público, o time responde daqui com `from_team=True`."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        mensagens = BoardMessageModel.objects.filter(project_id=project_id)
+        return Response([_ser_board_message(m) for m in mensagens])
+
+    def post(self, request: Request, project_id: str) -> Response:
+        assert_project_member(project_id=str(project_id), user_id=_uid(request))
+        body = str(request.data.get("body") or "").strip()
+        if not body:
+            return Response({"error": "Escreva uma mensagem."}, status=400)
+        mensagem = BoardMessageModel.objects.create(
+            project_id=project_id,
+            author_name=request.user.full_name,
+            body=body,
+            from_team=True,
+        )
+        return Response(_ser_board_message(mensagem), status=status.HTTP_201_CREATED)
 
 
 class DocumentDetailView(APIView):

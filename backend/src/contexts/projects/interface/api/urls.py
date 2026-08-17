@@ -29,6 +29,7 @@ from contexts.projects.interface.api.card_views import (
 from contexts.projects.interface.api.extra_views import (
     AttachmentDetailView,
     AttachmentListCreateView,
+    BoardMessageListCreateView,
     CardComponentView,
     CardVersionView,
     ComponentDetailView,
@@ -72,6 +73,11 @@ from contexts.projects.interface.api.permission_scheme_views import (
     ProjectPermissionSchemeView,
 )
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
+from contexts.projects.interface.api.public_views import (
+    PublicBoardView,
+    PublicCardCreateView,
+    PublicMessageListCreateView,
+)
 from contexts.projects.interface.api.reports_views import ProjectReportsView
 from contexts.projects.interface.api.sprint_views import (
     SprintDetailView,
@@ -80,6 +86,18 @@ from contexts.projects.interface.api.sprint_views import (
 from contexts.projects.interface.api.views import ProjectListCreateView
 
 urlpatterns = [
+    # Board público (sem login) — token na URL, não o id do projeto.
+    path("public/boards/<str:token>/", PublicBoardView.as_view(), name="public-board"),
+    path(
+        "public/boards/<str:token>/cards/",
+        PublicCardCreateView.as_view(),
+        name="public-board-create-card",
+    ),
+    path(
+        "public/boards/<str:token>/messages/",
+        PublicMessageListCreateView.as_view(),
+        name="public-board-messages",
+    ),
     path("anonymous-reports/", AnonymousReportCreateView.as_view(), name="anonymous-report-create"),
     # Visão pessoal: agrega todos os workspaces da pessoa (ver me_views.py).
     path("me/work/", MyWorkView.as_view(), name="my-work"),
@@ -178,6 +196,11 @@ urlpatterns = [
     path("saved-filters/<uuid:filter_id>/", SavedFilterDetailView.as_view(), name="saved-filter-detail"),
     # Documents (aba Documentos)
     path("projects/<uuid:project_id>/documents/", DocumentListCreateView.as_view(), name="document-list"),
+    path(
+        "projects/<uuid:project_id>/board-messages/",
+        BoardMessageListCreateView.as_view(),
+        name="board-message-list",
+    ),
     path("documents/<uuid:document_id>/", DocumentDetailView.as_view(), name="document-detail"),
     # Activity feed (aba Resumo)
     path("projects/<uuid:project_id>/activity/", ProjectActivityView.as_view(), name="project-activity"),

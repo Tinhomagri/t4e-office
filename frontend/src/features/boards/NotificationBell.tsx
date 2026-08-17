@@ -16,6 +16,7 @@ const TYPE_ICON: Record<string, string> = {
   card_status_changed: "🔄",
   automation_ran: "⚡",
   sprint_started: "🏃",
+  board_message: "💬",
 }
 
 function timeAgo(iso: string): string {

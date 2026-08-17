@@ -4,6 +4,7 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { AppShell } from "@/features/shell/AppShell"
 import { AvatarLabPage } from "@/features/avatar/AvatarLabPage"
 import { AnonymousReportPage } from "@/features/anonymous-reports/AnonymousReportPage"
+import { PublicBoardPage } from "@/features/public-board/PublicBoardPage"
 import { BoardsPage } from "@/features/boards/BoardsPage"
 import { BoardSettingsPage } from "@/features/boards/settings/BoardSettingsPage"
 import { CopilotPage } from "@/features/copilot/CopilotPage"
@@ -175,6 +176,9 @@ export const router = createBrowserRouter([
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/invite", element: <AcceptInvitePage /> },
   { path: "/reports", element: <AnonymousReportPage /> },
+  // Board público: sem login, sem AppShell — link que a pessoa de fora recebe
+  // pra acompanhar o board, nada mais do app.
+  { path: "/public/board/:token", element: <PublicBoardPage /> },
   {
     path: "/app",
     element: (

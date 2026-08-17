@@ -8,6 +8,7 @@ import {
   FolderPlus,
   GanttChartSquare,
   GitBranch,
+  MessageSquare,
   Globe2,
   Layers,
   LayoutList,
@@ -33,6 +34,7 @@ import { CalendarioView } from "./views/CalendarioView"
 import { MarketingView } from "./views/MarketingView"
 import { MetasView } from "./views/MetasView"
 import { DocumentosView } from "./views/DocumentosView"
+import { MuralView } from "./views/MuralView"
 import { BacklogView } from "./views/BacklogView"
 import { AutomacoesView } from "./views/AutomacoesView"
 import { KanbanView } from "./views/KanbanView"
@@ -81,7 +83,7 @@ import {
 } from "@/features/poker/poker.hooks"
 import { useAuthStore } from "@/features/auth/auth.store"
 
-type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "marketing" | "metas" | "desenvolvimento" | "documentos" | "automacoes"
+type ProjectView = "resumo" | "quadro" | "backlog" | "lista" | "cronograma" | "calendario" | "marketing" | "metas" | "desenvolvimento" | "documentos" | "mural" | "automacoes"
 
 // Abas visíveis apenas em projetos de marketing (template != software)
 const MARKETING_ONLY_VIEWS = new Set<ProjectView>(["marketing"])
@@ -97,6 +99,7 @@ const PROJECT_VIEWS: { id: ProjectView; label: string; icon: React.ReactNode }[]
   { id: "metas", label: "Metas", icon: <Target className="size-3.5" /> },
   { id: "desenvolvimento", label: "Desenvolvimento", icon: <GitBranch className="size-3.5" /> },
   { id: "documentos", label: "Documentos", icon: <FileText className="size-3.5" /> },
+  { id: "mural", label: "Cliente", icon: <MessageSquare className="size-3.5" /> },
   { id: "automacoes", label: "Automações", icon: <Zap className="size-3.5" /> },
 ]
 
@@ -403,6 +406,9 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
 
   if (view === "documentos") {
     return <DocumentosView projectId={projectId} members={members ?? []} />
+  }
+  if (view === "mural") {
+    return <MuralView projectId={projectId} />
   }
   if (view === "automacoes") {
     return <AutomacoesView projectId={projectId} />
