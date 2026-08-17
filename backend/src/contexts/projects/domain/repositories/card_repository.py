@@ -32,3 +32,7 @@ class CardRepository(ABC):
     @abstractmethod
     def update(self, *, card: Card) -> Card:
         """Atualiza um card existente."""
+
+    @abstractmethod
+    def delete(self, *, card_id: str) -> None:
+        """Remove um card definitivamente."""

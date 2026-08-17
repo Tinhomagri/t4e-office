@@ -118,6 +118,16 @@ export function useUpdateCard(projectId: string | null) {
   })
 }
 
+export function useDeleteCard(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (cardId: string) => wsApi.deleteCard(cardId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+    },
+  })
+}
+
 // Card enriquecido com a chave/nome do projeto (para telas agregadas).
 export interface BoardCard extends Card {
   projectKey: string
@@ -441,6 +451,15 @@ export function useResetProjectRole(projectId: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (userId: string) => wsApi.resetProjectRole(projectId!, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-access", projectId] }),
+  })
+}
+
+export function useSetCardDeleteGrant(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, enabled }: { userId: string; enabled: boolean }) =>
+      wsApi.setCardDeleteGrant(projectId!, userId, enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["project-access", projectId] }),
   })
 }

@@ -277,6 +277,14 @@ class CardDetailView(APIView):
 
         return Response(CardSerializer(_card_dict(card, project.key)).data)
 
+    def delete(self, request: Request, card_id: str) -> Response:
+        assert_card_capability(
+            card_id=str(card_id), user_id=str(request.user.id), capability=caps.DELETE_ISSUE
+        )
+        _, cards, _ = _deps()
+        cards.delete(card_id=str(card_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 def _comment_dict(c: CardComment) -> dict:
     return {

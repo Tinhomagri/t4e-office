@@ -14,6 +14,7 @@ from __future__ import annotations
 from contexts.estimation.infrastructure.django.models import SquadMemberModel
 from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.infrastructure.django.models import (
+    ProjectDeleteGrantModel,
     ProjectModel,
     ProjectRoleMemberModel,
 )
@@ -46,6 +47,7 @@ ROLE_CAPABILITIES: dict[str, set[str]] = {
     "developer": {
         BROWSE, CREATE_ISSUE, EDIT_ISSUE, TRANSITION_ISSUE, ASSIGN_ISSUE,
         COMMENT, MANAGE_SPRINTS, MANAGE_VERSIONS, MANAGE_COMPONENTS,
+        MANAGE_WORKFLOW,
     },
     "viewer": {BROWSE, COMMENT},
 }
@@ -123,9 +125,23 @@ def effective_role(project: ProjectModel, user_id: str) -> str | None:
     return _WORKSPACE_TO_PROJECT_ROLE.get(membership.role, "developer")
 
 
+def can_delete_cards(project: ProjectModel, user_id: str) -> bool:
+    """Deletar card não vem do papel — é concedido pessoa a pessoa pelo admin,
+    exceto pra quem já é admin (esse já tem tudo)."""
+    role = effective_role(project, user_id)
+    if role == "admin":
+        return True
+    return ProjectDeleteGrantModel.objects.filter(
+        project_id=project.id, user_id=user_id
+    ).exists()
+
+
 def capabilities_for(project: ProjectModel, user_id: str) -> set[str]:
     """Conjunto de capacidades do usuário no projeto (vazio se sem acesso)."""
     role = effective_role(project, user_id)
     if role is None:
         return set()
-    return set(ROLE_CAPABILITIES.get(role, {BROWSE}))
+    caps = set(ROLE_CAPABILITIES.get(role, {BROWSE}))
+    if can_delete_cards(project, user_id):
+        caps.add(DELETE_ISSUE)
+    return caps

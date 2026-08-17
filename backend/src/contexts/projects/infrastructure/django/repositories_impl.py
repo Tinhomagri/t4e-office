@@ -223,6 +223,9 @@ class DjangoCardRepository(CardRepository):
         row = CardModel.objects.get(id=card.id)
         return _card_to_entity(row)
 
+    def delete(self, *, card_id: str) -> None:
+        CardModel.objects.filter(id=card_id).delete()
+
 
 class DjangoSprintRepository(SprintRepository):
     """Persistência de sprints via Django ORM."""

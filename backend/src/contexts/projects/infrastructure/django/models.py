@@ -716,6 +716,29 @@ class ProjectRoleMemberModel(models.Model):
         return f"{self.user_id} → {self.role_id}"
 
 
+class ProjectDeleteGrantModel(models.Model):
+    """Concessão individual de `delete_issue` a um usuário sem papel admin.
+
+    Papéis dão capacidades em bloco (capabilities.py); deletar card é
+    perigoso demais pra virar padrão de um papel inteiro, então é concedido
+    pessoa a pessoa pelo admin do projeto.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        ProjectModel, on_delete=models.CASCADE, related_name="delete_grants"
+    )
+    user_id = models.UUIDField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "projects_project_delete_grant"
+        unique_together = [("project", "user_id")]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} pode deletar cards em {self.project_id}"
+
+
 class AutomationRunLogModel(models.Model):
     """Log de execução de uma regra de automação."""
 

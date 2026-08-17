@@ -68,6 +68,7 @@ from contexts.projects.interface.api.notification_views import (
 )
 from contexts.projects.interface.api.permission_scheme_views import (
     ProjectAccessView,
+    ProjectDeleteGrantView,
     ProjectPermissionSchemeView,
 )
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
@@ -139,6 +140,11 @@ urlpatterns = [
         "projects/<uuid:project_id>/permission-scheme/",
         ProjectPermissionSchemeView.as_view(),
         name="permission-scheme",
+    ),
+    path(
+        "projects/<uuid:project_id>/delete-grant/",
+        ProjectDeleteGrantView.as_view(),
+        name="project-delete-grant",
     ),
     # Versions
     path("projects/<uuid:project_id>/versions/", VersionListCreateView.as_view(), name="version-list"),

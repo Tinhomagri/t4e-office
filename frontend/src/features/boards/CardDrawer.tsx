@@ -56,6 +56,7 @@ import {
   useCreateWorklog,
   useCustomFields,
   useDeleteAttachment,
+  useDeleteCard,
   useDeleteCardLink,
   useDeleteWorklog,
   useEpics,
@@ -63,6 +64,7 @@ import {
   useRemoveCardComponent,
   useRemoveCardVersion,
   useApproveCard,
+  useProjectPermissions,
   useUpdateCard,
   useUploadAttachment,
   useUploadAttachmentVersion,
@@ -186,11 +188,14 @@ export function CardDrawer({
   onClose: () => void
 }) {
   const updateCard = useUpdateCard(projectId)
+  const deleteCard = useDeleteCard(projectId)
+  const { can } = useProjectPermissions(projectId)
   const { data: allCards } = useCards(projectId)
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const [draft, setDraft] = useState<Card | null>(card)
   const [savedHint, setSavedHint] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   useEffect(() => setDraft(card), [card])
 
@@ -302,6 +307,15 @@ export function CardDrawer({
             >
               {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </ToolbarButton>
+            {can("delete_issue") && (
+              <ToolbarButton
+                label="Deletar card"
+                onClick={() => setConfirmingDelete(true)}
+                className="text-danger-500 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/10"
+              >
+                <Trash2 className="size-4" />
+              </ToolbarButton>
+            )}
             <ToolbarButton label="Fechar" onClick={onClose}>
               <X className="size-4" />
             </ToolbarButton>
@@ -542,6 +556,23 @@ export function CardDrawer({
           </aside>
         </div>
       </motion.div>
+
+      {confirmingDelete && (
+        <DeleteCardModal
+          card={card}
+          isDeleting={deleteCard.isPending}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            try {
+              await deleteCard.mutateAsync(card.id)
+              toast.success(`${card.ref} deletado`)
+              onClose()
+            } catch (e) {
+              toast.error(errMsg(e))
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -2089,14 +2120,71 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 // Ícone-ação do cabeçalho do drawer (copiar link, expandir, fechar).
+function DeleteCardModal({
+  card,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  card: Card
+  isDeleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const [confirmText, setConfirmText] = useState("")
+  const canConfirm = confirmText.trim().toLowerCase() === "deletar"
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div
+        className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm"
+        onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+      />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-paper-200 bg-white p-5 shadow-xl dark:border-ink-700 dark:bg-ink-800">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink dark:text-paper">
+          <Trash2 className="size-4 text-danger-500" />
+          Deletar {card.ref}?
+        </h3>
+        <p className="mt-2 text-sm text-paper-500">
+          Essa ação é definitiva e não pode ser desfeita. Pra confirmar,
+          digite <span className="font-semibold text-ink dark:text-paper">deletar</span>.
+        </p>
+        <input
+          autoFocus
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder="deletar"
+          className="mt-3 w-full rounded-lg border border-paper-300 bg-paper px-3 py-2 text-sm outline-none focus:border-danger-400 dark:border-ink-700 dark:bg-ink-900"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={isDeleting}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={onConfirm}
+            disabled={!canConfirm || isDeleting}
+            loading={isDeleting}
+          >
+            Deletar card
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ToolbarButton({
   label,
   onClick,
   children,
+  className,
 }: {
   label: string
   onClick: () => void
   children: React.ReactNode
+  className?: string
 }) {
   return (
     <button
@@ -2104,7 +2192,10 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper focus-ring"
+      className={cx(
+        "grid size-8 place-items-center rounded-lg text-paper-400 transition-colors hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper focus-ring",
+        className,
+      )}
     >
       {children}
     </button>

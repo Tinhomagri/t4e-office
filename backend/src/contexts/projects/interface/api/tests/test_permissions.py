@@ -128,3 +128,29 @@ def test_atribuicao_explicita_sobrepoe(member_scenario):
     )
     ProjectRoleMemberModel.objects.create(role=admin_role, user_id=dev_id)
     assert ADMINISTER_PROJECT in capabilities_for(proj, dev_id)
+
+
+def test_developer_nao_deleta_card_sem_grant(member_scenario):
+    from contexts.projects.interface.api.capabilities import DELETE_ISSUE, capabilities_for
+
+    proj = member_scenario["project"]
+    dev_id = str(member_scenario["dev"].id)
+    assert DELETE_ISSUE not in capabilities_for(proj, dev_id)
+
+
+def test_developer_deleta_card_com_grant(member_scenario):
+    from contexts.projects.infrastructure.django.models import ProjectDeleteGrantModel
+    from contexts.projects.interface.api.capabilities import DELETE_ISSUE, capabilities_for
+
+    proj = member_scenario["project"]
+    dev_id = str(member_scenario["dev"].id)
+    ProjectDeleteGrantModel.objects.create(project=proj, user_id=dev_id)
+    assert DELETE_ISSUE in capabilities_for(proj, dev_id)
+
+
+def test_admin_deleta_card_sem_precisar_de_grant(scenario):
+    from contexts.projects.interface.api.capabilities import DELETE_ISSUE, capabilities_for
+
+    assert DELETE_ISSUE in capabilities_for(
+        scenario["project"], str(scenario["owner"].id)
+    )

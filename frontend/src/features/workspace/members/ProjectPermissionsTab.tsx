@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
-import { Globe2, Lock, RotateCcw } from "lucide-react"
+import { Globe2, Lock, RotateCcw, Trash2 } from "lucide-react"
 
 import { toast } from "@/shared/ui/toast"
 import { Avatar, EmptyState, Spinner, cx } from "@/shared/ui/primitives"
@@ -175,6 +175,28 @@ export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) 
     }
   }
 
+  const handleToggleDelete = async (
+    project: Project,
+    member: ProjectAccessMember,
+    enabled: boolean,
+  ) => {
+    const key = `${project.id}:${member.user_id}:delete`
+    setSaving(key)
+    try {
+      await wsApi.setCardDeleteGrant(project.id, member.user_id, enabled)
+      await invalidate(project.id)
+      toast.success(
+        enabled
+          ? `${member.name} agora pode deletar cards em ${project.key}`
+          : `${member.name} não pode mais deletar cards em ${project.key}`,
+      )
+    } catch (e) {
+      toast.error(errMsg(e))
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-paper-500">
@@ -249,6 +271,9 @@ export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) 
                       const isSaving = saving === key
                       const explicit = !!cell?.explicit_role
                       const value = cell?.project_role ?? "developer"
+                      const isAdmin = value === "admin"
+                      const canDelete = isAdmin || !!cell?.can_delete_cards
+                      const deleteSaving = saving === `${p.id}:${mem.user_id}:delete`
                       return (
                         <td key={p.id} className="px-4 py-2.5">
                           <div className="flex items-center gap-1.5">
@@ -291,6 +316,27 @@ export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) 
                                 <RotateCcw className="size-3.5" />
                               </button>
                             )}
+                            <button
+                              onClick={() =>
+                                cell && handleToggleDelete(p, cell, !canDelete)
+                              }
+                              disabled={isAdmin || deleteSaving}
+                              title={
+                                isAdmin
+                                  ? "Admin sempre pode deletar cards"
+                                  : canDelete
+                                    ? "Pode deletar cards — clique pra revogar"
+                                    : "Não pode deletar cards — clique pra liberar"
+                              }
+                              className={cx(
+                                "grid size-7 shrink-0 place-items-center rounded-md disabled:opacity-30",
+                                canDelete
+                                  ? "text-danger-600 dark:text-danger-400 hover:bg-danger-50 dark:hover:bg-danger-500/10"
+                                  : "text-paper-300 dark:text-ink-600 hover:bg-paper-100 dark:hover:bg-ink-800",
+                              )}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
                           </div>
                         </td>
                       )

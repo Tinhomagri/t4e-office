@@ -624,6 +624,7 @@ export interface ProjectAccessMember {
   workspace_role: Role
   project_role: ProjectRoleSlug | null // efetivo (explícito ou derivado)
   explicit_role: ProjectRoleSlug | null // null = derivado do papel de workspace
+  can_delete_cards: boolean // grant individual, não vem do papel
 }
 
 // /projects/<id>/permission-scheme/ — matriz papel×capacidade.

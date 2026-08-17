@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.infrastructure.django.models import (
+    ProjectDeleteGrantModel,
     ProjectModel,
     ProjectRoleMemberModel,
     ProjectRoleModel,
@@ -29,6 +30,7 @@ from contexts.projects.interface.api.capabilities import (
     DEFAULT_ROLES,
     ROLE_CAPABILITIES,
     can_browse,
+    can_delete_cards,
     effective_role,
 )
 from contexts.projects.interface.api.permissions import assert_project_capability
@@ -46,6 +48,7 @@ def _member_item(membership, project: ProjectModel, explicit_roles: dict[str, st
         "workspace_role": membership.role,
         "project_role": eff_role,   # role efetivo (explícito ou derivado)
         "explicit_role": explicit_roles.get(user_id),  # None se derivado
+        "can_delete_cards": can_delete_cards(project, user_id),
     }
 
 
@@ -147,6 +150,52 @@ class ProjectAccessView(APIView):
         # Papel volta a ser o derivado do workspace
         eff_role = effective_role(project, target_user_id)
         return Response({"user_id": target_user_id, "role": eff_role, "explicit_role": None})
+
+
+class ProjectDeleteGrantView(APIView):
+    """PUT/DELETE /api/projects/<project_id>/delete-grant/.
+
+    Concede ou revoga a capacidade de deletar cards para um usuário
+    específico do projeto. Quem já é admin não precisa disso (já tem tudo).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request, project_id: str) -> Response:
+        project = assert_project_capability(
+            project_id=project_id,
+            user_id=str(request.user.id),
+            capability="administer_project",
+        )
+
+        target_user_id = str(request.data.get("user_id", ""))
+        if not MembershipModel.objects.filter(
+            workspace_id=project.workspace_id, user_id=target_user_id
+        ).exists():
+            raise NotFoundError("Usuário não é membro do workspace.")
+
+        ProjectDeleteGrantModel.objects.get_or_create(
+            project=project, user_id=target_user_id
+        )
+        return Response({"user_id": target_user_id, "can_delete_cards": True})
+
+    def delete(self, request: Request, project_id: str) -> Response:
+        project = assert_project_capability(
+            project_id=project_id,
+            user_id=str(request.user.id),
+            capability="administer_project",
+        )
+
+        target_user_id = str(
+            request.query_params.get("user_id") or request.data.get("user_id") or ""
+        )
+        if not target_user_id:
+            raise ValueError("Informe o user_id do membro.")
+
+        ProjectDeleteGrantModel.objects.filter(
+            project=project, user_id=target_user_id
+        ).delete()
+        return Response({"user_id": target_user_id, "can_delete_cards": False})
 
 
 class ProjectPermissionSchemeView(APIView):

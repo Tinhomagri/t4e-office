@@ -160,6 +160,18 @@ export async function resetProjectRole(
   await api.delete(`/projects/${projectId}/access/`, { params: { user_id: userId } })
 }
 
+export async function setCardDeleteGrant(
+  projectId: string,
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  if (enabled) {
+    await api.put(`/projects/${projectId}/delete-grant/`, { user_id: userId })
+  } else {
+    await api.delete(`/projects/${projectId}/delete-grant/`, { params: { user_id: userId } })
+  }
+}
+
 export async function getPermissionScheme(
   projectId: string,
 ): Promise<PermissionScheme> {
@@ -217,6 +229,10 @@ export async function updateCard(
 ): Promise<Card> {
   const { data } = await api.patch<Card>(`/cards/${cardId}/`, payload)
   return data
+}
+
+export async function deleteCard(cardId: string): Promise<void> {
+  await api.delete(`/cards/${cardId}/`)
 }
 
 // ---- Vínculos entre cards (issue links) ----

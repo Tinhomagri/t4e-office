@@ -78,6 +78,7 @@ import {
   useEpics,
   useMembers,
   useProjectPermissions,
+  useReorderWorkflowStatuses,
   useSprints,
   useUpdateBoardConfig,
   useRankCard,
@@ -144,6 +145,7 @@ export function KanbanView({
   const createWorkflowStatus = useCreateWorkflowStatus(projectId)
   const deleteWorkflowStatus = useDeleteWorkflowStatus(projectId)
   const updateWorkflowStatus = useUpdateWorkflowStatus(projectId)
+  const reorderWorkflowStatuses = useReorderWorkflowStatuses(projectId)
   const [jqlResults, setJqlResults] = useState<Card[] | null>(null)
   const [chipJql, setChipJql] = useState<string | null>(null)
   const [currentJql, setCurrentJql] = useState("")
@@ -250,10 +252,31 @@ export function KanbanView({
     const alvo = destinoCards.findIndex((c) => c.id === overCard.id)
     if (alvo === -1) return
     const ordenado = [...destinoCards.slice(0, alvo), card, ...destinoCards.slice(alvo)]
+    const beforeId = ordenado[alvo - 1]?.id ?? null
+    const afterId = ordenado[alvo + 1]?.id ?? null
+
+    // Encaixa o card na posição final já no cache: sem isto ele volta pro
+    // lugar antigo assim que solta e só pula pro novo quando o rank volta do
+    // servidor — o mesmo pisca-pisca da troca de coluna.
+    qc.setQueryData<Card[]>(["cards", projectId], (old) => {
+      if (!old) return old
+      const resto = old.filter((c) => c.id !== card.id)
+      let indice: number
+      if (beforeId) {
+        indice = resto.findIndex((c) => c.id === beforeId) + 1
+      } else if (afterId) {
+        indice = resto.findIndex((c) => c.id === afterId)
+      } else {
+        indice = resto.length
+      }
+      const novo = [...resto]
+      novo.splice(indice, 0, { ...card, status: destino })
+      return novo
+    })
     rankCard.mutate({
       cardId: card.id,
-      beforeId: ordenado[alvo - 1]?.id ?? null,
-      afterId: ordenado[alvo + 1]?.id ?? null,
+      beforeId,
+      afterId,
     })
   }
 
@@ -267,22 +290,22 @@ export function KanbanView({
     const de = columns.findIndex((c) => `col:${c.id}` === activeId)
     const para = columns.findIndex((c) => `col:${c.id}` === overId)
     if (de === -1 || para === -1 || de === para) return
-    const nova = arrayMove(columns, de, para)
     // `order` é reescrito para todas: trocar só o par (como fazem as setas)
     // não resolve quando a coluna anda várias casas de uma vez.
-    nova.forEach((c, ordem) => {
-      if (c.order !== ordem) {
-        updateWorkflowStatus.mutate({ statusId: c.id, input: { order: ordem } })
-      }
-    })
+    const nova = arrayMove(columns, de, para).map((c, ordem) => ({ ...c, order: ordem }))
+    // Grava no cache já com a ordem final: sem isto a coluna volta pra
+    // posição antiga assim que o dnd-kit solta o transform, e só pula pro
+    // lugar certo quando a resposta do servidor chega — o pisca-pisca.
+    qc.setQueryData<WorkflowStatus[]>(["workflow-statuses", projectId], nova)
+    reorderWorkflowStatuses.mutate(nova.map((c) => c.id))
   }
 
   const moveColumn = (ws: WorkflowStatus, dir: -1 | 1) => {
     const idx = columns.findIndex((c) => c.id === ws.id)
-    const other = columns[idx + dir]
-    if (!other) return
-    updateWorkflowStatus.mutate({ statusId: ws.id, input: { order: other.order } })
-    updateWorkflowStatus.mutate({ statusId: other.id, input: { order: ws.order } })
+    if (idx + dir < 0 || idx + dir >= columns.length) return
+    const nova = arrayMove(columns, idx, idx + dir).map((c, ordem) => ({ ...c, order: ordem }))
+    qc.setQueryData<WorkflowStatus[]>(["workflow-statuses", projectId], nova)
+    reorderWorkflowStatuses.mutate(nova.map((c) => c.id))
   }
 
   return (
@@ -1103,10 +1126,7 @@ function Column({
     // diz "solta aqui" sem mover nada — e sai o `will-change` permanente, que
     // mantinha uma camada de composição por coluna sem necessidade.
     <div
-      ref={(node) => {
-        setNodeRef(node)
-        setColRef(node)
-      }}
+      ref={setNodeRef}
       style={{
         transform: CSS.Translate.toString(colTransform),
         transition: colTransition,
@@ -1130,8 +1150,16 @@ function Column({
       )}
     >
       {/* Header. É por aqui que a coluna é arrastada — a área do corpo continua
-          sendo alvo de drop dos cards. */}
+          sendo alvo de drop dos cards.
+
+          `setColRef` mora SÓ aqui, não no container inteiro: registrar os dois
+          hooks (droppable de card + sortable de coluna) no MESMO nó fazia os
+          dois competirem pelo mesmo retângulo na detecção de colisão, e o
+          `over` nunca resolvia pro id `col:` — arrastar a coluna simplesmente
+          não fazia nada ao soltar. Com o header isolado, cada um disputa só
+          a própria área. */}
       <div
+        ref={setColRef}
         {...(sortableId ? { ...colAttrs, ...colListeners } : {})}
         className={cx(
           "group/head flex items-center justify-between gap-2 px-3 pt-3 pb-2",
