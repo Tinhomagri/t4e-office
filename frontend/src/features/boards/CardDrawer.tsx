@@ -180,12 +180,17 @@ export function CardDrawer({
   sprints,
   members,
   onClose,
+  onOpenCard,
 }: {
   card: Card | null
   projectId: string
   sprints: Sprint[]
   members: Member[]
   onClose: () => void
+  // Abre outro card no lugar deste — usado pela subtarefa, que é um Card de
+  // verdade (só não aparece solta no board). Sem isto não tinha como entrar
+  // nela: a linha só marcava feito/não feito.
+  onOpenCard?: (card: Card) => void
 }) {
   const updateCard = useUpdateCard(projectId)
   const deleteCard = useDeleteCard(projectId)
@@ -367,7 +372,7 @@ export function CardDrawer({
               </>
             )}
 
-            <Subtasks parentCard={card} projectId={projectId} />
+            <Subtasks parentCard={card} projectId={projectId} onOpenCard={onOpenCard} />
 
             <Links card={card} projectId={projectId} />
 
@@ -836,7 +841,15 @@ function ApprovalPanel({ card, projectId }: { card: Card; projectId: string }) {
 // ---------------------------------------------------------------------------
 // Subtarefas (cards filhos via parent_id) — hit no backend
 // ---------------------------------------------------------------------------
-function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: string }) {
+function Subtasks({
+  parentCard,
+  projectId,
+  onOpenCard,
+}: {
+  parentCard: Card
+  projectId: string
+  onOpenCard?: (card: Card) => void
+}) {
   const { data: cards } = useCards(projectId)
   const createCard = useCreateCard(projectId)
   const updateCard = useUpdateCard(projectId)
@@ -876,8 +889,18 @@ function Subtasks({ parentCard, projectId }: { parentCard: Card; projectId: stri
       )}
       <ul className="space-y-1">
         {children.map((c) => (
-          <li key={c.id} className="flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
-            <button onClick={() => toggle(c)} className="text-paper-400 hover:text-success">
+          <li
+            key={c.id}
+            onClick={() => onOpenCard?.(c)}
+            className={cx(
+              "flex items-center gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5",
+              onOpenCard && "cursor-pointer hover:border-brand-300 dark:hover:border-brand-500/40",
+            )}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); toggle(c) }}
+              className="text-paper-400 hover:text-success"
+            >
               {c.status === "done" ? (
                 <CheckSquare className="size-4 text-success" />
               ) : (

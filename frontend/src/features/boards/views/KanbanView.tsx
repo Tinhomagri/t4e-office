@@ -188,6 +188,13 @@ export function KanbanView({
     })
   }, [allCards, scope, filters, jqlResults])
 
+  // Subtarefa não vira card solto no board — no Jira ela some dentro do card
+  // pai (o badge "2/5" já mostra o progresso). Sem isto ela ocupava sua
+  // própria coluna, dobrando a contagem visual do que já aparecia no pai.
+  // A visão "Agrupar por Subtarefas" é a exceção: o ponto dela é justamente
+  // separar item principal de subtarefa, então ali elas continuam visíveis.
+  const boardCards = swimlane === "subtask" ? scopeCards : scopeCards.filter((c) => !c.parent_id)
+
   const activeCard = scopeCards.find((c) => c.id === activeId) ?? null
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
@@ -478,7 +485,7 @@ export function KanbanView({
                   mode={swimlane}
                   epics={epicCards}
                   columns={columns}
-                  scopeCards={scopeCards}
+                  scopeCards={boardCards}
                   members={members ?? []}
                   projectId={projectId}
                   sprintId={currentSprintId}
@@ -505,7 +512,7 @@ export function KanbanView({
                       status={ws.slug}
                       label={ws.name}
                       color={ws.color}
-                      cards={scopeCards.filter((c) => c.status === ws.slug)}
+                      cards={boardCards.filter((c) => c.status === ws.slug)}
                       members={members ?? []}
                       projectId={projectId}
                       sprintId={currentSprintId}

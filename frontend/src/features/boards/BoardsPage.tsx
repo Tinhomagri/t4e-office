@@ -363,7 +363,7 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     <>
       <AnimatePresence>
         {openCard && (
-          <CardDrawer key={openCard.id} card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} />
+          <CardDrawer key={openCard.id} card={openCard} projectId={projectId} sprints={sprints ?? []} members={members ?? []} onClose={() => setOpenCard(null)} onOpenCard={setOpenCard} />
         )}
       </AnimatePresence>
       <NewCardModal projectId={projectId} sprintId={newCard?.sprintId ?? null} status={newCard?.status ?? null} onClose={() => setNewCardStatus(null)} />
