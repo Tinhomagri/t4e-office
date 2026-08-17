@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "contexts.sales",
     "contexts.chatwoot",
     "contexts.meetings",
+    "contexts.jira",
 ]
 
 # Em ambientes serverless (ex.: Vercel), daphne/channels podem não existir
