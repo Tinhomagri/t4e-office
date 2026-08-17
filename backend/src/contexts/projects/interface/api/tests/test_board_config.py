@@ -9,6 +9,7 @@ from contexts.identity.infrastructure.django.models import (
 )
 from contexts.projects.infrastructure.django.models import (
     BoardConfigModel,
+    CardModel,
     ProjectModel,
     WorkflowStatusModel,
 )
@@ -94,6 +95,22 @@ def test_patch_rejeita_chave_vazia(scenario):
         f"/api/projects/{scenario['project'].id}/", {"key": "  "}, format="json"
     )
     assert resp.status_code == 400
+
+
+def test_admin_deleta_o_projeto_e_leva_os_cards_junto(scenario):
+    project = scenario["project"]
+    CardModel.objects.create(project=project, number=1, title="Card")
+
+    resp = scenario["client"].delete(f"/api/projects/{project.id}/")
+    assert resp.status_code == 204
+    assert not ProjectModel.objects.filter(id=project.id).exists()
+    assert not CardModel.objects.filter(project_id=project.id).exists()
+
+
+def test_developer_nao_deleta_o_projeto(scenario):
+    resp = scenario["viewer_client"].delete(f"/api/projects/{scenario['project'].id}/")
+    assert resp.status_code == 403
+    assert ProjectModel.objects.filter(id=scenario["project"].id).exists()
 
 
 def test_salva_avatar_como_data_uri(scenario):

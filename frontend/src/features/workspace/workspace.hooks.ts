@@ -619,6 +619,14 @@ export function useUpdateProjectAvatar(projectId: string | null) {
   })
 }
 
+export function useDeleteProject() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId: string) => wsApi.deleteProject(projectId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  })
+}
+
 export function useBoardConfig(projectId: string | null) {
   return useQuery({
     queryKey: ["board-config", projectId],

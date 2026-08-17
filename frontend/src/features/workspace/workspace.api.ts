@@ -458,6 +458,10 @@ export async function updateProject(
   return data
 }
 
+export async function deleteProject(projectId: string): Promise<void> {
+  await api.delete(`/projects/${projectId}/`)
+}
+
 // Avatar por upload precisa de multipart; passar `null` remove a imagem e o
 // projeto volta a exibir o par emoji+cor.
 export async function updateProjectAvatar(

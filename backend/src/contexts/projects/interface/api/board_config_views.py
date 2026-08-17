@@ -182,6 +182,18 @@ class ProjectDetailView(APIView):
         project.save()
         return Response(_ser_project(project))
 
+    def delete(self, request: Request, project_id: str) -> Response:
+        """Apaga o projeto e tudo que pertence a ele (cards, sprints,
+        colunas, histórico — cascade no banco). Definitivo, só admin."""
+        assert_project_capability(
+            project_id=str(project_id),
+            user_id=_uid(request),
+            capability=caps.ADMINISTER_PROJECT,
+        )
+        project = _get_project(str(project_id))
+        project.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 # ── Config do quadro (swimlanes, layout do card, cores) ───────────────────────
 

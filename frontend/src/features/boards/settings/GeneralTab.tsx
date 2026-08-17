@@ -1,9 +1,11 @@
 // Aba "Geral" — identidade do projeto: avatar, nome, chave, categoria, lead.
 import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Globe2, Lock, Trash2, Upload } from "lucide-react"
 
 import { useSquads } from "@/features/poker/poker.hooks"
 import {
+  useDeleteProject,
   useProject,
   useUpdateProject,
   useUpdateProjectAvatar,
@@ -11,6 +13,7 @@ import {
 import type { ProjectDetail } from "@/features/workspace/workspace.types"
 import { Button, Field, Input, Select, Spinner, Textarea, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
+import { errMsg } from "../board.shared"
 
 import { ColorPicker, SettingsCard } from "./board-settings.shared"
 
@@ -38,7 +41,10 @@ export function GeneralTab({
   const { data: project, isLoading } = useProject(projectId)
   const update = useUpdateProject(projectId)
   const updateAvatar = useUpdateProjectAvatar(projectId)
+  const deleteProject = useDeleteProject()
+  const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Form local: só envia no submit, para o usuário poder desistir da edição.
   const [form, setForm] = useState<Partial<ProjectDetail>>({})
@@ -268,6 +274,94 @@ export function GeneralTab({
           </div>
         )}
       </SettingsCard>
+
+      {canEdit && (
+        <SettingsCard
+          title="Zona de perigo"
+          description="Excluir o board apaga TODOS os cards, sprints, colunas e histórico dele — definitivo, sem desfazer."
+        >
+          <Button
+            variant="danger"
+            icon={<Trash2 className="size-3.5" />}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Excluir board
+          </Button>
+        </SettingsCard>
+      )}
+
+      {confirmingDelete && (
+        <DeleteProjectModal
+          project={project}
+          isDeleting={deleteProject.isPending}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            try {
+              await deleteProject.mutateAsync(project.id)
+              toast.success(`Board ${project.key} excluído`)
+              navigate("/app/boards")
+            } catch (err) {
+              toast.error(errMsg(err))
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function DeleteProjectModal({
+  project,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  project: ProjectDetail
+  isDeleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const [confirmText, setConfirmText] = useState("")
+  const canConfirm = confirmText.trim().toUpperCase() === project.key
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div
+        className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm"
+        onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+      />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-paper-200 bg-white p-5 shadow-xl dark:border-ink-700 dark:bg-ink-800">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink dark:text-paper">
+          <Trash2 className="size-4 text-danger-500" />
+          Excluir o board {project.key}?
+        </h3>
+        <p className="mt-2 text-sm text-paper-500">
+          Apaga TODOS os cards, sprints, colunas e histórico. Definitivo. Pra
+          confirmar, digite a chave{" "}
+          <span className="font-semibold text-ink dark:text-paper">{project.key}</span>.
+        </p>
+        <input
+          autoFocus
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+          placeholder={project.key}
+          className="mt-3 w-full rounded-lg border border-paper-300 bg-paper px-3 py-2 text-sm outline-none focus:border-danger-400 dark:border-ink-700 dark:bg-ink-900"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={isDeleting}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={onConfirm}
+            disabled={!canConfirm || isDeleting}
+            loading={isDeleting}
+          >
+            Excluir board
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
