@@ -10,6 +10,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react"
 import { Children, isValidElement, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, Loader2, X } from "lucide-react"
 
 import type { PresenceStatus } from "@/features/workspace/workspace.types"
@@ -303,22 +304,40 @@ export function Select({
   ...rest
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   const [open, setOpen] = useState(false)
+  // Posição calculada na hora de abrir — o menu é portado pra fora do fluxo
+  // (document.body) porque, dentro de um Modal (body com overflow-y-auto), um
+  // dropdown absolute esticava o scrollHeight do container e quebrava a tela
+  // inteira (some era preciso rolar pra ver as opções).
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const wrapperRef = useRef<HTMLSpanElement>(null)
+  const menuRef = useRef<HTMLUListElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
 
   useEffect(() => {
     if (!open) return
     function onDocPointerDown(e: PointerEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (wrapperRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false)
     }
+    // Rolar a página/modal por trás invalida a posição calculada — fecha em
+    // vez de deixar o menu flutuando no lugar errado.
+    function onScrollOrResize() {
+      setOpen(false)
+    }
     document.addEventListener("pointerdown", onDocPointerDown)
     document.addEventListener("keydown", onKeyDown)
+    window.addEventListener("resize", onScrollOrResize)
+    document.addEventListener("scroll", onScrollOrResize, true)
     return () => {
       document.removeEventListener("pointerdown", onDocPointerDown)
       document.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("resize", onScrollOrResize)
+      document.removeEventListener("scroll", onScrollOrResize, true)
     }
   }, [open])
 
@@ -348,7 +367,13 @@ export function Select({
         disabled={disabled}
         aria-label={ariaLabel}
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) {
+            const r = wrapperRef.current?.getBoundingClientRect()
+            if (r) setMenuPos({ top: r.bottom + 6, left: r.left, width: r.width })
+          }
+          setOpen((o) => !o)
+        }}
         className={cx(
           CONTROL,
           "flex h-full w-full cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60",
@@ -357,28 +382,34 @@ export function Select({
         <span className="truncate">{current?.props.children}</span>
         <ChevronDown className={cx("size-3.5 shrink-0 text-paper-400 transition-transform", open && "rotate-180")} />
       </button>
-      {open && (
-        <ul className="absolute z-50 mt-1.5 max-h-64 w-full min-w-max overflow-auto rounded-xl border border-paper-200 bg-paper py-1 shadow-panel dark:border-ink-700 dark:bg-ink-900">
-          {options.map((o, i) => {
-            const v = String(o.props.value ?? "")
-            const active = v === String(value ?? "")
-            return (
-              <li key={v || i}>
-                <button
-                  type="button"
-                  onClick={() => pick(v)}
-                  className={cx(
-                    "flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-paper-100 dark:hover:bg-ink-800",
-                    active ? "font-medium text-brand-600 dark:text-brand-400" : "text-ink dark:text-paper",
-                  )}
-                >
-                  {o.props.children}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {open && menuPos &&
+        createPortal(
+          <ul
+            ref={menuRef}
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+            className="fixed z-50 max-h-64 min-w-max overflow-auto rounded-xl border border-paper-200 bg-paper py-1 shadow-panel dark:border-ink-700 dark:bg-ink-900"
+          >
+            {options.map((o, i) => {
+              const v = String(o.props.value ?? "")
+              const active = v === String(value ?? "")
+              return (
+                <li key={v || i}>
+                  <button
+                    type="button"
+                    onClick={() => pick(v)}
+                    className={cx(
+                      "flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-paper-100 dark:hover:bg-ink-800",
+                      active ? "font-medium text-brand-600 dark:text-brand-400" : "text-ink dark:text-paper",
+                    )}
+                  >
+                    {o.props.children}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>,
+          document.body,
+        )}
     </span>
   )
 }
