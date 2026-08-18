@@ -548,6 +548,7 @@ export type NotificationType =
   | "card_status_changed"
   | "automation_ran"
   | "sprint_started"
+  | "board_message"
 
 export interface Notification {
   id: string
