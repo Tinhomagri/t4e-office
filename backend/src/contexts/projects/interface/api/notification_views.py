@@ -4,6 +4,16 @@ Notificações em tempo real via SSE.
 SSE endpoint: GET /api/notifications/stream/
   → StreamingHttpResponse que polling DB a cada 3s e envia eventos novos.
 
+  O generator PRECISA ser assíncrono (`async def` + `asyncio.sleep`): rodando
+  sob ASGI (daphne), `StreamingHttpResponse.__aiter__` tenta `async for` no
+  generator antes de mais nada — um generator SÍNCRONO faz isso falhar
+  (TypeError) e cair num fallback que materializa ele INTEIRO via
+  `sync_to_async(list)(...)` antes de mandar qualquer byte, ou seja, o cliente
+  só recebe algo depois que o loop inteiro (os `max_duration` segundos)
+  terminar. Era exatamente esse o motivo do bipe/notificação chegando muito
+  depois — não delay de rede, era buffer da resposta inteira. Ver
+  django/http/response.py:531-545.
+
 REST:
   GET  /api/notifications/          → lista as 50 mais recentes
   POST /api/notifications/read-all/ → marca todas como lidas
@@ -11,6 +21,7 @@ REST:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import UTC, datetime
@@ -73,7 +84,7 @@ def _sse_event(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
-def _stream_notifications(user_id: str):
+async def _stream_notifications(user_id: str):
     """Generator: polls DB for new notifications and yields SSE events."""
     last_seen: datetime = datetime.now(tz=UTC)
 
@@ -90,13 +101,13 @@ def _stream_notifications(user_id: str):
             created_at__gt=last_seen,
         ).order_by("created_at")
 
-        for n in new_qs:
+        async for n in new_qs:
             yield _sse_event(_ser(n))
             last_seen = n.created_at
 
         # Heartbeat to keep connection alive
         yield ": ping\n\n"
-        time.sleep(poll_interval)
+        await asyncio.sleep(poll_interval)
 
 
 class NotificationStreamView(APIView):
