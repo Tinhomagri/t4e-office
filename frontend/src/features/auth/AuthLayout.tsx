@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
 import { type ReactNode } from "react"
+import { Link } from "react-router-dom"
 
 import { AuthCarousel } from "@/features/auth/AuthCarousel"
 import { EASE } from "@/shared/lib/motion"
@@ -93,7 +94,13 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
         </motion.div>
 
         <p className="absolute bottom-6 text-xs text-paper-400">
-          © T4E Group · Todos os direitos reservados
+          © T4E Group · Todos os direitos reservados ·{" "}
+          {/* Canal de denúncia é anônimo de propósito (ver AnonymousReportModel)
+              — precisa funcionar SEM login, então mora aqui, fora do fluxo
+              autenticado, acessível antes mesmo de entrar. */}
+          <Link to="/reports" className="underline-offset-4 hover:text-paper-600 hover:underline dark:hover:text-paper-300">
+            Canal de denúncias
+          </Link>
         </p>
       </div>
     </div>
