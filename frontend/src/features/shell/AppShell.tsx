@@ -1008,10 +1008,23 @@ function ProjectsNavLink({
   const isMarketing = kind === "marketing"
   const label = isMarketing ? "Campanhas" : "Boards"
   const Icon = isMarketing ? Megaphone : SquareKanban
+  const recentProjectIds = useSidebarPrefs((s) => s.recentProjectIds)
   // Projeto de marketing = qualquer template diferente de "software".
-  const projects = (allProjects ?? []).filter((p) =>
-    isMarketing ? !!p.template && p.template !== "software" : !p.template || p.template === "software",
-  )
+  const projects = useMemo(() => {
+    const filtered = (allProjects ?? []).filter((p) =>
+      isMarketing ? !!p.template && p.template !== "software" : !p.template || p.template === "software",
+    )
+    // Último aberto primeiro — sem isso a pessoa tinha que caçar o projeto
+    // que acabou de sair na lista alfabética inteira. Quem nunca foi aberto
+    // (não está no histórico) cai depois, na ordem alfabética de sempre.
+    const rank = new Map(recentProjectIds.map((id, i) => [id, i]))
+    return [...filtered].sort((a, b) => {
+      const ra = rank.get(a.id) ?? Infinity
+      const rb = rank.get(b.id) ?? Infinity
+      if (ra !== rb) return ra - rb
+      return a.name.localeCompare(b.name)
+    })
+  }, [allProjects, isMarketing, recentProjectIds])
 
   const onBoardsRoute = location.pathname.startsWith("/app/boards")
   const activeProjectId = onBoardsRoute ? searchParams.get("project") : null
@@ -1025,11 +1038,11 @@ function ProjectsNavLink({
   // Só o item realmente aberto ganha fundo. Pintar pai e filho ao mesmo tempo
   // dava duas seleções concorrentes na mesma coluna.
   const groupActive = selfActive || childActive
-  // Recolhido por padrão. Com dezenas de projetos importados, a lista aberta
-  // empurrava o resto do menu para fora da tela; quem quer ver expande. Abre
-  // sozinho apenas quando um projeto do grupo já está aberto, senão o item
-  // ativo ficaria escondido dentro de um grupo fechado.
-  const [open, setOpen] = useState(childActive)
+  // Aberto por padrão: só mostra INLINE_PROJECTS_LIMIT (6) de qualquer jeito,
+  // então não empurra o resto do menu — recolher só escondia a lista que a
+  // pessoa mais usa (agora ordenada por último aberto) e obrigava reabrir a
+  // cada visita.
+  const [open, setOpen] = useState(true)
   const [allOpen, setAllOpen] = useState(false)
   const visibleProjects = projects.slice(0, INLINE_PROJECTS_LIMIT)
   const hiddenCount = projects.length - visibleProjects.length
@@ -1137,6 +1150,7 @@ function ProjectRow({
   isMarketing: boolean
   onNavigate?: () => void
 }) {
+  const touchProject = useSidebarPrefs((s) => s.touchProject)
   return (
     // Fundo de hover mora AQUI (na linha inteira), não no NavLink de dentro —
     // antes o NavLink só cobria parte da largura (sobrava espaço pra
@@ -1151,7 +1165,10 @@ function ProjectRow({
     >
       <NavLink
         to={`/app/boards?project=${p.id}${isMarketing ? "&type=marketing" : ""}`}
-        onClick={onNavigate}
+        onClick={() => {
+          touchProject(p.id)
+          onNavigate?.()
+        }}
         className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5"
       >
         {p.avatar_url ? (
