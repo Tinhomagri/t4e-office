@@ -27,7 +27,7 @@ import {
   Target,
   Zap,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   useCompleteSprint,
@@ -104,6 +104,13 @@ export function BacklogView({
   const { data: epics } = useEpics(projectId)
 
   const [activeId, setActiveId] = useState<string | null>(null)
+  // Ordem otimista por lista logo após soltar um card: `rankCard` não tem
+  // optimistic update, então até o refetch chegar `cards` fica com a ordem
+  // pré-drag. Sem isto, um segundo drag antes do refetch calcula from/to
+  // contra a ordem velha (ex.: voltar ao slot original bate from===to e o
+  // rankCard nem chega a disparar). Some assim que `cards` renovar.
+  const [pendingOrder, setPendingOrder] = useState<Record<string, string[]>>({})
+  useEffect(() => setPendingOrder({}), [cards])
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [newGoal, setNewGoal] = useState("")
@@ -122,8 +129,20 @@ export function BacklogView({
 
   const visibleCards = epicFilter ? cards.filter((c) => c.epic_id === epicFilter) : cards
   // Lista de uma coluna (backlog = sprintId null), já na ordem manual.
-  const listOf = (sprintId: string | null) =>
-    visibleCards.filter((c) => (c.sprint_id ?? null) === sprintId).sort(byRank)
+  const listOf = (sprintId: string | null) => {
+    const base = visibleCards.filter((c) => (c.sprint_id ?? null) === sprintId)
+    const order = pendingOrder[sprintId ?? BACKLOG_DROP]
+    if (!order) return base.sort(byRank)
+    const pos = new Map(order.map((id, i) => [id, i]))
+    return [...base].sort((a, b) => {
+      const pa = pos.get(a.id)
+      const pb = pos.get(b.id)
+      if (pa != null && pb != null) return pa - pb
+      if (pa != null) return -1
+      if (pb != null) return 1
+      return byRank(a, b)
+    })
+  }
   const backlogCards = listOf(null)
   const activeCard = cards.find((c) => c.id === activeId) ?? null
 
@@ -165,6 +184,10 @@ export function BacklogView({
       if (pos === -1) return
       ordered = [...dest.slice(0, pos), card, ...dest.slice(pos)]
     }
+    setPendingOrder((prev) => ({
+      ...prev,
+      [destSprintId ?? BACKLOG_DROP]: ordered.map((c) => c.id),
+    }))
     rankCard.mutate({
       cardId: card.id,
       beforeId: ordered[pos - 1]?.id ?? null,
