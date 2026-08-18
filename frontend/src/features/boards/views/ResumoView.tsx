@@ -108,6 +108,10 @@ export function ResumoView({
     (c) => c.due_date && c.status !== "done" && new Date(c.due_date).getTime() <= next7 && new Date(c.due_date).getTime() >= now,
   )
 
+  // Carga de trabalho é só de quem de fato tem card aqui — `members` é o
+  // workspace inteiro, a maioria nunca tocou neste board específico.
+  const contributors = members.filter((m) => cards.some((c) => c.assignee_id === m.user_id))
+
   const statusCounts = (["backlog", "todo", "doing", "review", "done"] as CardStatus[]).map((s) => ({
     status: s, count: cards.filter((c) => c.status === s).length,
   })).filter((s) => s.count > 0)
@@ -186,7 +190,7 @@ export function ResumoView({
           <div className="mt-4 max-h-64 space-y-3 overflow-y-auto scrollbar-slim pr-1">
             {(activity ?? []).map((a) => (
               <div key={a.id} className="flex items-start gap-2.5">
-                <ColoredAvatar name={a.author_name} />
+                <ColoredAvatar name={a.author_name} userId={a.author_id} />
                 <p className="text-[13px] leading-snug text-paper-600 dark:text-paper-400">
                   <span className="font-medium text-ink dark:text-paper">{a.author_name}</span>{" "}
                   atualizou {fieldLabel(a.field)} em{" "}
@@ -248,12 +252,14 @@ export function ResumoView({
           <p className="text-sm font-semibold text-ink dark:text-paper">Carga de trabalho da equipe</p>
           <p className="mt-0.5 text-xs text-paper-400">Monitore a capacidade da equipe.</p>
           <div className="mt-4 space-y-3">
-            {members.map((m) => {
+            {/* Só quem de fato tem card neste board — `members` é o
+                workspace inteiro, e a maioria nunca tocou neste projeto. */}
+            {contributors.map((m) => {
               const open = cards.filter((c) => c.assignee_id === m.user_id && c.status !== "done")
               const pct = Math.round((open.length / Math.max(1, cards.filter((c) => c.status !== "done").length)) * 100)
               return (
                 <div key={m.user_id} className="flex items-center gap-3">
-                  <ColoredAvatar name={m.name} />
+                  <ColoredAvatar name={m.name} userId={m.user_id} />
                   <span className="w-24 shrink-0 truncate text-xs text-paper-500">{m.name}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-800">
                     <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-cyan-400" style={{ width: `${pct}%` }} />
@@ -278,7 +284,9 @@ export function ResumoView({
                 </div>
               ) : null
             })()}
-            {members.length === 0 && <p className="text-sm text-paper-400">Nenhum membro no workspace.</p>}
+            {contributors.length === 0 && cards.length === 0 && (
+              <p className="text-sm text-paper-400">Nenhum ticket ainda.</p>
+            )}
           </div>
         </section>
 

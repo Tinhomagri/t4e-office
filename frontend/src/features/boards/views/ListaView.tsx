@@ -351,7 +351,7 @@ export function ListaView({
                               ...members.map((m) => ({
                                 value: m.user_id,
                                 label: m.name,
-                                adornment: <ColoredAvatar name={m.name} size="xs" />,
+                                adornment: <ColoredAvatar name={m.name} userId={m.user_id} size="xs" />,
                               })),
                             ]}
                             onChange={(v) =>
@@ -360,7 +360,7 @@ export function ListaView({
                           >
                             {assignee ? (
                               <span className="flex items-center gap-2 text-xs text-ink dark:text-ink-200">
-                                <ColoredAvatar name={assignee.name} size="xs" />
+                                <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
                                 {assignee.name.split(" ")[0]}
                               </span>
                             ) : (

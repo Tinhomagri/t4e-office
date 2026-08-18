@@ -1,4 +1,7 @@
 // Constantes e helpers visuais compartilhados entre BoardsPage e KanbanView.
+import { AvatarCanvas } from "@/features/avatar/AvatarCanvas"
+import { useAvatarsBatch } from "@/features/office/office.hooks"
+import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { cx } from "@/shared/ui/primitives"
 import type { CardPriority, CardStatus, CardType } from "@/features/workspace/workspace.types"
 
@@ -120,7 +123,42 @@ export function dueState(due: string | null): DueState | null {
   return { tone: "bg-paper-100 text-paper-500", label, overdue: false }
 }
 
-export function ColoredAvatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" }) {
+// Iniciais coloridas por padrão; se `userId` tiver um personagem configurado
+// no Escritório, mostra ele no lugar — é a "foto" da pessoa no app inteiro,
+// não só lá no jogo. `userId` é opcional pra não quebrar quem só tem o nome
+// à mão (import antigo, autor de comentário externo, etc.).
+export function ColoredAvatar({
+  name,
+  userId,
+  size = "sm",
+}: {
+  name: string
+  userId?: string | null
+  size?: "xs" | "sm"
+}) {
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const { data: avatars } = useAvatarsBatch(workspaceId, userId ? [userId] : [])
+  const config = userId ? avatars?.[userId] : undefined
+  const dim = size === "xs" ? "size-5" : "size-6"
+
+  if (config) {
+    return (
+      <span
+        title={name}
+        className={cx(
+          // items-start (não center): o sprite é 16x32 (retrato inteiro),
+          // centralizar verticalmente cortaria a cabeça — alinhar no topo
+          // deixa o rosto dentro do círculo em vez do torso.
+          "grid shrink-0 justify-items-center overflow-hidden rounded-full bg-ink-800 ring-1 ring-inset ring-white/20 shadow-sm",
+          dim,
+        )}
+        style={{ alignContent: "start" }}
+      >
+        <AvatarCanvas config={config} anim="idle" dir="down" frozen scale={1} />
+      </span>
+    )
+  }
+
   const init = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
   const grad = avatarGradient(name)
   return (

@@ -149,6 +149,26 @@ def test_avatar_aparece_na_sala(scenario):
     assert bob["avatar_config"]["hair"] == 3
 
 
+def test_avatares_em_lote_so_devolve_quem_e_membro_do_workspace(scenario):
+    ws_id = str(scenario["ws"].id)
+    owner = scenario["owner"]
+    other = scenario["other"]
+    outsider = scenario["outsider"]  # não é membro deste workspace
+
+    UserAvatarModel.objects.create(user=owner, config={"name": "Ana", "hair": 1})
+    UserAvatarModel.objects.create(user=other, config={"name": "Bob", "hair": 3})
+    UserAvatarModel.objects.create(user=outsider, config={"name": "Zé", "hair": 9})
+
+    r = _client(owner).get(
+        "/api/presence/avatars/",
+        {"workspace_id": ws_id, "user_ids": f"{owner.id},{other.id},{outsider.id}"},
+    )
+    assert r.status_code == 200
+    assert set(r.data.keys()) == {str(owner.id), str(other.id)}
+    assert r.data[str(owner.id)]["hair"] == 1
+    assert str(outsider.id) not in r.data
+
+
 def test_card_em_andamento_com_mesa_aparece_sentado_sem_heartbeat(scenario):
     ws = scenario["ws"]
     other = scenario["other"]

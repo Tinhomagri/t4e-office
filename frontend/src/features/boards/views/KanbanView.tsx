@@ -377,7 +377,7 @@ export function KanbanView({
                       : "opacity-60 hover:opacity-100",
                   )}
                 >
-                  <ColoredAvatar name={m.name} size="sm" />
+                  <ColoredAvatar name={m.name} userId={m.user_id} size="sm" />
                 </button>
               ))}
             </div>
@@ -996,7 +996,7 @@ function SwimlaneBoard({
               {group.color ? (
                 <span className="size-2.5 rounded-full" style={{ backgroundColor: group.color }} />
               ) : mode === "assignee" && group.key !== "_none" ? (
-                <ColoredAvatar name={group.label} size="xs" />
+                <ColoredAvatar name={group.label} userId={group.key} size="xs" />
               ) : mode === "priority" ? (
                 <PriorityIcon priority={group.key as CardPriority} />
               ) : (
@@ -1846,7 +1846,7 @@ function AssigneePicker({
         className="rounded-full transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
       >
         {assignee ? (
-          <ColoredAvatar name={assignee.name} size="xs" />
+          <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
         ) : (
           <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 transition-colors hover:border-brand-500 hover:text-brand-500">
             ?
@@ -1903,7 +1903,7 @@ function AssigneePicker({
                       : "text-paper-600 dark:text-paper-400",
                   )}
                 >
-                  <ColoredAvatar name={m.name} size="xs" />
+                  <ColoredAvatar name={m.name} userId={m.user_id} size="xs" />
                   <span className="truncate">{m.name}</span>
                 </button>
               ))}
@@ -2079,7 +2079,7 @@ export function CardCell({
           {onAssign && !dragging ? (
             <AssigneePicker card={card} members={members} onAssign={onAssign} />
           ) : assignee ? (
-            <ColoredAvatar name={assignee.name} size="xs" />
+            <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
           ) : (
             <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400">
               ?

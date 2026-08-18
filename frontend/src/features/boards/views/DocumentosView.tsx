@@ -196,7 +196,7 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
               {members.length > 0 && (
                 <div className="hidden items-center -space-x-1.5 sm:flex" title="Membros com acesso a este documento">
                   {members.slice(0, 4).map((m) => (
-                    <ColoredAvatar key={m.user_id} name={m.name} size="xs" />
+                    <ColoredAvatar key={m.user_id} name={m.name} userId={m.user_id} size="xs" />
                   ))}
                 </div>
               )}

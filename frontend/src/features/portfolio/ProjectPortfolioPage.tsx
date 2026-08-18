@@ -243,7 +243,7 @@ export function ProjectPortfolioPage() {
                       <span className="shrink-0 font-mono text-xs text-paper-400">{c.points}pt</span>
                     )}
                     {memberName(c.assignee_id) && (
-                      <ColoredAvatar name={memberName(c.assignee_id)!} size="sm" />
+                      <ColoredAvatar name={memberName(c.assignee_id)!} userId={c.assignee_id} size="sm" />
                     )}
                   </li>
                 ))}

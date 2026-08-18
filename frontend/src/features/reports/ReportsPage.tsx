@@ -600,7 +600,7 @@ function WorkloadChart({ data, memberName }: {
             const pct = d.count ? Math.round((d.done / d.count) * 100) : 0
             return (
               <div key={d.id ?? "none"} className="flex items-center gap-2.5">
-                <ColoredAvatar name={name} size="sm" />
+                <ColoredAvatar name={name} userId={d.id} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="mb-0.5 flex items-center justify-between gap-2 text-xs">
                     <span className="truncate text-ink dark:text-paper">{name}</span>

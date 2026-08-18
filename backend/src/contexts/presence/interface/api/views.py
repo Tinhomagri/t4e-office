@@ -292,6 +292,34 @@ class AvatarView(APIView):
         return Response({"config": avatar.config}, status=status.HTTP_200_OK)
 
 
+class AvatarBatchView(APIView):
+    """GET /api/presence/avatars/?workspace_id=&user_ids=a,b,c — configs em
+    lote, pro board trocar a inicial genérica pelo personagem de cada
+    responsável sem uma requisição por card."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        workspace_id = str(request.query_params.get("workspace_id", ""))
+        if not workspace_id:
+            return Response({"error": "workspace_id obrigatório"}, status=400)
+        _assert_member(workspace_id, str(request.user.id))
+
+        requested = [
+            uid for uid in request.query_params.get("user_ids", "").split(",") if uid.strip()
+        ]
+        if not requested:
+            return Response({})
+
+        # Só devolve avatar de quem É membro deste workspace — evita
+        # devolver config de gente de fora pra quem manda um id qualquer.
+        member_ids = MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id__in=requested
+        ).values_list("user_id", flat=True)
+        avatars = UserAvatarModel.objects.filter(user_id__in=list(member_ids))
+        return Response({str(a.user_id): a.config for a in avatars})
+
+
 def _effective(presence: PresenceModel, now: datetime) -> str:
     return resolve_status(
         now=now,

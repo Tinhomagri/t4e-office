@@ -43,6 +43,19 @@ export async function getMyAvatar(): Promise<AvatarConfig | null> {
   return data.config
 }
 
+// Lote: o board resolve o personagem de todo mundo numa request só, em vez
+// de uma por card.
+export async function getAvatarsBatch(
+  workspaceId: string,
+  userIds: string[],
+): Promise<Record<string, AvatarConfig>> {
+  if (userIds.length === 0) return {}
+  const { data } = await api.get<Record<string, AvatarConfig>>("/presence/avatars/", {
+    params: { workspace_id: workspaceId, user_ids: userIds.join(",") },
+  })
+  return data
+}
+
 export async function saveAvatarConfig(config: AvatarConfig): Promise<AvatarConfig> {
   const { data } = await api.put<{ config: AvatarConfig }>("/presence/avatar/", {
     config,

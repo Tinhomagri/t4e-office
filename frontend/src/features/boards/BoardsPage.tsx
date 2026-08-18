@@ -1089,7 +1089,7 @@ function PokerLaunchModal({
                           </span>
                         )}
                         {assignee ? (
-                          <ColoredAvatar name={assignee.name} size="xs" />
+                          <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
                         ) : (
                           <span className="size-5 shrink-0" aria-hidden />
                         )}

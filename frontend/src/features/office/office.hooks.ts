@@ -62,3 +62,17 @@ export function useMyAvatar(enabled = true) {
     enabled,
   })
 }
+
+// Personagem de vários usuários numa request só — usado no board pra trocar
+// a inicial genérica pelo avatar de quem tem um configurado. `userIds` sem
+// ordenação estável faria a queryKey mudar (e refetchar) a cada render só
+// pela ordem diferente do array vindo de um novo `.map()`.
+export function useAvatarsBatch(workspaceId: string | null, userIds: string[]) {
+  const key = Array.from(new Set(userIds)).sort().join(",")
+  return useQuery({
+    queryKey: ["office-avatars-batch", workspaceId, key],
+    queryFn: () => officeApi.getAvatarsBatch(workspaceId!, key.split(",")),
+    enabled: !!workspaceId && key.length > 0,
+    staleTime: 5 * 60_000,
+  })
+}

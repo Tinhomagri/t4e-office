@@ -106,7 +106,7 @@ export function MembersPortfolioTab({ members, cards }: { members: Member[]; car
                 key={r.member.user_id}
                 className="inline-flex items-center gap-1.5 rounded-full bg-paper-50 px-2.5 py-1 text-xs text-paper-500 dark:bg-ink-900"
               >
-                <ColoredAvatar name={r.member.name} size="xs" />
+                <ColoredAvatar name={r.member.name} userId={r.member.user_id} size="xs" />
                 {r.member.name}
               </span>
             ))}
@@ -130,7 +130,7 @@ function MemberCard({ row }: { row: MemberPortfolio }) {
       />
 
       <div className="flex items-center gap-3">
-        <ColoredAvatar name={member.name} size="sm" />
+        <ColoredAvatar name={member.name} userId={member.user_id} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink dark:text-paper">{member.name}</p>
           <p className="truncate text-[11px] text-paper-400">{member.email}</p>
