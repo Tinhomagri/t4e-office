@@ -53,7 +53,6 @@ import {
   cx,
 } from "@/shared/ui/primitives"
 import { CardDrawer } from "./CardDrawer"
-import { NotificationBell } from "./NotificationBell"
 import { ColoredAvatar, PRIORITY_LABEL, STATUS_DOT, STATUS_LABEL, TYPE_LABEL, errMsg } from "./board.shared"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import {
@@ -229,7 +228,6 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
               : "Projetos e cards do workspace"
         }
       >
-        <NotificationBell />
         {activeProject && (
           <Button
             variant="ghost"
@@ -317,6 +315,16 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   const [openCard, setOpenCard] = useState<Card | null>(null)
   const setNewCardStatus = (status: CardStatus | null, sprintId: string | null = null) =>
     setNewCard(status ? { status, sprintId } : null)
+
+  // `openCard` é um snapshot — sem isto, depois de salvar (o que invalida e
+  // reconsulta `cards`), o card aberto no drawer continua com o valor ANTIGO
+  // como referência de "salvo", e o botão "Salvar/Cancelar" da descrição
+  // nunca some (fica achando que ainda há edição pendente).
+  useEffect(() => {
+    if (!openCard || !cards) return
+    const fresh = cards.find((c) => c.id === openCard.id)
+    if (fresh && fresh !== openCard) setOpenCard(fresh)
+  }, [cards, openCard])
 
   // Primeira coluna DESTE board, não "todo" cravado — projeto importado do
   // Jira (ou com colunas renomeadas/reordenadas) pode nem ter uma coluna

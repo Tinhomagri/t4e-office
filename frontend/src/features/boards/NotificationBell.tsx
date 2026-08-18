@@ -41,8 +41,10 @@ export function NotificationBell() {
 
   const unreadCount = (notifications ?? []).filter((n) => !n.read).length
 
-  // SSE: show toast when new notification arrives
+  // SSE: mensagem de cliente tem UI própria (bolinha de chat, ChatHeadsWidget)
+  // — toast/bipe daqui duplicaria. Aqui só o resto (card atribuído, etc).
   useNotificationStream((n) => {
+    if (n.type === "board_message") return
     setToastQueue((q) => [...q, n])
     setTimeout(() => setToastQueue((q) => q.filter((x) => x.id !== n.id)), 5_000)
   })

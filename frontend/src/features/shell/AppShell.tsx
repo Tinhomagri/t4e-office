@@ -1,6 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
-  Bell,
   Menu,
   CalendarClock,
   Check,
@@ -25,7 +24,9 @@ import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { ChatHeadsWidget } from "@/features/boards/ChatHeadsWidget"
 import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
+import { NotificationBell } from "@/features/boards/NotificationBell"
 import { AgendaPanel } from "@/features/integrations/AgendaPanel"
 import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
@@ -220,10 +221,7 @@ export function AppShell() {
               <Moon className="size-[18px]" strokeWidth={1.9} />
             )}
           </TopIcon>
-          <TopIcon label="Notificações">
-            <Bell className="size-[18px]" strokeWidth={1.9} />
-            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-danger ring-2 ring-paper dark:ring-ink-900" />
-          </TopIcon>
+          <NotificationBell />
           <TopIcon
             label="Agenda"
             active={agendaOpen}
@@ -337,6 +335,7 @@ export function AppShell() {
       </div>
 
       <CopilotChatWidget />
+      <ChatHeadsWidget />
       <AgendaPanel open={agendaOpen} onClose={() => setAgendaOpen(false)} />
     </div>
   )
