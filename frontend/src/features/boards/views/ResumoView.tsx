@@ -27,7 +27,7 @@ const STATUS_BAR: Record<CardStatus, string> = {
   briefing: "bg-purple-600", criacao: "bg-blue-500", aprovacao: "bg-yellow-500", agendado: "bg-teal-500", publicado: "bg-green-500",
 }
 const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
+  feature: "História", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
   post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const TYPE_BAR: Record<CardType, string> = {

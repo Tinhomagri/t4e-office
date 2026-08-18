@@ -29,7 +29,7 @@ export const STATUS_DOT: Record<CardStatus, string> = {
 }
 
 export const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature",
+  feature: "História",
   bug: "Bug",
   debt: "Débito",
   spike: "Spike",

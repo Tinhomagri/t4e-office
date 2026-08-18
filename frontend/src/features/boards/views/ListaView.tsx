@@ -35,7 +35,7 @@ const STATUS_DOT_COLOR: Record<CardStatus, string> = {
 }
 
 const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
+  feature: "História", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Epic",
   post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const PRIORITY_LABEL: Record<CardPriority, string> = {

@@ -167,7 +167,7 @@ class CardModel(models.Model):
         ("done", "Concluído"),
     ]
     TYPE_CHOICES = [
-        ("feature", "Feature"),
+        ("feature", "História"),
         ("bug", "Bug"),
         ("debt", "Débito técnico"),
         ("spike", "Spike"),

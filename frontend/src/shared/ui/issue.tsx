@@ -31,7 +31,7 @@ import { cn } from "@/shared/lib/cn"
 
 // ── Tipo de issue ────────────────────────────────────────────────────────────
 const TYPE_META: Record<CardType, { icon: LucideIcon; className: string; label: string }> = {
-  feature: { icon: Bookmark, className: "bg-blue-500 text-white", label: "Feature" },
+  feature: { icon: Bookmark, className: "bg-blue-500 text-white", label: "História" },
   bug: { icon: Bug, className: "bg-red-500 text-white", label: "Bug" },
   epic: { icon: Zap, className: "bg-violet-600 text-white", label: "Epic" },
   chore: { icon: CheckSquare, className: "bg-blue-500 text-white", label: "Tarefa" },

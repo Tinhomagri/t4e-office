@@ -109,7 +109,7 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   publicado: "Publicado",
 }
 const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature",
+  feature: "História",
   bug: "Bug",
   debt: "Débito",
   spike: "Spike",

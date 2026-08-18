@@ -56,7 +56,7 @@ const EMPTY_REPORTS: ProjectReports = {
 }
 
 const TYPE_LABEL: Record<CardType, string> = {
-  feature: "Feature", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Épico",
+  feature: "História", bug: "Bug", debt: "Débito", spike: "Spike", chore: "Tarefa", epic: "Épico",
   post: "Post", peca: "Peça", campanha: "Campanha", artigo: "Artigo", email: "E-mail",
 }
 const TYPE_COLOR: Record<CardType, string> = {
