@@ -62,5 +62,19 @@ export function computeHealth(project: Project, cards: BoardCard[]): ProjectHeal
   else if (reviewAging >= 3 || progress < 0.3) health = "off-track"
   else if (reviewAging >= 1 || progress < 0.6) health = "at-risk"
 
+  // Com prazo de contrato definido, cruza o progresso real com o tempo
+  // decorrido desde a criação do projeto até o prazo — pior sinal vence.
+  if (total > 0 && project.deadline) {
+    const start = new Date(project.created_at).getTime()
+    const end = new Date(`${project.deadline}T23:59:59`).getTime()
+    if (end > start) {
+      const timePct = Math.min(1, Math.max(0, (Date.now() - start) / (end - start)))
+      let byDeadline: Health = "on-track"
+      if ((timePct >= 1 && progress < 1) || progress < timePct - 0.15) byDeadline = "off-track"
+      else if (progress < timePct - 0.05) byDeadline = "at-risk"
+      if (HEALTH_RANK[byDeadline] < HEALTH_RANK[health]) health = byDeadline
+    }
+  }
+
   return { project, cards, total, done, pointsTotal, pointsDone, reviewAging, progress, health }
 }

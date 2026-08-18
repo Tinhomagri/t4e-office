@@ -76,6 +76,10 @@ class ProjectModel(models.Model):
     # pede de novo). Sem código configurado, o link sozinho já libera (como
     # era antes). Sem `unique`: o escopo já é o projeto (chega via token).
     public_access_code = models.CharField(max_length=16, null=True, blank=True, default=None)
+    # Prazo final do projeto (contrato). Digitado à mão ou aplicado a partir da
+    # extração por IA de um contrato enviado — usado no cálculo de saúde do
+    # portfólio (progresso real vs. tempo decorrido até esta data).
+    deadline = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -16,6 +16,7 @@ class AnalysisSerializer(serializers.Serializer):
     tasks = SuggestedTaskSerializer(many=True)
     decisions = serializers.ListField(child=serializers.CharField())
     risks = serializers.ListField(child=serializers.CharField())
+    deadline = serializers.CharField(allow_null=True, required=False)
 
 
 class DocumentSerializer(serializers.Serializer):

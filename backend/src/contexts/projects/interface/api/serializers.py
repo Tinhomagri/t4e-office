@@ -45,6 +45,8 @@ class ProjectSerializer(serializers.Serializer):
     avatar_emoji = serializers.CharField(allow_blank=True, default="")
     avatar_color = serializers.CharField(allow_blank=True, default="")
     avatar_url = serializers.CharField(allow_null=True, default=None)
+    deadline = serializers.CharField(allow_null=True, default=None)
+    created_at = serializers.CharField()
 
 
 _STATUS = [

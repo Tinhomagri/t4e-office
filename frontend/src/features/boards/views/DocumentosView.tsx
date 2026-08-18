@@ -2,21 +2,33 @@
 // servidor e compartilhados com todo o time do projeto (não mais um
 // protótipo em localStorage). Sincroniza com um poll leve (estilo Planning
 // Poker) para refletir edições de outros membros sem precisar de WebSocket.
-import { Check, Clock, FileText, Plus, Trash2, Users } from "lucide-react"
+import { Calendar, Check, Clock, FileText, Plus, Trash2, Upload, Users } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { cx } from "@/shared/ui/primitives"
+import { toast } from "@/shared/ui/toast"
 import { DocumentEditor } from "../DocumentEditor"
 import { ColoredAvatar } from "../board.shared"
 import { useAuthStore } from "@/features/auth/auth.store"
+import { analyzeDocument, ingestFile, type DocKind } from "@/features/copilot/copilot.api"
 import {
   useCreateDocument,
   useDeleteDocument,
   useDocument,
   useDocuments,
+  useProject,
   useUpdateDocument,
+  useUpdateProject,
+  useWorkspaces,
 } from "@/features/workspace/workspace.hooks"
 import { updateDocument as apiUpdateDocument } from "@/features/workspace/workspace.api"
-import type { Member } from "@/features/workspace/workspace.types"
+import type { Member, ProjectDetail } from "@/features/workspace/workspace.types"
+
+function kindFromFile(f: File): DocKind {
+  const n = f.name.toLowerCase()
+  if (n.endsWith(".pdf")) return "pdf"
+  if (n.endsWith(".docx")) return "docx"
+  return "text"
+}
 
 // Prévia em texto puro (sem tags HTML) para a lista lateral.
 function preview(html: string): string {
@@ -45,6 +57,9 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
   const createDoc = useCreateDocument(projectId)
   const updateDoc = useUpdateDocument(selectedId)
   const deleteDoc = useDeleteDocument(projectId)
+  const { data: project } = useProject(projectId)
+  const updateProject = useUpdateProject(projectId)
+  const { activeWorkspaceId } = useWorkspaces()
 
   const [editTitle, setEditTitle] = useState("")
   const [editContent, setEditContent] = useState("")
@@ -52,6 +67,14 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
   const pendingRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadedDocId = useRef<string | null>(null)
+  const contractFileRef = useRef<HTMLInputElement>(null)
+  const [uploadingContract, setUploadingContract] = useState(false)
+  // Prazo extraído pela IA do último contrato enviado, oferecido pra
+  // confirmação enquanto esse documento estiver aberto — não fica gravado
+  // em lugar nenhum até o usuário clicar em "Aplicar".
+  const [pendingDeadline, setPendingDeadline] = useState<{ docId: string; date: string } | null>(
+    null,
+  )
 
   // Seleciona o primeiro documento automaticamente quando a lista carrega.
   useEffect(() => {
@@ -98,6 +121,62 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
     setSelectedId(doc.id)
   }
 
+  // Sobe um contrato (PDF/DOCX), manda pra IA ler e já cria o documento do
+  // time com o resultado — assim o contrato fica junto dos outros documentos,
+  // não num lugar à parte. Se a IA achar uma data de entrega, oferece aplicar
+  // como prazo do projeto (usado no cálculo de saúde do portfólio).
+  async function handleUploadContract(file: File | null) {
+    if (!file || !activeWorkspaceId) return
+    flushPending()
+    setUploadingContract(true)
+    try {
+      const uploaded = await ingestFile(
+        activeWorkspaceId,
+        `Contrato — ${file.name}`,
+        kindFromFile(file),
+        file,
+      )
+      const analysis = await analyzeDocument(uploaded.id)
+      const content = [
+        `<p><strong>Resumo:</strong> ${analysis.summary || "—"}</p>`,
+        analysis.risks.length
+          ? `<p><strong>Riscos:</strong></p><ul>${analysis.risks.map((r) => `<li>${r}</li>`).join("")}</ul>`
+          : "",
+        analysis.decisions.length
+          ? `<p><strong>Decisões:</strong></p><ul>${analysis.decisions.map((d) => `<li>${d}</li>`).join("")}</ul>`
+          : "",
+      ].join("")
+      const doc = await createDoc.mutateAsync({
+        title: `Contrato — ${file.name}`,
+        content,
+      })
+      loadedDocId.current = doc.id
+      setEditTitle(doc.title)
+      setEditContent(content)
+      setSelectedId(doc.id)
+      if (analysis.deadline) {
+        setPendingDeadline({ docId: doc.id, date: analysis.deadline })
+      } else {
+        toast.info("Documento criado. A IA não encontrou uma data de entrega no contrato.")
+      }
+    } catch {
+      toast.error("Não foi possível ler o contrato.")
+    } finally {
+      setUploadingContract(false)
+    }
+  }
+
+  async function applyPendingDeadline() {
+    if (!pendingDeadline) return
+    try {
+      await updateProject.mutateAsync({ deadline: pendingDeadline.date })
+      toast.success("Prazo do projeto atualizado.")
+      setPendingDeadline(null)
+    } catch {
+      toast.error("Não foi possível aplicar o prazo.")
+    }
+  }
+
   // Autosave com debounce — editor rich-text não tem um "submit" natural;
   // salvar a cada pausa de digitação evita perder trabalho.
   function scheduleSave(title: string, content: string) {
@@ -130,16 +209,42 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-paper-500">
             <Users className="size-3.5" /> Documentos do time
           </span>
-          <button
-            onClick={createNewDoc}
-            disabled={createDoc.isPending}
-            className="grid size-6 place-items-center rounded-md text-paper-400 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper transition-colors disabled:opacity-40"
-            title="Novo documento"
-          >
-            <Plus className="size-4" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => contractFileRef.current?.click()}
+              disabled={uploadingContract}
+              className="grid size-6 place-items-center rounded-md text-paper-400 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper transition-colors disabled:opacity-40"
+              title="Enviar contrato (PDF/DOCX) — a IA lê e cria o documento"
+            >
+              <Upload className="size-4" />
+            </button>
+            <button
+              onClick={createNewDoc}
+              disabled={createDoc.isPending}
+              className="grid size-6 place-items-center rounded-md text-paper-400 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper transition-colors disabled:opacity-40"
+              title="Novo documento"
+            >
+              <Plus className="size-4" />
+            </button>
+          </div>
+          <input
+            ref={contractFileRef}
+            type="file"
+            accept=".pdf,.docx"
+            className="hidden"
+            onChange={(e) => {
+              handleUploadContract(e.target.files?.[0] ?? null)
+              e.target.value = ""
+            }}
+          />
         </div>
+        <DeadlineStrip project={project} update={updateProject} />
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 scrollbar-slim">
+          {uploadingContract && (
+            <p className="px-2 py-2 text-center text-xs text-paper-400">
+              Lendo contrato com IA…
+            </p>
+          )}
           {listLoading && (
             <p className="px-2 py-4 text-center text-xs text-paper-400">Carregando…</p>
           )}
@@ -211,6 +316,30 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
             </div>
           </div>
 
+          {pendingDeadline?.docId === selectedId && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-paper-100 bg-brand-50 px-4 py-2 text-[13px] text-brand-700 dark:border-ink-800 dark:bg-brand-500/10 dark:text-brand-300">
+              <Calendar className="size-3.5 shrink-0" />
+              <span>
+                A IA encontrou o prazo de entrega{" "}
+                <strong>{new Date(`${pendingDeadline.date}T00:00:00`).toLocaleDateString("pt-BR")}</strong>{" "}
+                neste contrato.
+              </span>
+              <button
+                onClick={applyPendingDeadline}
+                disabled={updateProject.isPending}
+                className="ml-auto rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600 transition-colors disabled:opacity-50"
+              >
+                Definir como prazo do projeto
+              </button>
+              <button
+                onClick={() => setPendingDeadline(null)}
+                className="text-xs text-brand-600 hover:underline dark:text-brand-300"
+              >
+                Ignorar
+              </button>
+            </div>
+          )}
+
           {/* Editor rich-text completo: blocos, tabela, imagem, link, checklist, fonte, cor... */}
           {detailLoading && !detail ? (
             <div className="flex flex-1 items-center justify-center text-sm text-paper-400">
@@ -244,6 +373,55 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
             </button>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Prazo do projeto (contrato): campo manual, sempre visível — a extração
+// por IA no upload é um atalho pra preencher isto, não o único caminho.
+function DeadlineStrip({
+  project,
+  update,
+}: {
+  project: ProjectDetail | undefined
+  update: ReturnType<typeof useUpdateProject>
+}) {
+  const [value, setValue] = useState("")
+
+  useEffect(() => {
+    setValue(project?.deadline ?? "")
+  }, [project?.deadline])
+
+  if (!project) return null
+
+  async function save() {
+    try {
+      await update.mutateAsync({ deadline: value || null })
+      toast.success("Prazo do projeto atualizado.")
+    } catch {
+      toast.error("Não foi possível salvar o prazo.")
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 border-b border-paper-100 px-3 py-1.5 dark:border-ink-800">
+      <Calendar className="size-3.5 shrink-0 text-paper-400" />
+      <span className="text-[11px] text-paper-500">Prazo:</span>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="min-w-0 flex-1 bg-transparent text-[11px] text-ink outline-none dark:text-paper"
+      />
+      {value !== (project.deadline ?? "") && (
+        <button
+          onClick={save}
+          disabled={update.isPending}
+          className="shrink-0 rounded-md bg-brand-500 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600 transition-colors disabled:opacity-50"
+        >
+          Salvar
+        </button>
       )}
     </div>
   )

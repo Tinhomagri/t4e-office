@@ -12,6 +12,7 @@ e WorkflowStatusReorderView (config do quadro em si — coluna, swimlane, layout
 from __future__ import annotations
 
 import secrets
+from datetime import date
 
 from django.db import transaction
 from rest_framework import status
@@ -93,6 +94,8 @@ def _ser_project(project: ProjectModel) -> dict:
         ),
         "squad_id": str(project.squad_id) if project.squad_id else None,
         "visibility": project.visibility,
+        "deadline": project.deadline.isoformat() if project.deadline else None,
+        "created_at": project.created_at.isoformat(),
         "public_token": project.public_token,
         "public_allow_create": project.public_allow_create,
         "public_access_code": project.public_access_code,
@@ -183,6 +186,16 @@ class ProjectDetailView(APIView):
                 if not pertence:
                     raise ValidationError("Squad não encontrada neste workspace.")
             project.squad_id = squad_id
+
+        if "deadline" in request.data:
+            raw_deadline = request.data["deadline"]
+            if not raw_deadline:
+                project.deadline = None
+            else:
+                try:
+                    project.deadline = date.fromisoformat(str(raw_deadline))
+                except ValueError as exc:
+                    raise ValidationError("Data de prazo inválida. Use o formato AAAA-MM-DD.") from exc
 
         if "public_allow_create" in request.data:
             project.public_allow_create = bool(request.data["public_allow_create"])

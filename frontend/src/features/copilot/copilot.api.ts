@@ -15,6 +15,8 @@ export interface Analysis {
   tasks: SuggestedTask[]
   decisions: string[]
   risks: string[]
+  // Prazo final extraído (contrato/proposta), "AAAA-MM-DD", ou null.
+  deadline: string | null
 }
 
 export interface CopilotDocument {

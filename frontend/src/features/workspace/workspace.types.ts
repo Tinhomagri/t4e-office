@@ -42,6 +42,8 @@ export interface Project {
   avatar_emoji: string
   avatar_color: string
   avatar_url: string | null
+  deadline: string | null
+  created_at: string
 }
 
 // /projects/<id>/ — projeto com os campos da aba "Geral" da configuração do quadro.
@@ -78,6 +80,7 @@ export interface UpdateProjectInput {
   // Só o servidor decide o valor do token — isto só pede a ação.
   public_token_action?: "generate" | "revoke"
   public_access_code_action?: "generate" | "revoke"
+  deadline?: string | null
 }
 
 export interface BoardMessage {

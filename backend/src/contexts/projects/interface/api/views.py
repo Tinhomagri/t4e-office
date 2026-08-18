@@ -81,6 +81,8 @@ class ProjectListCreateView(APIView):
                     "avatar_emoji": projeto.avatar_emoji,
                     "avatar_color": projeto.avatar_color,
                     "avatar_url": projeto.avatar_image or None,
+                    "deadline": None,
+                    "created_at": projeto.created_at.isoformat(),
                 }
             ).data,
             status=status.HTTP_201_CREATED,
@@ -129,6 +131,12 @@ class ProjectListCreateView(APIView):
                     "avatar_emoji": modelos[str(p.id)].avatar_emoji,
                     "avatar_color": modelos[str(p.id)].avatar_color,
                     "avatar_url": modelos[str(p.id)].avatar_image or None,
+                    "deadline": (
+                        modelos[str(p.id)].deadline.isoformat()
+                        if modelos[str(p.id)].deadline
+                        else None
+                    ),
+                    "created_at": modelos[str(p.id)].created_at.isoformat(),
                 }
                 for p in projects
             ],

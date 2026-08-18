@@ -20,6 +20,8 @@ class AnalysisResult:
     tasks: list[SuggestedTask] = field(default_factory=list)
     decisions: list[str] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)
+    # Prazo final extraído (contrato/proposta), ISO "AAAA-MM-DD", quando houver.
+    deadline: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -27,4 +29,5 @@ class AnalysisResult:
             "tasks": [t.__dict__ for t in self.tasks],
             "decisions": self.decisions,
             "risks": self.risks,
+            "deadline": self.deadline,
         }

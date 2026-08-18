@@ -30,15 +30,20 @@ SCHEMA = {
         },
         "decisions": {"type": "array", "items": {"type": "string"}},
         "risks": {"type": "array", "items": {"type": "string"}},
+        # Prazo final do projeto, quando o documento é um contrato/proposta com
+        # data de entrega — string ISO (AAAA-MM-DD) ou null se não houver.
+        "deadline": {"type": ["string", "null"]},
     },
-    "required": ["summary", "tasks", "decisions", "risks"],
+    "required": ["summary", "tasks", "decisions", "risks", "deadline"],
     "additionalProperties": False,
 }
 
 SYSTEM = (
     "Você é um analista de projetos. Recebe documentos e transcrições (reuniões, "
-    "atas, especificações) em português e extrai: um resumo objetivo, uma lista de "
-    "tarefas acionáveis, as decisões tomadas e os riscos identificados. "
+    "atas, especificações, contratos) em português e extrai: um resumo objetivo, "
+    "uma lista de tarefas acionáveis, as decisões tomadas, os riscos identificados "
+    "e, se o documento for um contrato ou proposta com prazo final de entrega, essa "
+    "data (formato AAAA-MM-DD; null se não houver data de entrega explícita). "
     "Tarefas devem ter títulos curtos e imperativos (ex.: 'Implementar login por SSO') "
     "e descrição com o contexto necessário. Classifique prioridade e tipo de cada tarefa. "
     "Responda sempre em português."
@@ -170,4 +175,5 @@ def parse_analysis(raw: str) -> AnalysisResult:
         ],
         decisions=data.get("decisions", []),
         risks=data.get("risks", []),
+        deadline=data.get("deadline") or None,
     )
