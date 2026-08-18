@@ -14,6 +14,7 @@ from contexts.projects.infrastructure.django.models import (
     CardCommentModel,
     CardModel,
     ProjectModel,
+    SprintModel,
     WorkflowStatusModel,
 )
 
@@ -66,6 +67,43 @@ def test_board_publico_traz_card_completo_sem_autenticacao(cenario):
 
 
 @pytest.mark.django_db
+def test_board_publico_mostra_so_sprint_ativa_igual_o_board_interno(cenario):
+    """Cópia exata do time: card de sprint fechada/planejada some, card sem
+    sprint (backlog) também some quando existe sprint ativa — igual o
+    `KanbanView` escolhe sozinho ao abrir (nunca mistura tudo junto)."""
+    p = cenario["projeto"]
+    ativa = SprintModel.objects.create(project=p, name="Ativa", status="active")
+    outra = SprintModel.objects.create(project=p, name="Fechada", status="closed")
+    da_ativa = CardModel.objects.create(
+        project=p, number=2, title="Da sprint ativa", status="todo", sprint=ativa,
+    )
+    CardModel.objects.create(
+        project=p, number=3, title="De outra sprint", status="todo", sprint=outra,
+    )
+    # cenario["card"] (number=1) não tem sprint — é backlog, também some.
+
+    r = APIClient().get("/api/public/boards/tok-123/")
+    assert r.status_code == 200
+    titulos = {c["title"] for c in r.data["cards"]}
+    assert titulos == {"Da sprint ativa"}
+    assert da_ativa.title in titulos
+
+
+@pytest.mark.django_db
+def test_board_publico_mostra_backlog_quando_nenhuma_sprint_ativa(cenario):
+    p = cenario["projeto"]
+    fechada = SprintModel.objects.create(project=p, name="Fechada", status="closed")
+    CardModel.objects.create(project=p, number=2, title="De sprint fechada", status="todo", sprint=fechada)
+
+    r = APIClient().get("/api/public/boards/tok-123/")
+    assert r.status_code == 200
+    titulos = {c["title"] for c in r.data["cards"]}
+    # cenario["card"] (sem sprint) aparece — é backlog e não há sprint ativa.
+    assert cenario["card"].title in titulos
+    assert "De sprint fechada" not in titulos
+
+
+@pytest.mark.django_db
 def test_projeto_sem_link_nao_aparece_por_token_vazio(cenario):
     """Token nulo em outro projeto não pode ser alcançável por URL vazia."""
     ProjectModel.objects.create(workspace=cenario["ws"], name="Sem link", key="SL")
@@ -96,6 +134,23 @@ def test_criar_card_publico_funciona_quando_liberado(cenario):
     assert novo.title == "Sugestão do cliente"
     assert novo.source == "public_link"
     assert novo.status == "todo"
+
+
+@pytest.mark.django_db
+def test_card_criado_pelo_link_publico_entra_no_topo(cenario):
+    """Mesma regra do board real: card novo primeiro, não no fim da coluna."""
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+    cenario["card"].rank = "m"
+    cenario["card"].save(update_fields=["rank"])
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/", {"title": "Card do cliente"}, format="json"
+    )
+    assert r.status_code == 201
+    novo = CardModel.objects.get(id=r.data["id"])
+    cenario["card"].refresh_from_db()
+    assert novo.rank < cenario["card"].rank
 
 
 @pytest.mark.django_db

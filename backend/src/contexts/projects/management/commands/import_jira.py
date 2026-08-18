@@ -584,6 +584,15 @@ class Command(BaseCommand):
                     if not CardModel.objects.filter(project=project, status=orfa.slug).exists():
                         orfa.delete()
 
+            # Import nunca seta `rank` (só `order`, a posição na coluna do
+            # Jira) — sem isto, todo card importado ficava com rank="" pra
+            # sempre, e um card novo criado depois pelo app caía no FIM da
+            # coluna em vez do topo (rank vazio sempre vem antes de qualquer
+            # rank real na ordenação). Idempotente: não toca em quem já tem.
+            from contexts.projects.infrastructure.lexorank import backfill_missing_ranks
+
+            backfill_missing_ranks(CardModel, str(project.id))
+
         return len(issues)
 
     def _import_comments(self, issue_key: str, card: CardModel) -> None:

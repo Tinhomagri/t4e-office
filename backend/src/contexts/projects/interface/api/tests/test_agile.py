@@ -140,6 +140,50 @@ def test_concluir_sprint_move_abertos_para_outra_sprint(scenario):
     assert str(aberto.sprint_id) == str(s2.id)
 
 
+def test_novo_card_entra_no_topo_da_coluna(scenario):
+    """Card criado tem que aparecer primeiro na coluna — ninguém quer descer
+    até o card #300 pra achar o que acabou de criar."""
+    p = scenario["project"]
+    client = scenario["client"]
+    antigo = _card(p, 1, status="todo", rank="m")
+
+    resp = client.post(
+        f"/api/projects/{p.id}/cards/", {"title": "Novo", "status": "todo"}, format="json"
+    )
+    assert resp.status_code == 201
+    novo = CardModel.objects.get(id=resp.json()["id"])
+    antigo.refresh_from_db()
+    assert novo.rank < antigo.rank
+
+
+def test_card_com_rank_vazio_nao_engana_o_topo_apos_backfill(scenario):
+    """Reprodução do bug real: projeto todo importado do Jira nunca ganhou
+    rank (fica ""), então `rank_at_top` sozinho acha "ninguém tem rank" e
+    devolve um valor que, por não ser vazio, sempre cai DEPOIS de "" —
+    o card novo ia pro fim mesmo com a regra de topo certa. O backfill
+    (`backfill_missing_ranks`, chamado pela migração 0038 e ao fim de todo
+    import do Jira) tem que resolver isso de vez."""
+    from contexts.projects.infrastructure.lexorank import backfill_missing_ranks
+
+    p = scenario["project"]
+    client = scenario["client"]
+    antigo1 = _card(p, 1, status="todo")  # rank="" — igual card importado do Jira
+    antigo2 = _card(p, 2, status="todo")  # rank="" também
+
+    backfill_missing_ranks(CardModel, str(p.id))
+    antigo1.refresh_from_db()
+    antigo2.refresh_from_db()
+    assert antigo1.rank and antigo2.rank  # ninguém mais fica com rank vazio
+    assert antigo1.rank < antigo2.rank  # ordem original (number) preservada
+
+    resp = client.post(
+        f"/api/projects/{p.id}/cards/", {"title": "Novo", "status": "todo"}, format="json"
+    )
+    assert resp.status_code == 201
+    novo = CardModel.objects.get(id=resp.json()["id"])
+    assert novo.rank < antigo1.rank  # agora sim vai pro topo de verdade
+
+
 def test_rerank_entre_vizinhos(scenario):
     p = scenario["project"]
     client = scenario["client"]

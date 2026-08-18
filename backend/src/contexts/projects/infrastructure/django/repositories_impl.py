@@ -134,18 +134,11 @@ class DjangoCardRepository(CardRepository):
         return (agg["m"] or 0) + 1
 
     def create(self, *, card: Card) -> Card:
-        # Rank no fim da lista do projeto quando não informado (Lexorank).
+        # Rank no INÍCIO da coluna quando não informado (Lexorank).
         if not card.rank:
-            from contexts.projects.infrastructure.lexorank import rank_between
+            from contexts.projects.infrastructure.lexorank import rank_at_top
 
-            last = (
-                CardModel.objects.filter(project_id=card.project_id)
-                .exclude(rank="")
-                .order_by("-rank")
-                .values_list("rank", flat=True)
-                .first()
-            )
-            card.rank = rank_between(last or "", "")
+            card.rank = rank_at_top(card.project_id)
         row = CardModel.objects.create(
             project_id=card.project_id,
             number=card.number,

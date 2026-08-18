@@ -29,8 +29,10 @@ from contexts.projects.infrastructure.django.models import (
     CardCommentModel,
     CardModel,
     ProjectModel,
+    SprintModel,
     WorkflowStatusModel,
 )
+from contexts.projects.infrastructure.lexorank import rank_at_top
 from contexts.projects.interface.api.notification_views import notify
 from shared.domain.errors import NotFoundError, ValidationError
 
@@ -124,9 +126,20 @@ class PublicBoardView(APIView):
             return Response({"code_required": True}, status=401)
 
         columns = WorkflowStatusModel.objects.filter(project=project).order_by("order")
+
+        # Cópia exata do que o time vê por padrão no board interno: sprint
+        # ativa se houver uma, senão backlog (cards sem sprint) — o mesmo
+        # escopo que `KanbanView` seleciona sozinho ao abrir (nunca "todos os
+        # cards de todas as sprints juntos", que não é uma visão real de lá).
+        active_sprint = SprintModel.objects.filter(project=project, status="active").first()
+        cards_qs = CardModel.objects.filter(project=project, archived_at__isnull=True)
+        cards_qs = (
+            cards_qs.filter(sprint_id=active_sprint.id)
+            if active_sprint
+            else cards_qs.filter(sprint__isnull=True)
+        )
         cards = (
-            CardModel.objects.filter(project=project, archived_at__isnull=True)
-            .select_related("project")
+            cards_qs.select_related("project")
             .prefetch_related("comments__author")
             .order_by("status", "rank", "order", "number")
         )
@@ -183,6 +196,9 @@ class PublicCardCreateView(APIView):
             title=title[:200],
             description=description,
             status=column.slug if column else "todo",
+            # Mesma regra do board real: card novo entra no topo, não no fim
+            # (senão o board público desalinha da ordem que o time vê).
+            rank=rank_at_top(str(project.id)),
             # Marca a origem: card de fora do time, não confundir com o que
             # o próprio time criou — útil pra saber de onde veio a sugestão.
             source="public_link",

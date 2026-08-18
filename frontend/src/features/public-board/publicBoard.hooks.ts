@@ -8,8 +8,10 @@ export function usePublicBoard(token: string | undefined, code?: string) {
     queryFn: () => api.getPublicBoard(token!, code),
     enabled: !!token,
     // Outras pessoas podem estar olhando o mesmo link ao mesmo tempo que o
-    // dev trabalha — reconsulta sozinho pra não parecer parado.
-    refetchInterval: 15_000,
+    // dev trabalha — reconsulta sozinho pra não parecer parado. Mais rápido
+    // que o board interno porque aqui não tem SSE/notificação nenhuma
+    // avisando de mudança — é o único jeito de perceber algo novo.
+    refetchInterval: 5_000,
     retry: false,
   })
 }

@@ -83,6 +83,9 @@ export function useCards(projectId: string | null, jql?: string) {
     queryKey: ["cards", projectId, jql],
     queryFn: () => wsApi.listCards(projectId!, jql),
     enabled: !!projectId,
+    // Card pode chegar por fora (link público, outra pessoa no time) — sem
+    // isto só aparecia dando F5. Igual ao poll do mural/board público.
+    refetchInterval: 10_000,
   })
 }
 
