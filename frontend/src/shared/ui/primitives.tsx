@@ -326,7 +326,8 @@ export function Select({
     }
     // Rolar a página/modal por trás invalida a posição calculada — fecha em
     // vez de deixar o menu flutuando no lugar errado.
-    function onScrollOrResize() {
+    function onScrollOrResize(e: Event) {
+      if (menuRef.current?.contains(e.target as Node)) return
       setOpen(false)
     }
     document.addEventListener("pointerdown", onDocPointerDown)
