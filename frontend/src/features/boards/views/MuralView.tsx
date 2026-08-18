@@ -21,49 +21,17 @@ function fmt(d: string) {
   })
 }
 
-// Bipe curto via Web Audio — sem depender de arquivo de áudio nenhum.
-function beep() {
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.frequency.value = 880
-    osc.type = "sine"
-    gain.gain.setValueAtTime(0.15, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35)
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.start()
-    osc.stop(ctx.currentTime + 0.35)
-  } catch {
-    // Navegador sem AudioContext ou bloqueou autoplay — silencioso, sem quebrar a tela.
-  }
-}
-
 export function MuralView({ projectId }: { projectId: string }) {
+  // Bipe de mensagem nova mora no sino (NotificationBell), global — inclusive
+  // com o app aberto fora desta aba. Aqui dentro seria bipe duplicado.
   const { data: messages, isLoading } = useBoardMessages(projectId)
   const create = useCreateBoardMessage(projectId)
   const [body, setBody] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
-  // IDs já vistos — o bipe é só pra mensagem NOVA de fora, não pra toda
-  // atualização do poll (senão tocaria de novo a cada 10s à toa).
-  const seenIds = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages?.length])
-
-  useEffect(() => {
-    if (!messages) return
-    if (seenIds.current === null) {
-      // Primeira carga: só registra o que já existe, não bipa histórico.
-      seenIds.current = new Set(messages.map((m) => m.id))
-      return
-    }
-    const novas = messages.filter((m) => !seenIds.current!.has(m.id))
-    messages.forEach((m) => seenIds.current!.add(m.id))
-    if (novas.some((m) => !m.from_team)) beep()
-  }, [messages])
 
   const submit = () => {
     const t = body.trim()
