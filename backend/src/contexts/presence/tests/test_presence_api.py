@@ -238,3 +238,29 @@ def test_sala_nao_mistura_andares(scenario):
     andar2 = c.get("/api/presence/room/", {"workspace_id": ws_id, "floor": 2})
     assert [r["user_id"] for r in andar2.data] == [str(other.id)]
     assert andar2.data[0]["floor"] == 2
+
+
+def test_delivery_champion_ranqueia_por_pontos_nao_por_quantidade(scenario):
+    """Quem entregou 1 card de 8 pontos tem que ganhar de quem entregou 3
+    cards sem pontuação — o destaque é por pontuação, não por unidade."""
+    ws_id = str(scenario["ws"].id)
+    owner = scenario["owner"]
+    other = scenario["other"]
+    proj = ProjectModel.objects.create(workspace_id=ws_id, name="Proj", key="PRJ")
+
+    # Bob: 3 cards entregues, sem pontuação (soma 0).
+    for i in range(1, 4):
+        CardModel.objects.create(
+            project=proj, number=i, title=f"C{i}", assignee=other,
+            status="done", resolution="done",
+        )
+    # Ana: 1 card só, mas vale 8 pontos — tem que vencer no ranking por pontos.
+    CardModel.objects.create(
+        project=proj, number=10, title="Grande entrega", assignee=owner,
+        status="done", resolution="done", points=8,
+    )
+
+    r = _client(owner).get("/api/presence/delivery-champion/", {"workspace_id": ws_id})
+    assert r.status_code == 200
+    assert r.data["user_id"] == str(owner.id)
+    assert r.data["deliveries"] == 8

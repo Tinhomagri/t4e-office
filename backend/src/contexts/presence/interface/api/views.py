@@ -4,7 +4,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef, Q, Sum
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -216,11 +217,16 @@ class DeliveryChampionView(APIView):
         delivered_this_week = Q(resolved_at__gte=week_start) | Q(
             resolved_at__isnull=True, updated_at__gte=week_start
         )
+        # Ranking por PONTOS entregues, não quantidade de cards — um card de
+        # 8 pontos vale mais que três de 1, e o destaque tem que refletir
+        # isso. `Coalesce` zera quem só entregou card sem pontuação, senão
+        # `Sum` devolve NULL e bagunça o `order_by` (NULL não compara com
+        # inteiro de forma previsível).
         winner = (
             CardModel.objects.filter(project__workspace_id=workspace_id, assignee__isnull=False)
             .filter(delivered, delivered_this_week)
             .values("assignee_id", "assignee__full_name")
-            .annotate(deliveries=Count("id"))
+            .annotate(deliveries=Coalesce(Sum("points"), 0))
             .order_by("-deliveries", "assignee__full_name")
             .first()
         )

@@ -1062,7 +1062,7 @@ export class OfficeEngine {
     ctx.fillText(name, Math.round(x + 252), Math.round(y + 64))
     ctx.fillStyle = "#a6323b"
     ctx.font = "bold 14px monospace"
-    ctx.fillText(`${champion.deliveries} CARDS ENTREGUES`, Math.round(x + 252), Math.round(y + 88))
+    ctx.fillText(`${champion.deliveries} PONTOS ENTREGUES`, Math.round(x + 252), Math.round(y + 88))
     ctx.restore()
   }
 
