@@ -397,6 +397,29 @@ def test_mural_notifica_todo_mundo_do_workspace(cenario):
 
 
 @pytest.mark.django_db
+def test_mural_nao_notifica_quem_o_admin_excluiu(cenario):
+    from contexts.projects.infrastructure.django.models import NotificationModel
+
+    membro_comum = UserModel.objects.create_user(
+        email="membro@t4e.com", password="x", full_name="Comum", is_active=True
+    )
+    MembershipModel.objects.create(workspace=cenario["ws"], user=membro_comum, role="member")
+    cenario["projeto"].mural_notification_excluded_user_ids = [str(membro_comum.id)]
+    cenario["projeto"].save(update_fields=["mural_notification_excluded_user_ids"])
+
+    APIClient().post(
+        "/api/public/boards/tok-123/messages/",
+        {"author_name": "Cliente", "body": "Oi, tudo bem?"},
+        format="json",
+    )
+
+    notificados = set(
+        NotificationModel.objects.filter(type="board_message").values_list("user_id", flat=True)
+    )
+    assert notificados == {cenario["dono"].id}
+
+
+@pytest.mark.django_db
 def test_board_com_codigo_configurado_exige_codigo(cenario):
     cenario["projeto"].public_access_code = "ABC234"
     cenario["projeto"].save(update_fields=["public_access_code"])

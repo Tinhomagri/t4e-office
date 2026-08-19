@@ -198,6 +198,13 @@ export function GeneralTab({
 
       <AccessCard project={project} canEdit={canEdit} update={update} />
 
+      <MuralNotificationsCard
+        project={project}
+        members={members}
+        canEdit={canEdit}
+        update={update}
+      />
+
       <SettingsCard title="Detalhes" description="Nome, chave e responsáveis do projeto.">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nome">
@@ -368,6 +375,55 @@ function DeleteProjectModal({
 
 // Squad dona + visibilidade — a mesma coisa que a criação de board já pede,
 // só que aqui edita um projeto que já existe. Sem isto, só dava pra declarar
+function MuralNotificationsCard({
+  project,
+  members,
+  canEdit,
+  update,
+}: {
+  project: ProjectDetail
+  members: Member[]
+  canEdit: boolean
+  update: ReturnType<typeof useUpdateProject>
+}) {
+  const excluded = new Set(project.mural_notification_excluded_user_ids)
+
+  const toggle = (userId: string) => {
+    const next = new Set(excluded)
+    if (next.has(userId)) next.delete(userId)
+    else next.add(userId)
+    update.mutate(
+      { mural_notification_excluded_user_ids: Array.from(next) },
+      { onError: () => toast.error("Não foi possível salvar quem recebe notificação do mural.") },
+    )
+  }
+
+  return (
+    <SettingsCard
+      title="Notificações do mural"
+      description="Quem recebe bipe e notificação quando o cliente escreve no mural deste board. Todo mundo recebe por padrão — desmarque quem não precisa."
+    >
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {members.map((m) => (
+          <label
+            key={m.user_id}
+            className="flex items-center gap-2 rounded-lg border border-paper-200 p-2 text-[13px] dark:border-ink-700"
+          >
+            <input
+              type="checkbox"
+              checked={!excluded.has(m.user_id)}
+              disabled={!canEdit}
+              onChange={() => toggle(m.user_id)}
+              className="size-3.5 accent-brand-600"
+            />
+            {m.name}
+          </label>
+        ))}
+      </div>
+    </SettingsCard>
+  )
+}
+
 function AccessCard({
   project,
   canEdit,

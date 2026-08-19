@@ -336,9 +336,11 @@ class PublicMessageListCreateView(APIView):
         # card é quem mais precisa saber que o cliente escreveu, e antes só
         # owner/admin recebiam: o resto do time não tinha bipe nem
         # atualização instantânea nenhuma, só via no próximo poll (10s).
+        # Exceto quem o admin excluiu explicitamente na config do board.
+        excluidos = set(project.mural_notification_excluded_user_ids)
         destinatarios = MembershipModel.objects.filter(
             workspace_id=project.workspace_id
-        ).values_list("user_id", flat=True)
+        ).exclude(user_id__in=excluidos).values_list("user_id", flat=True)
         for user_id in destinatarios:
             notify(
                 str(user_id),

@@ -63,6 +63,9 @@ export interface ProjectDetail extends Project {
   // link pede este código; depois o navegador lembra. Nulo = link sozinho
   // já libera (sem portão).
   public_access_code: string | null
+  // Membros do workspace que NÃO recebem notificação/bipe quando o cliente
+  // escreve no mural deste board. Vazio = todo mundo recebe (default).
+  mural_notification_excluded_user_ids: string[]
 }
 
 export interface UpdateProjectInput {
@@ -81,6 +84,7 @@ export interface UpdateProjectInput {
   public_token_action?: "generate" | "revoke"
   public_access_code_action?: "generate" | "revoke"
   deadline?: string | null
+  mural_notification_excluded_user_ids?: string[]
 }
 
 export interface BoardMessageReplyTo {

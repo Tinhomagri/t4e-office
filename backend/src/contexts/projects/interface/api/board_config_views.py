@@ -99,6 +99,9 @@ def _ser_project(project: ProjectModel) -> dict:
         "public_token": project.public_token,
         "public_allow_create": project.public_allow_create,
         "public_access_code": project.public_access_code,
+        "mural_notification_excluded_user_ids": list(
+            project.mural_notification_excluded_user_ids
+        ),
     }
 
 
@@ -199,6 +202,21 @@ class ProjectDetailView(APIView):
 
         if "public_allow_create" in request.data:
             project.public_allow_create = bool(request.data["public_allow_create"])
+
+        if "mural_notification_excluded_user_ids" in request.data:
+            from contexts.identity.infrastructure.django.models import MembershipModel
+
+            raw_ids = request.data["mural_notification_excluded_user_ids"] or []
+            ids = [str(i) for i in raw_ids]
+            pertencem = {
+                str(uid)
+                for uid in MembershipModel.objects.filter(
+                    workspace_id=project.workspace_id, user_id__in=ids
+                ).values_list("user_id", flat=True)
+            }
+            if len(pertencem) != len(set(ids)):
+                raise ValidationError("Algum usuário não pertence a este workspace.")
+            project.mural_notification_excluded_user_ids = ids
 
         # Gerar/revogar o link público — nunca aceita um token vindo do
         # cliente: só o servidor decide o valor, senão dava pra "escolher"

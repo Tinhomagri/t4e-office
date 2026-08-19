@@ -80,6 +80,11 @@ class ProjectModel(models.Model):
     # extração por IA de um contrato enviado — usado no cálculo de saúde do
     # portfólio (progresso real vs. tempo decorrido até esta data).
     deadline = models.DateField(null=True, blank=True)
+    # Quem do workspace NÃO quer bipe/notificação de mensagem do mural deste
+    # board. Lista de user_id (string) em vez de M2M: evita ter que popular
+    # "todo mundo" na migração — vazio já significa "ninguém excluído", igual
+    # o comportamento de antes desta configuração existir.
+    mural_notification_excluded_user_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

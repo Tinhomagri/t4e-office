@@ -97,6 +97,31 @@ def test_patch_rejeita_chave_vazia(scenario):
     assert resp.status_code == 400
 
 
+def test_patch_define_quem_fica_de_fora_das_notificacoes_do_mural(scenario):
+    project = scenario["project"]
+    resp = scenario["client"].patch(
+        f"/api/projects/{project.id}/",
+        {"mural_notification_excluded_user_ids": [str(scenario["viewer"].id)]},
+        format="json",
+    )
+    assert resp.status_code == 200
+    project.refresh_from_db()
+    assert project.mural_notification_excluded_user_ids == [str(scenario["viewer"].id)]
+    assert resp.data["mural_notification_excluded_user_ids"] == [str(scenario["viewer"].id)]
+
+
+def test_patch_rejeita_usuario_de_fora_do_workspace_na_exclusao_do_mural(scenario):
+    fora = UserModel.objects.create_user(
+        email="fora@t4e.com", password="x", full_name="Fora", is_active=True
+    )
+    resp = scenario["client"].patch(
+        f"/api/projects/{scenario['project'].id}/",
+        {"mural_notification_excluded_user_ids": [str(fora.id)]},
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
 def test_admin_deleta_o_projeto_e_leva_os_cards_junto(scenario):
     project = scenario["project"]
     CardModel.objects.create(project=project, number=1, title="Card")
