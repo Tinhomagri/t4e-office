@@ -604,7 +604,14 @@ export function OfficeRoom({
               {hoveredCard.cards!.map((card, i) => (
                 <div
                   key={card.id}
-                  className={i > 0 ? "mt-1.5 border-t border-gray-700 pt-1.5" : undefined}
+                  // O balão fica flutuando POR CIMA do boneco — clicar nele é o
+                  // gesto natural (é o que está embaixo do cursor), não só
+                  // acertar o pixel exato do avatar por baixo.
+                  onClick={() => navigate(`/app/boards?project=${card.project_id}&card=${card.id}`)}
+                  className={cx(
+                    "cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-white/10",
+                    i > 0 && "mt-1.5 border-t border-gray-700 pt-1.5",
+                  )}
                 >
                   <div className="font-semibold">
                     #{card.number} {card.title}
