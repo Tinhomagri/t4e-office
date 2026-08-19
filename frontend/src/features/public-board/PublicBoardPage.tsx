@@ -241,8 +241,8 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
           <p className="py-8 text-center text-xs text-white/30">Nenhuma mensagem ainda.</p>
         ) : (
           (messages ?? []).map((m) => (
-            <div key={m.id} className={cx("group flex items-end gap-1", m.from_team ? "justify-end" : "justify-start")}>
-              {!m.from_team && (
+            <div key={m.id} className={cx("group flex items-end gap-1", m.from_team ? "justify-start" : "justify-end")}>
+              {m.from_team && (
                 <button
                   onClick={() => setReplyingTo(m)}
                   title="Responder"
@@ -253,7 +253,7 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
               )}
               <div
                 className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-[13px] ${
-                  m.from_team ? "bg-brand-600 text-white" : "bg-white/[0.06] text-white/90"
+                  m.from_team ? "bg-white/[0.06] text-white/90" : "bg-brand-600 text-white"
                 }`}
               >
                 <p className="mb-0.5 text-[10px] font-medium opacity-60">
@@ -263,7 +263,7 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
                   <div
                     className={cx(
                       "mb-1 rounded-md border-l-2 px-1.5 py-0.5 text-[11px] opacity-80",
-                      m.from_team ? "border-white/40 bg-white/10" : "border-brand-400 bg-white/5",
+                      m.from_team ? "border-brand-400 bg-white/5" : "border-white/40 bg-white/10",
                     )}
                   >
                     <p className="font-medium">{m.reply_to.author_name}</p>
@@ -272,7 +272,7 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
                 )}
                 <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
               </div>
-              {m.from_team && (
+              {!m.from_team && (
                 <button
                   onClick={() => setReplyingTo(m)}
                   title="Responder"
