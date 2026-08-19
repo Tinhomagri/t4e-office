@@ -28,5 +28,5 @@ lint:  ## Lint backend (ruff) + typecheck frontend
 	cd backend && ruff check src
 	cd frontend && npm run lint
 
-prod-deploy:  ## Build das imagens Docker e migrate em produção (rodar no servidor)
-	cd /opt/t4e-office/deploy && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml exec web python manage.py migrate
+prod-deploy:  ## Build das imagens Docker, migrate e restart em produção (rodar no servidor)
+	cd /opt/t4e-office/deploy && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml exec web python manage.py migrate && docker compose -f docker-compose.prod.yml up -d
