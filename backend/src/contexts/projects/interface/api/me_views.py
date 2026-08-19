@@ -21,6 +21,7 @@ from contexts.projects.infrastructure.django.models import (
     CardModel,
     ProjectModel,
     SprintModel,
+    WorkflowStatusModel,
 )
 from contexts.projects.interface.api.card_views import card_row
 from contexts.projects.interface.api.serializers import CardSerializer, SprintSerializer
@@ -60,6 +61,18 @@ class MyWorkView(APIView):
             .select_related("project")
             .order_by("due_date", "created_at")
         )
+        # A coluna "em andamento" não é sempre o slug "doing" — cada time
+        # renomeia/adiciona colunas à vontade (ex.: "em-andamento", "testes").
+        # `is_working` é a flag real (mesma que senta o boneco na mesa no
+        # Escritório); sem ela, "Em andamento" no Meu Dia comparava status
+        # contra o literal "doing" e ficava zerado pra qualquer board com
+        # coluna renomeada.
+        working_slugs = set(
+            WorkflowStatusModel.objects.filter(
+                project_id__in=project_ids, is_working=True
+            ).values_list("project_id", "slug")
+        )
+
         # `project_key`/`project_name` vão junto porque esta tela mistura
         # projetos de workspaces diferentes: sem eles o card não tem como dizer
         # de onde veio.
@@ -67,7 +80,11 @@ class MyWorkView(APIView):
             card_row(
                 cm,
                 cm.project.key,
-                {"project_key": cm.project.key, "project_name": cm.project.name},
+                {
+                    "project_key": cm.project.key,
+                    "project_name": cm.project.name,
+                    "is_working": (cm.project_id, cm.status) in working_slugs,
+                },
             )
             for cm in cards
         ]

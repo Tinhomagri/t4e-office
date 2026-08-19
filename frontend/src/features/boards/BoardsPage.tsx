@@ -326,6 +326,26 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
     if (fresh && fresh !== openCard) setOpenCard(fresh)
   }, [cards, openCard])
 
+  // Deep-link ?card=<id> (usado pelo clique no boneco do Escritório, por
+  // exemplo): abre o drawer direto assim que a lista carrega, e limpa o
+  // parâmetro da URL — sem isso, um F5 na mesma URL reabriria o card sempre.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const cardParam = searchParams.get("card")
+    if (!cardParam || !cards) return
+    const found = cards.find((c) => c.id === cardParam)
+    if (found) setOpenCard(found)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete("card")
+        return next
+      },
+      { replace: true },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, searchParams])
+
   // Primeira coluna DESTE board, não "todo" cravado — projeto importado do
   // Jira (ou com colunas renomeadas/reordenadas) pode nem ter uma coluna
   // "todo"; criar sem escolher coluna sempre caía nela mesmo assim, e o card

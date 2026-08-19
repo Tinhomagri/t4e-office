@@ -30,6 +30,7 @@ import {
   Bookmark,
   CalendarDays,
   Check,
+  Clock,
   ChevronDown,
   ChevronRight,
   Filter,
@@ -52,6 +53,7 @@ import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
 import { cardFade, dragLift, dropFlight, popCheck, settleSpring } from "@/shared/lib/motion"
+import { formatDoingSince } from "@/shared/lib/businessTime"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
 import { useBoardPrefs, colKey } from "../board.prefs.store"
@@ -1966,7 +1968,7 @@ export function CardCell({
   const nSub = card.subtasks_count ?? 0
   const nComments = card.comments_count ?? 0
   const nFiles = card.attachments_count ?? 0
-  const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null
+  const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null || !!card.doing_since
 
   return (
     <div
@@ -2079,6 +2081,15 @@ export function CardCell({
               <span className={cx("inline-flex items-center gap-1 rounded px-1.5 py-0.5", due.tone)}>
                 <CalendarDays className="size-3" />
                 {due.label}
+              </span>
+            )}
+            {card.doing_since && (
+              <span
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300"
+                title="Tempo em andamento (horário comercial)"
+              >
+                <Clock className="size-3" />
+                {formatDoingSince(card.doing_since)}
               </span>
             )}
             {nSub > 0 && (

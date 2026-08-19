@@ -52,6 +52,7 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
         cards.append(
             {
                 "id": str(card.id),
+                "project_id": str(card.project_id),
                 "number": card.number,
                 "title": card.title,
                 "project": card.project.key,

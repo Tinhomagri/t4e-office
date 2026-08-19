@@ -134,7 +134,10 @@ export function sliceMyDay(cards: BoardCard[], userId: string | undefined, today
     // pendência do dia — contá-lo inflava o KPI todo fim de sprint.
     dueToday: open.filter((c) => c.due_date?.slice(0, 10) === today),
     overdue: open.filter((c) => c.due_date != null && c.due_date.slice(0, 10) < today),
-    inProgress: mine.filter((c) => c.status === "doing"),
+    // `is_working` reflete a config real da coluna (WorkflowStatusModel),
+    // não o slug — um board com a coluna renomeada (ex.: "em-andamento",
+    // "testes") não usa mais o literal "doing" e ficava fora daqui.
+    inProgress: mine.filter((c) => c.is_working),
     review: mine.filter((c) => c.status === "review"),
     todo: mine.filter((c) => c.status === "todo"),
     delivered: mine.filter(isDelivered),

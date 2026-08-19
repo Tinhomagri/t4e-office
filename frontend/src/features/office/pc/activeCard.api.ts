@@ -2,6 +2,7 @@ import { api } from "@/shared/api/client"
 
 export interface ActiveCardItem {
   id: string
+  project_id: string
   number: number
   title: string
   project: string

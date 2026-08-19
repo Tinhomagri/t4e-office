@@ -6,6 +6,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Keyboard, MessageSquare, Mic, MicOff, Smile, Video, VideoOff, Volume2, VolumeX } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 import type { AvatarConfig, Direction } from "@/features/avatar/avatar.types"
 import { useAuthStore } from "@/features/auth/auth.store"
@@ -32,11 +33,11 @@ import { buildFloor } from "./world/floors"
 import type { OfficeMap } from "./world/map"
 import { TILE } from "./world/tiles"
 import { useWorldStore } from "./world.store"
-import { getMockActiveCard, getMockRoom, MOCK_DELIVERY_CHAMPION, MOCK_DESK_ASSIGNMENTS } from "./office.mock"
 import { OfficeVideoOverlay } from "./OfficeVideoOverlay"
 import { joinOfficeRoom, type JoinResult } from "@/features/meetings/meetings.api"
 import { mediaErrorMessage, type MediaKind } from "@/features/meetings/MediaSync"
 import { toast as notify } from "@/shared/ui/toast"
+import { formatDoingSince } from "@/shared/lib/businessTime"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -46,42 +47,6 @@ const KEEPALIVE_MS = 3000
 // dá ~7 amostras/s, suficiente para a interpolação do cliente suavizar sem
 // transformar cada passo numa requisição.
 const MOVE_PUBLISH_MS = 150
-
-const BUSINESS_DAY_START_HOUR = 9
-const BUSINESS_DAY_END_HOUR = 18
-
-// Minutos "de expediente" entre duas datas: só conta 09h-18h de segunda a
-// sexta — card parado no fim de semana ou de madrugada não deve parecer que
-// o dev trabalhou nesse tempo todo. Anda dia a dia somando só a sobreposição
-// de cada dia útil com a janela [start, end].
-function businessMinutesBetween(start: Date, end: Date): number {
-  if (end <= start) return 0
-  let total = 0
-  const cursor = new Date(start)
-  cursor.setHours(0, 0, 0, 0)
-  while (cursor < end) {
-    const isWeekday = cursor.getDay() >= 1 && cursor.getDay() <= 5
-    if (isWeekday) {
-      const dayStart = new Date(cursor)
-      dayStart.setHours(BUSINESS_DAY_START_HOUR, 0, 0, 0)
-      const dayEnd = new Date(cursor)
-      dayEnd.setHours(BUSINESS_DAY_END_HOUR, 0, 0, 0)
-      const from = start > dayStart ? start : dayStart
-      const to = end < dayEnd ? end : dayEnd
-      if (to > from) total += (to.getTime() - from.getTime()) / 60000
-    }
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  return Math.round(total)
-}
-
-function formatDoingSince(iso: string): string {
-  const minutes = businessMinutesBetween(new Date(iso), new Date())
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (hours === 0) return `${mins}min`
-  return `${hours}h${mins > 0 ? ` ${mins}min` : ""}`
-}
 
 /** Andar da sala de Planning Poker (ver world/floors/index.ts). */
 const POKER_FLOOR = 2
@@ -99,15 +64,13 @@ const EMOTES: { anim: string; label: string; icon: string }[] = [
 export function OfficeRoom({
   workspaceId,
   myConfig,
-  mock = false,
 }: {
   workspaceId: string
   myConfig: AvatarConfig
-  mock?: boolean
 }) {
   const me = useAuthStore((s) => s.user)
   const floor = useWorldStore((s) => s.floor)
-  const queryWorkspaceId = mock ? null : workspaceId
+  const queryWorkspaceId = workspaceId
   const room = useRoom(queryWorkspaceId, floor)
   const deliveryChampionQuery = useDeliveryChampion(queryWorkspaceId)
   const heartbeat = useHeartbeat()
@@ -131,8 +94,9 @@ export function OfficeRoom({
   // alguém já ter atribuído algo — trava circular numa instalação nova).
   const members = useMembers(queryWorkspaceId)
   const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
-  const canManageDesks = mock || myRole === "owner" || myRole === "admin"
+  const canManageDesks = myRole === "owner" || myRole === "admin"
 
+  const navigate = useNavigate()
   const [hoverUserId, setHoverUserId] = useState<string | null>(null)
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
@@ -158,15 +122,15 @@ export function OfficeRoom({
     hoverCloseTimerRef.current = window.setTimeout(closeHoverNow, 100)
   }, [cancelHoverClose, closeHoverNow])
   useEffect(() => cancelHoverClose, [cancelHoverClose])
-  const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks && !mock)
-  const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, !mock)
-  const roomMembers = mock ? getMockRoom(floor) : room.data
-  const deliveryChampion = mock ? MOCK_DELIVERY_CHAMPION : deliveryChampionQuery.data
+  const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks)
+  const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, true)
+  const roomMembers = room.data
+  const deliveryChampion = deliveryChampionQuery.data
   const currentDeskAssignments = useMemo(
-    () => (mock && floor === 1 ? MOCK_DESK_ASSIGNMENTS : (deskAssignments.data ?? [])),
-    [mock, floor, deskAssignments.data],
+    () => deskAssignments.data ?? [],
+    [deskAssignments.data],
   )
-  const hoveredCard = mock ? getMockActiveCard(hoverUserId) : activeCard.data
+  const hoveredCard = activeCard.data
   const { data: squads = [] } = useSquads(queryWorkspaceId)
   const squadDoHover = hoverUserId
     ? squads.find((sq) => sq.members.some((m) => m.user_id === hoverUserId))
@@ -282,7 +246,7 @@ export function OfficeRoom({
     engineRef.current = engine
     setEngineEpoch((n) => n + 1)
 
-    engine.spawnSelf(mock ? "demo-admin" : (me?.id ?? "me"), mock ? "Admin Demo" : (me?.full_name ?? "Você"), myConfig)
+    engine.spawnSelf(me?.id ?? "me", me?.full_name ?? "Você", myConfig)
 
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
@@ -395,10 +359,6 @@ export function OfficeRoom({
   // Publicação de presença. Dois gatilhos: o movimento (via `publishRef`, com
   // throttle) e este intervalo, que cobre quem está parado.
   useEffect(() => {
-    if (mock) {
-      publishRef.current = null
-      return
-    }
     const send = () => {
       lastPublishRef.current = performance.now()
       heartbeat.mutate({
@@ -422,7 +382,7 @@ export function OfficeRoom({
       publishRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, mock])
+  }, [workspaceId])
 
   // O toast de interação some sozinho.
   useEffect(() => {
@@ -488,11 +448,29 @@ export function OfficeRoom({
     const rect = e.currentTarget.getBoundingClientRect()
     const engine = engineRef.current
     if (!engine) return
-    engine.clickTo(e.clientX - rect.left, e.clientY - rect.top)
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+
+    // Clicou num colega com card ativo: abre o board dele direto no card,
+    // em vez de andar até lá — é o mesmo hit-test do hover, então só
+    // navega quando já temos o card carregado pra esse usuário (evita
+    // clique cru virar navegação errada por causa de uma resposta velha).
+    if (canManageDesks) {
+      const clickedUserId = engine.hoverSeatAt(localX, localY)
+      if (clickedUserId && clickedUserId === hoverUserId && hoveredCard?.active) {
+        const card = hoveredCard.cards?.[0]
+        if (card) {
+          navigate(`/app/boards?project=${card.project_id}&card=${card.id}`)
+          return
+        }
+      }
+    }
+
+    engine.clickTo(localX, localY)
     // clickTo levanta o avatar sem passar pelo onInteract — quem estava
     // sentado na mesa de poker precisa perder a roda de cartas aqui.
     if (!engine.isSeated()) usePokerRoomStore.getState().closeVote()
-  }, [])
+  }, [canManageDesks, hoverUserId, hoveredCard, navigate])
 
   const onCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -556,7 +534,7 @@ export function OfficeRoom({
   // abram duas conexões.
   const enableMedia = async (kind: "voice" | "camera") => {
     const next = kind === "voice" ? !voiceEnabled : !cameraEnabled
-    if (next && !officeSession && !mock) {
+    if (next && !officeSession) {
       if (joiningMedia.current) return
       joiningMedia.current = true
       try {

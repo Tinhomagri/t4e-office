@@ -168,6 +168,12 @@ class CardSerializer(serializers.Serializer):
     # por projeto o front já sabe de que projeto o card é.
     project_key = serializers.CharField(allow_blank=True, default="")
     project_name = serializers.CharField(allow_blank=True, default="")
+    # Só o Meu Dia preenche isto (mistura cards de várias colunas com nomes
+    # livres) — os demais consumidores de CardSerializer ficam com o default.
+    is_working = serializers.BooleanField(default=False)
+    # Desde quando o card está numa coluna `is_working` (config do board, não
+    # o slug "doing") — null quando o card não está numa coluna dessas.
+    doing_since = serializers.DateTimeField(allow_null=True, default=None)
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

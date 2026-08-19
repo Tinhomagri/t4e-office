@@ -241,3 +241,36 @@ def test_children_de_epico_e_subtarefas(scenario):
     assert [r["ref"] for r in resp.json()] == ["PRJ-2"]
     resp = client.get(f"/api/cards/{story.id}/children/")
     assert [r["ref"] for r in resp.json()] == ["PRJ-3"]
+
+
+def test_listagem_traz_doing_since_so_pra_card_em_coluna_is_working(scenario):
+    """Coluna renomeada (não o literal "doing") ainda precisa contar como "em
+    andamento" na listagem que o board consome — mesma lógica usada no
+    Escritório (`is_working`), aplicada a TODOS os cards, não só o de uma
+    pessoa."""
+    from contexts.projects.infrastructure.django.models import (
+        CardHistoryModel,
+        WorkflowStatusModel,
+    )
+
+    p = scenario["project"]
+    client = scenario["client"]
+    WorkflowStatusModel.objects.create(
+        project=p, name="Em andamento", slug="em-andamento",
+        category="in_progress", order=0, is_working=True,
+    )
+    card = _card(p, 1, status="em-andamento")
+    parado = _card(p, 2, status="todo")
+    CardHistoryModel.objects.create(
+        card=card, field="status", old_value="todo", new_value="em-andamento",
+    )
+
+    resp = client.get(f"/api/projects/{p.id}/cards/")
+    por_id = {c["id"]: c for c in resp.json()}
+    assert por_id[str(card.id)]["doing_since"] is not None
+    assert por_id[str(parado.id)]["doing_since"] is None
+
+    # Mesmo campo no caminho com JQL (query separada no view).
+    resp_jql = client.get(f"/api/projects/{p.id}/cards/?jql=status = em-andamento")
+    por_id_jql = {c["id"]: c for c in resp_jql.json()}
+    assert por_id_jql[str(card.id)]["doing_since"] is not None

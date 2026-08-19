@@ -142,6 +142,12 @@ export interface Card {
   remaining_estimate_seconds?: number | null
   // Sinalizador de atenção (igual "Flag" do Jira) — aura laranja + "!" no card.
   flagged?: boolean
+  // Card está numa coluna marcada como "trabalho em andamento" (config do
+  // board, não o slug literal "doing") — só o Meu Dia preenche isto.
+  is_working?: boolean
+  // Desde quando o card entrou numa coluna is_working — null se não está
+  // numa agora. Vem preenchido na listagem de cards do board (Kanban).
+  doing_since?: string | null
   archived?: boolean
   archived_at?: string | null
   created_at: string | null

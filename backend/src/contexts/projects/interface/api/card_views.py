@@ -88,6 +88,44 @@ def _deps():
     )
 
 
+def _working_since_map(project_id: str) -> dict[str, str]:
+    """`doing_since` de todo card que está numa coluna `is_working` do projeto —
+    mesma lógica de `presence.active_card`, só que pra TODOS os cards do board
+    de uma vez (não só o card ativo de uma pessoa), numa única query anotada.
+    Card fora de coluna `is_working` nem aparece no dict (front trata ausência
+    como "não está em andamento")."""
+    from django.db.models import OuterRef, Subquery
+
+    from contexts.projects.infrastructure.django.models import (
+        CardHistoryModel,
+        WorkflowStatusModel,
+    )
+
+    working_slugs = list(
+        WorkflowStatusModel.objects.filter(
+            project_id=project_id, is_working=True
+        ).values_list("slug", flat=True)
+    )
+    if not working_slugs:
+        return {}
+
+    latest_status_change = (
+        CardHistoryModel.objects.filter(
+            card_id=OuterRef("pk"), field="status", new_value=OuterRef("status")
+        )
+        .order_by("-created_at")
+        .values("created_at")[:1]
+    )
+    rows = (
+        CardModel.objects.filter(project_id=project_id, status__in=working_slugs)
+        .annotate(status_changed_at=Subquery(latest_status_change))
+        .values("id", "status_changed_at", "created_at")
+    )
+    return {
+        str(r["id"]): r["status_changed_at"] or r["created_at"] for r in rows
+    }
+
+
 def _counts_map(project_id: str) -> dict[str, dict]:
     """Contadores (comentários, anexos, subtarefas) de todos os cards do projeto
     numa única query anotada — evita N+1 ao montar a lista do board."""
@@ -184,15 +222,31 @@ class CardListCreateView(APIView):
             )
             project = projects.get(project_id=project_id)
             counts = _counts_map(str(project_id))
-            rows = [card_row(cm, project.key, counts.get(str(cm.id))) for cm in qs]
+            working_since = _working_since_map(str(project_id))
+            rows = [
+                card_row(
+                    cm,
+                    project.key,
+                    {**counts.get(str(cm.id), {}), "doing_since": working_since.get(str(cm.id))},
+                )
+                for cm in qs
+            ]
             return Response(CardSerializer(rows, many=True).data)
 
         use_case = ListCards(projects, cards, access)
         result = use_case.execute(project_id=project_id, actor_id=str(request.user.id))
         project = projects.get(project_id=project_id)
         counts = _counts_map(str(project_id))
+        working_since = _working_since_map(str(project_id))
         data = CardSerializer(
-            [{**_card_dict(c, project.key), **counts.get(str(c.id), {})} for c in result],
+            [
+                {
+                    **_card_dict(c, project.key),
+                    **counts.get(str(c.id), {}),
+                    "doing_since": working_since.get(str(c.id)),
+                }
+                for c in result
+            ],
             many=True,
         ).data
         return Response(data)
