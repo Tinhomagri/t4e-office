@@ -136,6 +136,7 @@ def _old_done_ids(project_id: str) -> set[str]:
     da criação original."""
     from datetime import timedelta
 
+    from django.db.models import Q
     from django.utils import timezone
 
     from contexts.projects.infrastructure.django.models import WorkflowStatusModel
@@ -145,10 +146,14 @@ def _old_done_ids(project_id: str) -> set[str]:
     if not config.hide_done_after_days:
         return set()
 
+    # `is_done` é um toggle manual que quase ninguém liga (3 de 134 colunas no
+    # sistema todo); `category="done"` é o que o import do Jira já preenche
+    # sozinho — sem incluir essa, a coluna concluída de qualquer board
+    # importado nunca teria nada pra esconder.
     done_slugs = list(
-        WorkflowStatusModel.objects.filter(project_id=project_id, is_done=True).values_list(
-            "slug", flat=True
-        )
+        WorkflowStatusModel.objects.filter(
+            Q(is_done=True) | Q(category="done"), project_id=project_id
+        ).values_list("slug", flat=True)
     )
     if not done_slugs:
         return set()
