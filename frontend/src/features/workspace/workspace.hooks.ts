@@ -698,7 +698,8 @@ export function useBoardMessages(projectId: string | null) {
 export function useCreateBoardMessage(projectId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: string) => wsApi.createBoardMessage(projectId!, body),
+    mutationFn: ({ body, replyToId }: { body: string; replyToId?: string }) =>
+      wsApi.createBoardMessage(projectId!, body, replyToId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["board-messages", projectId] }),
   })
 }

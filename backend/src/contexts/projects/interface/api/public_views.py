@@ -15,6 +15,12 @@ a tela de entrada e criar card ou postar no mural direto pela API.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+from datetime import UTC, datetime
+
+from django.http import StreamingHttpResponse
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -36,7 +42,7 @@ from contexts.projects.infrastructure.django.models import (
     WorkflowStatusModel,
 )
 from contexts.projects.infrastructure.lexorank import rank_at_top
-from contexts.projects.interface.api.notification_views import notify
+from contexts.projects.interface.api.notification_views import EventStreamRenderer, notify
 from shared.domain.errors import NotFoundError, ValidationError
 
 MAX_MESSAGE_LEN = 2000
@@ -127,6 +133,21 @@ def _ser_column(ws: WorkflowStatusModel) -> dict:
     }
 
 
+def _ser_reply_to(m: BoardMessageModel) -> dict | None:
+    # Trecho da original — só o suficiente pra citação, não a mensagem
+    # inteira: mural pode ter texto longo e o preview tem que caber numa linha.
+    if m.reply_to_id is None:
+        return None
+    original = m.reply_to
+    if original is None:  # apagada/SET_NULL, mas reply_to_id ainda no banco
+        return None
+    return {
+        "id": str(original.id),
+        "author_name": original.author_name,
+        "body": original.body[:140],
+    }
+
+
 def _ser_message(m: BoardMessageModel) -> dict:
     return {
         "id": str(m.id),
@@ -134,6 +155,7 @@ def _ser_message(m: BoardMessageModel) -> dict:
         "body": m.body,
         "from_team": m.from_team,
         "created_at": m.created_at.isoformat(),
+        "reply_to": _ser_reply_to(m),
     }
 
 
@@ -172,7 +194,7 @@ class PublicBoardView(APIView):
         cards = (
             cards_qs.select_related("project")
             .prefetch_related("comments__author", "attachments")
-            .order_by("status", "rank", "order", "number")
+            .order_by("status", "-flagged", "rank", "order", "number")
         )
         return Response(
             {
@@ -275,7 +297,7 @@ class PublicMessageListCreateView(APIView):
             return Response({"error": "Link não encontrado."}, status=404)
         if not _code_ok(project, request):
             return Response({"code_required": True}, status=401)
-        mensagens = BoardMessageModel.objects.filter(project=project)
+        mensagens = BoardMessageModel.objects.filter(project=project).select_related("reply_to")
         return Response([_ser_message(m) for m in mensagens])
 
     def post(self, request: Request, token: str) -> Response:
@@ -296,15 +318,26 @@ class PublicMessageListCreateView(APIView):
         if not author_name:
             raise ValidationError("Informe seu nome.")
 
-        mensagem = BoardMessageModel.objects.create(
-            project=project, author_name=author_name, body=body, from_team=False
+        # Resposta com citação: só aceita se a original for do MESMO board —
+        # senão dava pra citar mensagem de outro projeto pelo id.
+        reply_to_id = str(request.data.get("reply_to_id") or "").strip()
+        reply_to = (
+            BoardMessageModel.objects.filter(id=reply_to_id, project=project).first()
+            if reply_to_id
+            else None
         )
 
-        # Owner/admin do workspace são quem configura o link e mais provável
-        # de acompanhar — sem isto ninguém saberia que chegou recado novo a
-        # não ser abrindo a aba Cliente por acaso.
+        mensagem = BoardMessageModel.objects.create(
+            project=project, author_name=author_name, body=body, from_team=False,
+            reply_to=reply_to,
+        )
+
+        # Todo mundo do workspace, não só owner/admin — quem trabalha no
+        # card é quem mais precisa saber que o cliente escreveu, e antes só
+        # owner/admin recebiam: o resto do time não tinha bipe nem
+        # atualização instantânea nenhuma, só via no próximo poll (10s).
         destinatarios = MembershipModel.objects.filter(
-            workspace_id=project.workspace_id, role__in=["owner", "admin"]
+            workspace_id=project.workspace_id
         ).values_list("user_id", flat=True)
         for user_id in destinatarios:
             notify(
@@ -316,3 +349,55 @@ class PublicMessageListCreateView(APIView):
             )
 
         return Response(_ser_message(mensagem), status=201)
+
+
+async def _stream_public_messages(project_id: str):
+    """Generator assíncrono — mesma técnica do sino (`notification_views.py`):
+    sob ASGI, um generator síncrono faz `StreamingHttpResponse` bufferizar a
+    resposta inteira antes de mandar qualquer byte (ver comentário lá).
+    Poll no banco a cada 3s é leve — tabela de mural é pequena e a query é
+    por `project_id` + `created_at`, ambos indexados."""
+    last_seen: datetime = datetime.now(tz=UTC)
+    yield ": heartbeat\n\n"
+
+    poll_interval = 3
+    max_duration = 55  # cliente reconecta — evita timeout de proxy
+
+    start = time.monotonic()
+    while time.monotonic() - start < max_duration:
+        novas = (
+            BoardMessageModel.objects.filter(project_id=project_id, created_at__gt=last_seen)
+            .select_related("reply_to")
+            .order_by("created_at")
+        )
+        async for m in novas:
+            yield f"data: {json.dumps(_ser_message(m))}\n\n"
+            last_seen = m.created_at
+        yield ": ping\n\n"
+        await asyncio.sleep(poll_interval)
+
+
+class PublicMessageStreamView(APIView):
+    """GET /api/public/boards/<token>/messages/stream/ — SSE do mural, sem
+    autenticação. Código de acesso (quando configurado) só pode vir por query
+    string aqui — é GET puro, sem corpo pra mandar no POST."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    renderer_classes = [EventStreamRenderer]
+
+    def get(self, request: Request, token: str) -> StreamingHttpResponse | Response:
+        try:
+            project = _get_public_project(token)
+        except NotFoundError:
+            return Response({"error": "Link não encontrado."}, status=404)
+        if not _code_ok(project, request):
+            return Response({"code_required": True}, status=401)
+
+        response = StreamingHttpResponse(
+            _stream_public_messages(str(project.id)),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response

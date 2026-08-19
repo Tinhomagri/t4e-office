@@ -3,7 +3,8 @@
 // no rodapé — igual o chat heads do Messenger. Substitui o toast que ficava
 // escondido atrás do Copiloto.
 import { useEffect, useMemo, useRef, useState } from "react"
-import { MessageCircle, Send, X } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { CornerUpLeft, MessageCircle, Send, X } from "lucide-react"
 
 import {
   useBoardMessages,
@@ -13,7 +14,7 @@ import {
   useNotificationStream,
   useProject,
 } from "@/features/workspace/workspace.hooks"
-import type { Notification } from "@/features/workspace/workspace.types"
+import type { BoardMessage, Notification } from "@/features/workspace/workspace.types"
 import { Spinner, cx } from "@/shared/ui/primitives"
 import { beep } from "@/shared/ui/sound"
 
@@ -64,13 +65,19 @@ export function ChatHeadsWidget() {
   const [openChats, setOpenChats] = useState<string[]>([])
   const popoverRef = useRef<HTMLDivElement>(null)
   const markRead = useMarkNotificationRead()
+  const qc = useQueryClient()
 
   const unreadTotal = threads.reduce((acc, t) => acc + t.unread, 0)
 
   // Bipe mesmo com a bolinha fechada — é o ponto: perceber sem precisar
-  // estar de olho no popover ou com o chat aberto.
+  // estar de olho no popover ou com o chat aberto. Invalida o cache do
+  // mural daquele projeto na hora — sem isto, quem tava com a aba Cliente
+  // aberta só via a mensagem no próximo poll (até 10s depois do bipe).
   useNotificationStream((n) => {
-    if (n.type === "board_message") beep()
+    if (n.type !== "board_message") return
+    beep()
+    const projectId = projectIdFromLink(n.link)
+    if (projectId) qc.invalidateQueries({ queryKey: ["board-messages", projectId] })
   })
 
   useEffect(() => {
@@ -185,6 +192,7 @@ function ChatHeadWindow({
   const { data: messages, isLoading } = useBoardMessages(projectId)
   const create = useCreateBoardMessage(projectId)
   const [body, setBody] = useState("")
+  const [replyingTo, setReplyingTo] = useState<BoardMessage | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -194,7 +202,10 @@ function ChatHeadWindow({
   const submit = () => {
     const t = body.trim()
     if (!t) return
-    create.mutate(t, { onSuccess: () => setBody("") })
+    create.mutate(
+      { body: t, replyToId: replyingTo?.id },
+      { onSuccess: () => { setBody(""); setReplyingTo(null) } },
+    )
   }
 
   const right = WINDOW_RIGHT_BASE + offset * (WINDOW_WIDTH + WINDOW_GAP)
@@ -223,7 +234,16 @@ function ChatHeadWindow({
             <p className="py-8 text-center text-xs text-paper-400">Nenhuma mensagem ainda.</p>
           ) : (
             (messages ?? []).map((m) => (
-              <div key={m.id} className={cx("flex", m.from_team ? "justify-end" : "justify-start")}>
+              <div key={m.id} className={cx("group flex items-end gap-1", m.from_team ? "justify-end" : "justify-start")}>
+                {!m.from_team && (
+                  <button
+                    onClick={() => setReplyingTo(m)}
+                    title="Responder"
+                    className="shrink-0 rounded-full p-0.5 text-paper-400 opacity-0 transition-opacity hover:bg-paper-100 hover:text-ink group-hover:opacity-100 dark:hover:bg-ink-800"
+                  >
+                    <CornerUpLeft className="size-3" />
+                  </button>
+                )}
                 <div
                   className={cx(
                     "max-w-[85%] rounded-xl px-3 py-2 text-[13px]",
@@ -235,9 +255,29 @@ function ChatHeadWindow({
                   <p className="mb-0.5 text-[10px] font-medium opacity-60">
                     {m.author_name || (m.from_team ? "Time" : "Cliente")}
                   </p>
+                  {m.reply_to && (
+                    <div
+                      className={cx(
+                        "mb-1 rounded-md border-l-2 px-1.5 py-0.5 text-[11px] opacity-80",
+                        m.from_team ? "border-white/40 bg-white/10" : "border-brand-400 bg-paper-50 dark:bg-ink-900",
+                      )}
+                    >
+                      <p className="font-medium">{m.reply_to.author_name}</p>
+                      <p className="truncate">{m.reply_to.body}</p>
+                    </div>
+                  )}
                   <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
                   <p className="mt-1 text-[10px] opacity-60">{fmt(m.created_at)}</p>
                 </div>
+                {m.from_team && (
+                  <button
+                    onClick={() => setReplyingTo(m)}
+                    title="Responder"
+                    className="shrink-0 rounded-full p-0.5 text-paper-400 opacity-0 transition-opacity hover:bg-paper-100 hover:text-ink group-hover:opacity-100 dark:hover:bg-ink-800"
+                  >
+                    <CornerUpLeft className="size-3" />
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -245,6 +285,23 @@ function ChatHeadWindow({
         </div>
       )}
 
+      {replyingTo && (
+        <div className="flex items-center gap-1.5 border-t border-paper-100 bg-paper-50 px-2.5 py-1.5 dark:border-ink-800 dark:bg-ink-800">
+          <CornerUpLeft className="size-3 shrink-0 text-paper-400" />
+          <p className="min-w-0 flex-1 truncate text-[11px] text-paper-500">
+            <span className="font-medium text-ink dark:text-paper">
+              {replyingTo.author_name || (replyingTo.from_team ? "Time" : "Cliente")}:
+            </span>{" "}
+            {replyingTo.body}
+          </p>
+          <button
+            onClick={() => setReplyingTo(null)}
+            className="shrink-0 rounded-full p-0.5 text-paper-400 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-700"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-2 border-t border-paper-100 p-2.5 dark:border-ink-800">
         <textarea
           value={body}

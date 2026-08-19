@@ -572,8 +572,15 @@ export async function listBoardMessages(projectId: string): Promise<BoardMessage
   return data
 }
 
-export async function createBoardMessage(projectId: string, body: string): Promise<BoardMessage> {
-  const { data } = await api.post<BoardMessage>(`/projects/${projectId}/board-messages/`, { body })
+export async function createBoardMessage(
+  projectId: string,
+  body: string,
+  replyToId?: string,
+): Promise<BoardMessage> {
+  const { data } = await api.post<BoardMessage>(`/projects/${projectId}/board-messages/`, {
+    body,
+    reply_to_id: replyToId,
+  })
   return data
 }
 

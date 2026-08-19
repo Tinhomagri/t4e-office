@@ -83,12 +83,19 @@ export interface UpdateProjectInput {
   deadline?: string | null
 }
 
+export interface BoardMessageReplyTo {
+  id: string
+  author_name: string
+  body: string
+}
+
 export interface BoardMessage {
   id: string
   author_name: string
   body: string
   from_team: boolean
   created_at: string
+  reply_to: BoardMessageReplyTo | null
 }
 
 export interface Card {

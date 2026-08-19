@@ -565,6 +565,16 @@ class DocumentListCreateView(APIView):
         return Response(_ser_doc(doc), status=status.HTTP_201_CREATED)
 
 
+def _ser_board_message_reply_to(m: BoardMessageModel) -> dict | None:
+    if m.reply_to_id is None or m.reply_to is None:
+        return None
+    return {
+        "id": str(m.reply_to.id),
+        "author_name": m.reply_to.author_name,
+        "body": m.reply_to.body[:140],
+    }
+
+
 def _ser_board_message(m: BoardMessageModel) -> dict:
     return {
         "id": str(m.id),
@@ -572,6 +582,7 @@ def _ser_board_message(m: BoardMessageModel) -> dict:
         "body": m.body,
         "from_team": m.from_team,
         "created_at": m.created_at.isoformat(),
+        "reply_to": _ser_board_message_reply_to(m),
     }
 
 
@@ -583,7 +594,7 @@ class BoardMessageListCreateView(APIView):
 
     def get(self, request: Request, project_id: str) -> Response:
         assert_project_member(project_id=str(project_id), user_id=_uid(request))
-        mensagens = BoardMessageModel.objects.filter(project_id=project_id)
+        mensagens = BoardMessageModel.objects.filter(project_id=project_id).select_related("reply_to")
         return Response([_ser_board_message(m) for m in mensagens])
 
     def post(self, request: Request, project_id: str) -> Response:
@@ -591,11 +602,18 @@ class BoardMessageListCreateView(APIView):
         body = str(request.data.get("body") or "").strip()
         if not body:
             return Response({"error": "Escreva uma mensagem."}, status=400)
+        reply_to_id = str(request.data.get("reply_to_id") or "").strip()
+        reply_to = (
+            BoardMessageModel.objects.filter(id=reply_to_id, project_id=project_id).first()
+            if reply_to_id
+            else None
+        )
         mensagem = BoardMessageModel.objects.create(
             project_id=project_id,
             author_name=request.user.full_name,
             body=body,
             from_team=True,
+            reply_to=reply_to,
         )
         return Response(_ser_board_message(mensagem), status=status.HTTP_201_CREATED)
 

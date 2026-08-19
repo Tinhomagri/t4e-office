@@ -168,6 +168,25 @@ def test_novo_card_entra_no_topo_da_coluna(scenario):
     assert novo.rank < antigo.rank
 
 
+def test_card_sinalizado_sempre_no_topo_da_coluna_mesmo_com_rank_pior(scenario):
+    """Sinalizado fica na frente de tudo na coluna — não importa o rank, nem
+    quando foi criado. É "-flagged" antes de "rank" no Meta.ordering, então
+    vale pra QUALQUER listagem de cards, sem precisar repetir order_by."""
+    p = scenario["project"]
+    client = scenario["client"]
+    novo = _card(p, 1, status="todo", rank="a")  # rank melhor (mais no topo)
+    velho_urgente = _card(p, 2, status="todo", rank="z", flagged=True)  # rank pior
+
+    # Sem order_by explícito — depende só do Meta.ordering do model.
+    listagem = list(CardModel.objects.filter(project=p, status="todo"))
+    assert [c.id for c in listagem] == [velho_urgente.id, novo.id]
+
+    # E na API de verdade (o board consome isto).
+    resp = client.get(f"/api/projects/{p.id}/cards/")
+    refs_todo = [c["ref"] for c in resp.json() if c["status"] == "todo"]
+    assert refs_todo == [f"{p.key}-2", f"{p.key}-1"]
+
+
 def test_card_com_rank_vazio_nao_engana_o_topo_apos_backfill(scenario):
     """Reprodução do bug real: projeto todo importado do Jira nunca ganhou
     rank (fica ""), então `rank_at_top` sozinho acha "ninguém tem rank" e

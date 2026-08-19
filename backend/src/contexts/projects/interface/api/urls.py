@@ -77,6 +77,7 @@ from contexts.projects.interface.api.public_views import (
     PublicBoardView,
     PublicCardCreateView,
     PublicMessageListCreateView,
+    PublicMessageStreamView,
 )
 from contexts.projects.interface.api.reports_views import ProjectReportsView
 from contexts.projects.interface.api.sprint_views import (
@@ -97,6 +98,11 @@ urlpatterns = [
         "public/boards/<str:token>/messages/",
         PublicMessageListCreateView.as_view(),
         name="public-board-messages",
+    ),
+    path(
+        "public/boards/<str:token>/messages/stream/",
+        PublicMessageStreamView.as_view(),
+        name="public-board-messages-stream",
     ),
     path("anonymous-reports/", AnonymousReportCreateView.as_view(), name="anonymous-report-create"),
     # Visão pessoal: agrega todos os workspaces da pessoa (ver me_views.py).

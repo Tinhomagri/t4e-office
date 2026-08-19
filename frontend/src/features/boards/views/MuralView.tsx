@@ -3,7 +3,7 @@
 // opostos, igual chat. A configuração do link/código do cliente mora bem
 // aqui em cima — é o lugar natural pra achar, não escondido na aba Geral.
 import { useEffect, useRef, useState } from "react"
-import { Copy, Globe2, Link2, Lock, MessageSquare, Send } from "lucide-react"
+import { Copy, CornerUpLeft, Globe2, Link2, Lock, MessageSquare, Send, X } from "lucide-react"
 
 import {
   useBoardMessages,
@@ -12,6 +12,7 @@ import {
   useProjectPermissions,
   useUpdateProject,
 } from "@/features/workspace/workspace.hooks"
+import type { BoardMessage } from "@/features/workspace/workspace.types"
 import { Button, Spinner, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 
@@ -27,6 +28,9 @@ export function MuralView({ projectId }: { projectId: string }) {
   const { data: messages, isLoading } = useBoardMessages(projectId)
   const create = useCreateBoardMessage(projectId)
   const [body, setBody] = useState("")
+  // Mais de uma pessoa fala no mesmo mural (vários clientes + time) — sem
+  // citação não dava pra saber a quem uma mensagem respondia.
+  const [replyingTo, setReplyingTo] = useState<BoardMessage | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -36,7 +40,10 @@ export function MuralView({ projectId }: { projectId: string }) {
   const submit = () => {
     const t = body.trim()
     if (!t) return
-    create.mutate(t, { onSuccess: () => setBody("") })
+    create.mutate(
+      { body: t, replyToId: replyingTo?.id },
+      { onSuccess: () => { setBody(""); setReplyingTo(null) } },
+    )
   }
 
   const lista = messages ?? []
@@ -66,7 +73,21 @@ export function MuralView({ projectId }: { projectId: string }) {
               <p className="py-10 text-center text-sm text-paper-400">Nenhuma mensagem ainda.</p>
             ) : (
               lista.map((m) => (
-                <div key={m.id} className={cx("flex", m.from_team ? "justify-end" : "justify-start")}>
+                <div
+                  key={m.id}
+                  className={cx("group flex items-end gap-1.5", m.from_team ? "justify-end" : "justify-start")}
+                >
+                  {/* Botão só no hover — mural lotado de "Responder" o tempo
+                      todo ficaria poluído. */}
+                  {!m.from_team && (
+                    <button
+                      onClick={() => setReplyingTo(m)}
+                      title="Responder"
+                      className="mb-1 shrink-0 rounded-full p-1 text-paper-400 opacity-0 transition-opacity hover:bg-paper-100 hover:text-ink group-hover:opacity-100 dark:hover:bg-ink-800"
+                    >
+                      <CornerUpLeft className="size-3.5" />
+                    </button>
+                  )}
                   <div
                     className={cx(
                       "max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm",
@@ -78,9 +99,29 @@ export function MuralView({ projectId }: { projectId: string }) {
                     <p className="mb-0.5 text-[11px] font-medium opacity-70">
                       {m.from_team ? m.author_name || "Time" : m.author_name || "Cliente"}
                     </p>
+                    {m.reply_to && (
+                      <div
+                        className={cx(
+                          "mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs opacity-80",
+                          m.from_team ? "border-white/40 bg-white/10" : "border-brand-400 bg-paper-50 dark:bg-ink-900",
+                        )}
+                      >
+                        <p className="font-medium">{m.reply_to.author_name}</p>
+                        <p className="truncate">{m.reply_to.body}</p>
+                      </div>
+                    )}
                     <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
                     <p className="mt-1 text-[10px] opacity-60">{fmt(m.created_at)}</p>
                   </div>
+                  {m.from_team && (
+                    <button
+                      onClick={() => setReplyingTo(m)}
+                      title="Responder"
+                      className="mb-1 shrink-0 rounded-full p-1 text-paper-400 opacity-0 transition-opacity hover:bg-paper-100 hover:text-ink group-hover:opacity-100 dark:hover:bg-ink-800"
+                    >
+                      <CornerUpLeft className="size-3.5" />
+                    </button>
+                  )}
                 </div>
               ))
             )}
@@ -88,6 +129,23 @@ export function MuralView({ projectId }: { projectId: string }) {
           </div>
         )}
 
+        {replyingTo && (
+          <div className="flex items-center gap-2 border-t border-paper-200 bg-paper-50 px-3 py-2 dark:border-ink-700 dark:bg-ink-800">
+            <CornerUpLeft className="size-3.5 shrink-0 text-paper-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-ink dark:text-paper">
+                {replyingTo.from_team ? replyingTo.author_name || "Time" : replyingTo.author_name || "Cliente"}
+              </p>
+              <p className="truncate text-xs text-paper-500">{replyingTo.body}</p>
+            </div>
+            <button
+              onClick={() => setReplyingTo(null)}
+              className="shrink-0 rounded-full p-1 text-paper-400 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-700"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2 border-t border-paper-200 p-3 dark:border-ink-700">
           <textarea
             value={body}

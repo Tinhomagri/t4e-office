@@ -55,12 +55,19 @@ export interface PublicBoard {
   cards: PublicCard[]
 }
 
+export interface PublicMessageReplyTo {
+  id: string
+  author_name: string
+  body: string
+}
+
 export interface PublicBoardMessage {
   id: string
   author_name: string
   body: string
   from_team: boolean
   created_at: string
+  reply_to: PublicMessageReplyTo | null
 }
 
 // Código de acesso: quando o board pede, TODA rota (board, criar card,
@@ -113,7 +120,7 @@ export async function getPublicMessages(token: string, code?: string): Promise<P
 
 export async function createPublicMessage(
   token: string,
-  input: { author_name: string; body: string; code?: string },
+  input: { author_name: string; body: string; code?: string; reply_to_id?: string },
 ): Promise<PublicBoardMessage> {
   const { data } = await publicApi.post<PublicBoardMessage>(
     `/public/boards/${token}/messages/`,

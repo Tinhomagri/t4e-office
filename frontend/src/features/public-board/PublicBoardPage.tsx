@@ -9,16 +9,19 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import axios from "axios"
-import { AlertTriangle, ChevronsRight, Image as ImageIcon, Lock, MessageSquare, Paperclip, Plus, Send, X } from "lucide-react"
+import { AlertTriangle, ChevronsRight, CornerUpLeft, Image as ImageIcon, Lock, MessageSquare, Paperclip, Plus, Send, X } from "lucide-react"
 
 import {
   useCreatePublicCard,
   useCreatePublicMessage,
   usePublicBoard,
   usePublicMessages,
+  usePublicMessageStream,
 } from "./publicBoard.hooks"
-import type { PublicCard, PublicColumn } from "./publicBoard.api"
+import type { PublicBoardMessage, PublicCard, PublicColumn } from "./publicBoard.api"
 import { cx } from "@/shared/ui/primitives"
+import { beep } from "@/shared/ui/sound"
+import { useQueryClient } from "@tanstack/react-query"
 
 function accessCodeStorageKey(token: string) {
   return `public-board-access-${token}`
@@ -166,10 +169,25 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
   const [authorName, setAuthorName] = useState(() => localStorage.getItem(nameStorageKey(token)) ?? "")
   const [nameInput, setNameInput] = useState("")
   const [body, setBody] = useState("")
+  // Mais de um cliente pode escrever no mesmo mural — citação (igual
+  // WhatsApp) deixa claro a quem cada mensagem responde.
+  const [replyingTo, setReplyingTo] = useState<PublicBoardMessage | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  const qc = useQueryClient()
   const { data: messages } = usePublicMessages(token, true, code)
   const create = useCreatePublicMessage(token, code)
+  // IDs que este navegador acabou de mandar — o SSE ecoa a própria mensagem
+  // de volta, e sem isto o cliente ouviria bipe da própria mensagem enviada.
+  const ownIds = useRef<Set<string>>(new Set())
+
+  usePublicMessageStream(token, code, (m) => {
+    qc.setQueryData<PublicBoardMessage[]>(["public-board-messages", token, code], (old) => {
+      if (!old || old.some((x) => x.id === m.id)) return old
+      return [...old, m]
+    })
+    if (!ownIds.current.has(m.id)) beep()
+  })
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
@@ -178,8 +196,12 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
   const send = async () => {
     const t = body.trim()
     if (!t || !authorName) return
-    await create.mutateAsync({ author_name: authorName, body: t })
+    const enviada = await create.mutateAsync({
+      author_name: authorName, body: t, reply_to_id: replyingTo?.id,
+    })
+    ownIds.current.add(enviada.id)
     setBody("")
+    setReplyingTo(null)
   }
 
   const setName = () => {
@@ -219,7 +241,16 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
           <p className="py-8 text-center text-xs text-white/30">Nenhuma mensagem ainda.</p>
         ) : (
           (messages ?? []).map((m) => (
-            <div key={m.id} className={m.from_team ? "flex justify-end" : "flex justify-start"}>
+            <div key={m.id} className={cx("group flex items-end gap-1", m.from_team ? "justify-end" : "justify-start")}>
+              {!m.from_team && (
+                <button
+                  onClick={() => setReplyingTo(m)}
+                  title="Responder"
+                  className="shrink-0 rounded-full p-0.5 text-white/40 opacity-0 transition-opacity hover:bg-white/10 hover:text-white group-hover:opacity-100"
+                >
+                  <CornerUpLeft className="size-3" />
+                </button>
+              )}
               <div
                 className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-[13px] ${
                   m.from_team ? "bg-brand-600 text-white" : "bg-white/[0.06] text-white/90"
@@ -228,8 +259,28 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
                 <p className="mb-0.5 text-[10px] font-medium opacity-60">
                   {m.author_name || (m.from_team ? "Time" : "Você")}
                 </p>
+                {m.reply_to && (
+                  <div
+                    className={cx(
+                      "mb-1 rounded-md border-l-2 px-1.5 py-0.5 text-[11px] opacity-80",
+                      m.from_team ? "border-white/40 bg-white/10" : "border-brand-400 bg-white/5",
+                    )}
+                  >
+                    <p className="font-medium">{m.reply_to.author_name}</p>
+                    <p className="truncate">{m.reply_to.body}</p>
+                  </div>
+                )}
                 <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
               </div>
+              {m.from_team && (
+                <button
+                  onClick={() => setReplyingTo(m)}
+                  title="Responder"
+                  className="shrink-0 rounded-full p-0.5 text-white/40 opacity-0 transition-opacity hover:bg-white/10 hover:text-white group-hover:opacity-100"
+                >
+                  <CornerUpLeft className="size-3" />
+                </button>
+              )}
             </div>
           ))
         )}
@@ -258,6 +309,23 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
         </div>
       ) : (
         <div className="space-y-1.5 border-t border-white/10 p-3.5">
+          {replyingTo && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2 py-1.5">
+              <CornerUpLeft className="size-3 shrink-0 text-white/40" />
+              <p className="min-w-0 flex-1 truncate text-[11px] text-white/60">
+                <span className="font-medium text-white/80">
+                  {replyingTo.author_name || (replyingTo.from_team ? "Time" : "Você")}:
+                </span>{" "}
+                {replyingTo.body}
+              </p>
+              <button
+                onClick={() => setReplyingTo(null)}
+                className="shrink-0 rounded-full p-0.5 text-white/40 hover:bg-white/10 hover:text-white"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          )}
           <p className="text-[11px] text-white/40">Enviando como <span className="text-white/70">{authorName}</span></p>
           <div className="flex gap-1.5">
             <input

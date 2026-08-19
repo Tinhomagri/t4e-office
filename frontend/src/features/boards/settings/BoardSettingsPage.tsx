@@ -75,7 +75,7 @@ export function BoardSettingsPage() {
           tela de trabalho, o espaço tem que ir para os campos. */}
       <div className="flex flex-wrap items-center gap-2">
         <Link
-          to="/app/boards"
+          to={`/app/boards?project=${projectId}${project.template && project.template !== "software" ? "&type=marketing" : ""}`}
           className="grid size-7 shrink-0 place-items-center rounded-lg text-paper-500 transition-colors hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper"
           aria-label="Voltar aos quadros"
         >

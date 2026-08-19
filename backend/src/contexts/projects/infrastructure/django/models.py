@@ -293,7 +293,10 @@ class CardModel(models.Model):
         db_table = "projects_card"
         verbose_name = "Card"
         verbose_name_plural = "Cards"
-        ordering = ["status", "rank", "order", "number"]
+        # "-flagged" antes de "rank": card marcado como urgente sempre no topo
+        # da coluna, na frente de qualquer rank — não importa quando foi
+        # criado ou reordenado, sinalizado sobe e fica lá até ser desmarcado.
+        ordering = ["status", "-flagged", "rank", "order", "number"]
         constraints = [
             models.UniqueConstraint(
                 fields=["project", "number"], name="unique_project_card_number"
@@ -637,6 +640,13 @@ class BoardMessageModel(models.Model):
     # Distingue quem postou sem precisar decifrar o nome — a bolha da UI
     # espelha em lados diferentes conforme isto.
     from_team = models.BooleanField(default=False)
+    # Resposta com citação (igual WhatsApp) — pode ter mais de uma pessoa
+    # falando no mesmo mural (vários clientes + time), sem isto não dava pra
+    # saber a quem uma mensagem respondia. SET_NULL: apagar a original não
+    # pode derrubar quem respondeu a ela.
+    reply_to = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

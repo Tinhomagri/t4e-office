@@ -320,7 +320,59 @@ def test_mural_publica_mensagem_sem_codigo_configurado(cenario):
 
 
 @pytest.mark.django_db
-def test_mural_notifica_owner_e_admin_do_workspace(cenario):
+def test_mural_responde_com_citacao(cenario):
+    """Mais de uma pessoa pode falar no mesmo mural — resposta com citação
+    (igual WhatsApp) deixa claro a quem cada mensagem responde."""
+    original = APIClient().post(
+        "/api/public/boards/tok-123/messages/",
+        {"author_name": "Cliente A", "body": "Quando sai a entrega?"},
+        format="json",
+    ).data
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/messages/",
+        {
+            "author_name": "Cliente B",
+            "body": "Também quero saber!",
+            "reply_to_id": original["id"],
+        },
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["reply_to"] == {
+        "id": original["id"], "author_name": "Cliente A", "body": "Quando sai a entrega?",
+    }
+
+    listagem = APIClient().get("/api/public/boards/tok-123/messages/").data
+    resposta = next(m for m in listagem if m["author_name"] == "Cliente B")
+    assert resposta["reply_to"]["author_name"] == "Cliente A"
+
+
+@pytest.mark.django_db
+def test_mural_reply_to_de_outro_board_e_ignorado(cenario):
+    """reply_to_id de mensagem de OUTRO projeto não pode colar — senão dava
+    pra citar conversa de um board diferente pelo id."""
+    outro_projeto = ProjectModel.objects.create(
+        workspace=cenario["ws"], name="Outro", key="OUT", public_token="tok-outro",
+    )
+    de_outro_board = BoardMessageModel.objects.create(
+        project=outro_projeto, author_name="Fulano", body="Mensagem de outro board",
+    )
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/messages/",
+        {"author_name": "Cliente", "body": "Oi", "reply_to_id": str(de_outro_board.id)},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["reply_to"] is None
+
+
+@pytest.mark.django_db
+def test_mural_notifica_todo_mundo_do_workspace(cenario):
+    """Não só owner/admin — quem trabalha no card (developer comum) também
+    precisa saber na hora que o cliente escreveu, senão fica sem bipe e sem
+    atualização instantânea, só vendo no próximo poll."""
     from contexts.projects.infrastructure.django.models import NotificationModel
 
     admin = UserModel.objects.create_user(
@@ -341,7 +393,7 @@ def test_mural_notifica_owner_e_admin_do_workspace(cenario):
     notificados = set(
         NotificationModel.objects.filter(type="board_message").values_list("user_id", flat=True)
     )
-    assert notificados == {cenario["dono"].id, admin.id}
+    assert notificados == {cenario["dono"].id, admin.id, membro_comum.id}
 
 
 @pytest.mark.django_db
@@ -427,6 +479,24 @@ def test_time_ve_e_responde_mural_pelo_app(cenario):
 
     r = APIClient().get("/api/public/boards/tok-123/messages/")
     assert any(m["from_team"] for m in r.data)
+
+
+@pytest.mark.django_db
+def test_time_responde_mural_com_citacao(cenario):
+    do_cliente = APIClient().post(
+        "/api/public/boards/tok-123/messages/",
+        {"author_name": "Cliente", "body": "Quando sai a entrega?"},
+        format="json",
+    ).data
+
+    r = _admin(cenario["dono"]).post(
+        f"/api/projects/{cenario['projeto'].id}/board-messages/",
+        {"body": "Sai amanhã!", "reply_to_id": do_cliente["id"]},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["reply_to"]["author_name"] == "Cliente"
+    assert r.data["reply_to"]["body"] == "Quando sai a entrega?"
 
 
 @pytest.mark.django_db
