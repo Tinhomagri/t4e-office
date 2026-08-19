@@ -46,7 +46,7 @@ import {
   X,
   Zap,
 } from "lucide-react"
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react"
+import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Ref } from "react"
 import { Link } from "react-router-dom"
 
@@ -108,6 +108,7 @@ interface FilterState {
 }
 
 const EMPTY_FILTER: FilterState = { types: [], priorities: [], assigneeIds: [] }
+const EMPTY_CARDS: Card[] = []
 
 const SWIMLANE_LABEL: Record<SwimlaneMode, string> = {
   none: "Nenhum",
@@ -169,6 +170,18 @@ export function KanbanView({
   const doneStatus =
     columns.find((c) => c.is_done)?.slug ?? columns.find((c) => c.category === "done")?.slug ?? "done"
 
+  // Identidade estável: iguais em toda coluna, então não quebram o memo do
+  // card a cada re-render do board.
+  const onDoneCard = useCallback(
+    (cardId: string) => updateCard.mutate({ cardId, input: { status: doneStatus as CardStatus } }),
+    [updateCard, doneStatus],
+  )
+  const onAssignCard = useCallback(
+    (cardId: string, assigneeId: string | null) =>
+      updateCard.mutate({ cardId, input: { assignee_id: assigneeId } }),
+    [updateCard],
+  )
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   // O voo do clone é uma animação WAAPI de duração fixa, fora do alcance do
   // framer: sem este guarda ele ignoraria `prefers-reduced-motion`.
@@ -201,6 +214,19 @@ export function KanbanView({
   // A visão "Agrupar por Subtarefas" é a exceção: o ponto dela é justamente
   // separar item principal de subtarefa, então ali elas continuam visíveis.
   const boardCards = swimlane === "subtask" ? scopeCards : scopeCards.filter((c) => !c.parent_id)
+
+  // Um único agrupamento por status, em vez de um `.filter()` novo (varrendo
+  // todos os cards) para cada coluna a cada render — coluna com muitos cards
+  // travava o board inteiro.
+  const cardsByStatus = useMemo(() => {
+    const map = new Map<string, Card[]>()
+    for (const c of boardCards) {
+      const list = map.get(c.status)
+      if (list) list.push(c)
+      else map.set(c.status, [c])
+    }
+    return map
+  }, [boardCards])
 
   const activeCard = scopeCards.find((c) => c.id === activeId) ?? null
 
@@ -498,10 +524,8 @@ export function KanbanView({
                   sprintId={currentSprintId}
                   onAddDetailed={onNewCard}
                   onOpen={onOpen}
-                  onDone={(cardId) => updateCard.mutate({ cardId, input: { status: doneStatus as CardStatus } })}
-                  onAssign={(cardId, assigneeId) =>
-                    updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
-                  }
+                  onDone={onDoneCard}
+                  onAssign={onAssignCard}
                 />
               ) : (
                 <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
@@ -519,7 +543,7 @@ export function KanbanView({
                       status={ws.slug}
                       label={ws.name}
                       color={ws.color}
-                      cards={boardCards.filter((c) => c.status === ws.slug)}
+                      cards={cardsByStatus.get(ws.slug) ?? EMPTY_CARDS}
                       members={members ?? []}
                       projectId={projectId}
                       sprintId={currentSprintId}
@@ -537,10 +561,8 @@ export function KanbanView({
                       }
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
-                      onDone={(cardId) => updateCard.mutate({ cardId, input: { status: doneStatus as CardStatus } })}
-                  onAssign={(cardId, assigneeId) =>
-                    updateCard.mutate({ cardId, input: { assignee_id: assigneeId } })
-                  }
+                      onDone={onDoneCard}
+                      onAssign={onAssignCard}
                       onRename={(name) => updateWorkflowStatus.mutate({ statusId: ws.id, input: { name } })}
                       onMoveLeft={i > 0 ? () => moveColumn(ws, -1) : undefined}
                       onMoveRight={i < columns.length - 1 ? () => moveColumn(ws, 1) : undefined}
@@ -1683,7 +1705,7 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   }
 }
 
-const DraggableCard = forwardRef<HTMLDivElement, {
+const DraggableCard = memo(forwardRef<HTMLDivElement, {
   card: Card
   members: Member[]
   onOpen: (c: Card) => void
@@ -1750,7 +1772,7 @@ const DraggableCard = forwardRef<HTMLDivElement, {
     </motion.div>
     </div>
   )
-})
+}))
 
 /**
  * Troca o responsável sem sair do quadro, como no Jira: clicar no avatar abre

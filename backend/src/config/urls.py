@@ -1,8 +1,9 @@
 """Rotas raiz do projeto."""
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.decorators.cache import cache_control
+from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -28,7 +29,13 @@ urlpatterns = [
     path("api/meetings/", include("contexts.meetings.interface.api.urls")),
 ]
 
-# Em dev o próprio runserver entrega os uploads. Em produção quem serve é o
-# proxy/CDN na frente, então esta rota não entra.
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Hostinger roda processo único com disco persistente: o próprio Django
+# entrega os uploads, também em produção. Cache de 1 dia pro navegador não
+# ficar rebaixando o mesmo anexo do disco a cada abertura.
+urlpatterns += [
+    re_path(
+        rf"^{settings.MEDIA_URL.lstrip('/')}(?P<path>.*)$",
+        cache_control(max_age=86400)(serve),
+        {"document_root": settings.MEDIA_ROOT},
+    ),
+]

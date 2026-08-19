@@ -1,4 +1,4 @@
-.PHONY: help install migrate seed dev test lint backend-test frontend-test
+.PHONY: help install migrate seed dev test lint backend-test frontend-test prod-deploy
 
 help:  ## Lista os alvos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -27,3 +27,6 @@ frontend-test:  ## Testes do frontend
 lint:  ## Lint backend (ruff) + typecheck frontend
 	cd backend && ruff check src
 	cd frontend && npm run lint
+
+prod-deploy:  ## Build das imagens Docker e migrate em produção (rodar no servidor)
+	cd /opt/t4e-office/deploy && docker compose build && docker compose exec web python manage.py migrate
