@@ -196,9 +196,13 @@ export async function createProject(payload: CreateProjectInput): Promise<Projec
 }
 
 // ---- Cards ----
-export async function listCards(projectId: string, jql?: string): Promise<Card[]> {
+export async function listCards(
+  projectId: string,
+  jql?: string,
+  includeOldDone?: boolean,
+): Promise<Card[]> {
   const { data } = await api.get<Card[]>(`/projects/${projectId}/cards/`, {
-    params: jql ? { jql } : undefined,
+    params: { ...(jql ? { jql } : undefined), ...(includeOldDone ? { include_old_done: "1" } : undefined) },
   })
   return data
 }

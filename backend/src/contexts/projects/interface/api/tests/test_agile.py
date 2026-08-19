@@ -274,3 +274,52 @@ def test_listagem_traz_doing_since_so_pra_card_em_coluna_is_working(scenario):
     resp_jql = client.get(f"/api/projects/{p.id}/cards/?jql=status = em-andamento")
     por_id_jql = {c["id"]: c for c in resp_jql.json()}
     assert por_id_jql[str(card.id)]["doing_since"] is not None
+
+
+def test_esconde_concluido_antigo_conforme_config_do_board(scenario):
+    """Board com `hide_done_after_days` configurado não lista card concluído
+    há mais tempo que isso — mesmo mecanismo do Jira pra board grande não
+    travar renderizando tudo. `?include_old_done=1` pede a lista inteira de
+    volta, pro botão "ver mais antigos" do front."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from contexts.projects.infrastructure.django.models import (
+        BoardConfigModel,
+        WorkflowStatusModel,
+    )
+
+    p = scenario["project"]
+    client = scenario["client"]
+    WorkflowStatusModel.objects.create(
+        project=p, name="Concluído", slug="done", category="done", order=0, is_done=True,
+    )
+    BoardConfigModel.objects.create(project=p, hide_done_after_days=14)
+
+    antigo = _card(
+        p, 1, status="done", resolution="done",
+        resolved_at=timezone.now() - timedelta(days=30),
+    )
+    recente = _card(
+        p, 2, status="done", resolution="done",
+        resolved_at=timezone.now() - timedelta(days=1),
+    )
+    sem_data = _card(p, 3, status="done")  # resolved_at nulo — não some sem certeza.
+
+    resp = client.get(f"/api/projects/{p.id}/cards/")
+    assert resp.status_code == 200, resp.content
+    ids = {c["id"] for c in resp.json()}
+    assert str(antigo.id) not in ids
+    assert str(recente.id) in ids
+    assert str(sem_data.id) in ids
+
+    resp_all = client.get(f"/api/projects/{p.id}/cards/?include_old_done=1")
+    ids_all = {c["id"] for c in resp_all.json()}
+    assert str(antigo.id) in ids_all
+
+    # Mesmo comportamento no caminho com JQL.
+    resp_jql = client.get(f"/api/projects/{p.id}/cards/?jql=status = done")
+    ids_jql = {c["id"] for c in resp_jql.json()}
+    assert str(antigo.id) not in ids_jql
+    assert str(recente.id) in ids_jql

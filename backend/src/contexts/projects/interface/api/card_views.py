@@ -126,6 +126,40 @@ def _working_since_map(project_id: str) -> dict[str, str]:
     }
 
 
+def _old_done_ids(project_id: str) -> set[str]:
+    """Cards concluídos há mais de `hide_done_after_days` (config do board) —
+    excluídos da listagem padrão pra board grande não travar renderizando
+    centenas de card já entregues há meses (mesmo mecanismo do Jira: a coluna
+    Done só mostra o que foi resolvido recentemente, o resto fica só a uma
+    busca de distância). `resolved_at` é a data real (vem do Jira no import
+    quando existe); `created_at` não serve pra isso — é a data do IMPORT, não
+    da criação original."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from contexts.projects.infrastructure.django.models import WorkflowStatusModel
+    from contexts.projects.interface.api.board_config_views import get_or_create_board_config
+
+    config = get_or_create_board_config(project_id)
+    if not config.hide_done_after_days:
+        return set()
+
+    done_slugs = list(
+        WorkflowStatusModel.objects.filter(project_id=project_id, is_done=True).values_list(
+            "slug", flat=True
+        )
+    )
+    if not done_slugs:
+        return set()
+
+    cutoff = timezone.now() - timedelta(days=config.hide_done_after_days)
+    ids = CardModel.objects.filter(
+        project_id=project_id, status__in=done_slugs, resolved_at__lt=cutoff
+    ).values_list("id", flat=True)
+    return {str(i) for i in ids}
+
+
 def _counts_map(project_id: str) -> dict[str, dict]:
     """Contadores (comentários, anexos, subtarefas) de todos os cards do projeto
     numa única query anotada — evita N+1 ao montar a lista do board."""
@@ -210,6 +244,10 @@ class CardListCreateView(APIView):
         assert_project_member(project_id=str(project_id), user_id=str(request.user.id))
         projects, cards, access = _deps()
         jql = request.query_params.get("jql", "").strip()
+        # "Ver concluídos mais antigos" no front manda isto pra pedir a lista
+        # inteira de propósito, sem o corte por idade.
+        include_old_done = request.query_params.get("include_old_done") == "1"
+        old_done = set() if include_old_done else _old_done_ids(str(project_id))
 
         if jql:
             try:
@@ -220,6 +258,8 @@ class CardListCreateView(APIView):
                 CardModel.objects.filter(project_id=project_id, archived_at__isnull=True)
                 .filter(jql_filter)
             )
+            if old_done:
+                qs = qs.exclude(id__in=old_done)
             project = projects.get(project_id=project_id)
             counts = _counts_map(str(project_id))
             working_since = _working_since_map(str(project_id))
@@ -235,6 +275,8 @@ class CardListCreateView(APIView):
 
         use_case = ListCards(projects, cards, access)
         result = use_case.execute(project_id=project_id, actor_id=str(request.user.id))
+        if old_done:
+            result = [c for c in result if c.id not in old_done]
         project = projects.get(project_id=project_id)
         counts = _counts_map(str(project_id))
         working_since = _working_since_map(str(project_id))

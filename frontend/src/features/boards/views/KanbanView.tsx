@@ -32,6 +32,7 @@ import {
   Check,
   Clock,
   ChevronDown,
+  History,
   ChevronRight,
   Filter,
   Layers,
@@ -133,7 +134,11 @@ export function KanbanView({
 }) {
   const projectId = project.id
   const qc = useQueryClient()
-  const { data: cards } = useCards(projectId)
+  // Board com `hide_done_after_days` configurado já chega SEM os concluídos
+  // antigos (o backend nem lista) — economiza rede e DOM em board grande.
+  // "Ver mais antigos" troca pra buscar tudo mesmo, de propósito.
+  const [showOldDone, setShowOldDone] = useState(false)
+  const { data: cards } = useCards(projectId, undefined, showOldDone)
   const { data: sprints } = useSprints(projectId)
   const { data: members } = useMembers(workspaceId)
   const updateCard = useUpdateCard(projectId)
@@ -561,6 +566,10 @@ export function KanbanView({
                       onDoneChange={(is_done) =>
                         updateWorkflowStatus.mutate({ statusId: ws.id, input: { is_done } })
                       }
+                      oldDoneHidden={
+                        ws.is_done && !showOldDone && !!boardConfig?.hide_done_after_days
+                      }
+                      onShowOldDone={() => setShowOldDone(true)}
                       onAddDetailed={() => onNewCard(ws.slug as CardStatus, currentSprintId)}
                       onOpen={onOpen}
                       onDone={onDoneCard}
@@ -1081,6 +1090,8 @@ function Column({
   onWorkingChange,
   isDone = false,
   onDoneChange,
+  oldDoneHidden = false,
+  onShowOldDone,
   sortableId,
   compact = false,
 }: {
@@ -1099,6 +1110,10 @@ function Column({
   onWorkingChange?: (value: boolean) => void
   isDone?: boolean
   onDoneChange?: (value: boolean) => void
+  /** Coluna concluída com concluídos antigos escondidos (config do board) —
+   * mostra o aviso/botão "ver mais antigos" no rodapé da lista. */
+  oldDoneHidden?: boolean
+  onShowOldDone?: () => void
   onAddDetailed: () => void
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
@@ -1393,6 +1408,19 @@ function Column({
             </div>
             <p className="text-xs text-paper-400">Nenhum card</p>
           </div>
+        )}
+        {oldDoneHidden && (
+          // Board grande demais pra renderizar tudo de uma vez trava — o
+          // corte vem do backend (`hide_done_after_days`), isto só avisa e
+          // deixa buscar o resto quando a pessoa realmente precisar.
+          <button
+            type="button"
+            onClick={onShowOldDone}
+            className="mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-dashed border-paper-300 py-2 text-[11px] font-medium text-paper-500 transition-colors hover:border-brand-300 hover:text-brand-600 dark:border-ink-600 dark:text-paper-400"
+          >
+            <History className="size-3.5" />
+            Ver concluídos mais antigos
+          </button>
         )}
       </div>
 

@@ -78,10 +78,10 @@ export function useCreateProject(workspaceId: string | null) {
 }
 
 // ---- Cards ----
-export function useCards(projectId: string | null, jql?: string) {
+export function useCards(projectId: string | null, jql?: string, includeOldDone?: boolean) {
   return useQuery({
-    queryKey: ["cards", projectId, jql],
-    queryFn: () => wsApi.listCards(projectId!, jql),
+    queryKey: ["cards", projectId, jql, includeOldDone],
+    queryFn: () => wsApi.listCards(projectId!, jql, includeOldDone),
     enabled: !!projectId,
     // Card pode chegar por fora (link público, outra pessoa no time) — sem
     // isto só aparecia dando F5. Igual ao poll do mural/board público.

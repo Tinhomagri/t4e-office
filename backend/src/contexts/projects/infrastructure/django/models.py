@@ -909,8 +909,10 @@ class BoardConfigModel(models.Model):
     # Mapa valor→cor hex usado quando card_color_rule != "none".
     # Ex.: {"high": "#ef4444", "low": "#10b981"} para a regra "priority".
     card_color_map = models.JSONField(default=dict, blank=True)
-    # Esconde cards concluídos há mais de N dias na coluna "done". 0 = nunca esconder.
-    hide_done_after_days = models.PositiveSmallIntegerField(default=0)
+    # Esconde cards concluídos há mais de N dias na coluna "done". 0 = nunca
+    # esconder. Default 14 (igual Jira) — board com muito histórico travava
+    # renderizando centenas de card já entregue há meses.
+    hide_done_after_days = models.PositiveSmallIntegerField(default=14)
     # Feature flags do projeto (aba "Funções" do Jira).
     sprints_enabled = models.BooleanField(default=True)
     estimation_enabled = models.BooleanField(default=True)
