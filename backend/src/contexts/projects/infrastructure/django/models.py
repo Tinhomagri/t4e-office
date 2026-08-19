@@ -467,8 +467,11 @@ class AttachmentModel(models.Model):
     """Anexo (arquivo) vinculado a um card."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card = models.ForeignKey(CardModel, on_delete=models.CASCADE, related_name="attachments")
+    # Nulo quando o anexo veio do link público (cliente sem conta) — anexo do
+    # time sempre tem autor; anexo do board público nunca tem usuário logado.
     author = models.ForeignKey(
-        "identity.UserModel", on_delete=models.CASCADE, related_name="attachments"
+        "identity.UserModel", on_delete=models.CASCADE, related_name="attachments",
+        null=True, blank=True,
     )
     filename = models.CharField(max_length=255)
     file = models.FileField(upload_to="attachments/%Y/%m/")

@@ -274,7 +274,7 @@ def _ser_attachment(a: AttachmentModel, request: Request) -> dict:
     url = request.build_absolute_uri(a.file.url) if a.file else None
     return {
         "id": str(a.id), "card_id": str(a.card_id),
-        "author_id": str(a.author_id), "filename": a.filename,
+        "author_id": str(a.author_id) if a.author_id else None, "filename": a.filename,
         "url": url, "mime_type": a.mime_type, "size": a.size,
         "group_id": str(a.group_id), "version": a.version,
         "approval_status": a.approval_status,

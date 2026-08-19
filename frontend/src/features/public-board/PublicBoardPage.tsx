@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import axios from "axios"
-import { ChevronsRight, Lock, MessageSquare, Plus, Send, X } from "lucide-react"
+import { ChevronsRight, Image as ImageIcon, Lock, MessageSquare, Paperclip, Plus, Send, X } from "lucide-react"
 
 import {
   useCreatePublicCard,
@@ -327,14 +327,42 @@ function Column({
 }) {
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [image, setImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const create = useCreatePublicCard(token, code)
+
+  const pickImage = (file: File | undefined) => {
+    if (!file) return
+    setImage(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  const clearImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview)
+    setImage(null)
+    setImagePreview(null)
+    if (fileRef.current) fileRef.current.value = ""
+  }
+
+  const reset = () => {
+    setTitle("")
+    setDescription("")
+    clearImage()
+    setAdding(false)
+  }
 
   const submit = async () => {
     const t = title.trim()
     if (!t) return
-    await create.mutateAsync({ title: t, status: column.slug })
-    setTitle("")
-    setAdding(false)
+    await create.mutateAsync({
+      title: t,
+      description: description.trim() || undefined,
+      status: column.slug,
+      image: image ?? undefined,
+    })
+    reset()
   }
 
   return (
@@ -385,22 +413,62 @@ function Column({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") submit()
-                  if (e.key === "Escape") setAdding(false)
+                  if (e.key === "Escape") reset()
                 }}
                 placeholder="Título do card"
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-brand-400"
               />
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") reset()
+                }}
+                placeholder="Descreva o que precisa ser feito…"
+                rows={3}
+                className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-brand-400"
+              />
+
+              {imagePreview ? (
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt=""
+                    className="max-h-28 w-full rounded-lg border border-white/10 object-cover"
+                  />
+                  <button
+                    onClick={clearImage}
+                    className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-black/60 text-white/80 hover:text-white"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/15 py-1.5 text-[12px] text-white/40 transition-colors hover:border-white/30 hover:text-white/70"
+                >
+                  <ImageIcon className="size-3.5" /> Anexar imagem
+                </button>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={(e) => pickImage(e.target.files?.[0])}
+                className="hidden"
+              />
+
               <div className="flex gap-1.5">
                 <button
                   onClick={submit}
                   disabled={!title.trim() || create.isPending}
                   className="flex-1 rounded-lg bg-brand-600 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-brand-500 disabled:opacity-40"
                 >
-                  Criar
+                  {create.isPending ? "Enviando…" : "Criar"}
                 </button>
                 <button
-                  onClick={() => setAdding(false)}
+                  onClick={reset}
                   className="rounded-lg px-2.5 py-1.5 text-[12px] text-white/50 hover:bg-white/10"
                 >
                   Cancelar
@@ -445,6 +513,33 @@ function CardDetail({ card, onClose }: { card: PublicCard; onClose: () => void }
           <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-white/80">
             {card.description}
           </p>
+        )}
+
+        {card.attachments.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/40">
+              <Paperclip className="size-3.5" /> Anexos
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {card.attachments.map((a) => (
+                <a
+                  key={a.id}
+                  href={a.url ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block overflow-hidden rounded-lg border border-white/10 hover:border-white/30"
+                >
+                  {a.mime_type.startsWith("image/") && a.url ? (
+                    <img src={a.url} alt={a.filename} className="h-24 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-24 items-center justify-center bg-white/5 px-2 text-center text-[11px] text-white/50">
+                      {a.filename}
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="mt-6 border-t border-white/10 pt-4">

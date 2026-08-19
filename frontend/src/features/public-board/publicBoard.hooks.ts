@@ -19,7 +19,7 @@ export function usePublicBoard(token: string | undefined, code?: string) {
 export function useCreatePublicCard(token: string | undefined, code?: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { title: string; description?: string; status?: string }) =>
+    mutationFn: (input: { title: string; description?: string; status?: string; image?: File }) =>
       api.createPublicCard(token!, { ...input, code }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["public-board", token] }),
   })

@@ -16,6 +16,13 @@ export interface PublicComment {
   created_at: string
 }
 
+export interface PublicAttachment {
+  id: string
+  filename: string
+  url: string | null
+  mime_type: string
+}
+
 export interface PublicCard {
   id: string
   ref: string
@@ -29,6 +36,7 @@ export interface PublicCard {
   labels: string[]
   due_date: string | null
   comments: PublicComment[]
+  attachments: PublicAttachment[]
 }
 
 export interface PublicColumn {
@@ -65,10 +73,24 @@ export async function getPublicBoard(token: string, code?: string): Promise<Publ
   return data
 }
 
+// `image` faz o POST virar multipart — sem imagem continua JSON puro
+// (mais leve, é o caso comum). O backend aceita os dois no mesmo endpoint.
 export async function createPublicCard(
   token: string,
-  input: { title: string; description?: string; status?: string; code?: string },
+  input: { title: string; description?: string; status?: string; code?: string; image?: File },
 ): Promise<PublicCard> {
+  if (input.image) {
+    const form = new FormData()
+    form.append("title", input.title)
+    if (input.description) form.append("description", input.description)
+    if (input.status) form.append("status", input.status)
+    if (input.code) form.append("code", input.code)
+    form.append("image", input.image)
+    const { data } = await publicApi.post<PublicCard>(`/public/boards/${token}/cards/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    return data
+  }
   const { data } = await publicApi.post<PublicCard>(`/public/boards/${token}/cards/`, input)
   return data
 }

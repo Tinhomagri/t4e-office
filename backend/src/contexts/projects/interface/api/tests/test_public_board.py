@@ -2,6 +2,7 @@
 com a exceção de criar card novo quando o projeto libera.
 """
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from contexts.identity.infrastructure.django.models import (
@@ -10,12 +11,20 @@ from contexts.identity.infrastructure.django.models import (
     WorkspaceModel,
 )
 from contexts.projects.infrastructure.django.models import (
+    AttachmentModel,
     BoardMessageModel,
     CardCommentModel,
     CardModel,
     ProjectModel,
     SprintModel,
     WorkflowStatusModel,
+)
+
+# PNG 1x1 mínimo válido — só pra passar pela checagem de mimetype/tamanho.
+PNG_1X1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+    "53de0000000c4944415478da6360000000020001e221bc330000000049454e"
+    "44ae426082"
 )
 
 
@@ -134,6 +143,60 @@ def test_criar_card_publico_funciona_quando_liberado(cenario):
     assert novo.title == "Sugestão do cliente"
     assert novo.source == "public_link"
     assert novo.status == "todo"
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_com_imagem_anexa_sem_autor(cenario):
+    """Cliente sem conta consegue anexar print/foto junto do card — anexo
+    nasce sem autor (author=None), só o time tem conta pra isso."""
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    imagem = SimpleUploadedFile("print.png", PNG_1X1, content_type="image/png")
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Com imagem", "image": imagem},
+        format="multipart",
+    )
+    assert r.status_code == 201
+    assert len(r.data["attachments"]) == 1
+    assert r.data["attachments"][0]["filename"] == "print.png"
+
+    anexo = AttachmentModel.objects.get(card_id=r.data["id"])
+    assert anexo.author_id is None
+    assert anexo.mime_type == "image/png"
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_recusa_arquivo_que_nao_e_imagem(cenario):
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    arquivo = SimpleUploadedFile("script.exe", b"conteudo", content_type="application/x-msdownload")
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Com arquivo ruim", "image": arquivo},
+        format="multipart",
+    )
+    assert r.status_code == 400
+    assert not CardModel.objects.filter(title="Com arquivo ruim").exists()
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_recusa_imagem_grande_demais(cenario):
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    grande = SimpleUploadedFile(
+        "grande.png", b"0" * (8 * 1024 * 1024 + 1), content_type="image/png"
+    )
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Imagem grande", "image": grande},
+        format="multipart",
+    )
+    assert r.status_code == 400
+    assert not CardModel.objects.filter(title="Imagem grande").exists()
 
 
 @pytest.mark.django_db

@@ -15,9 +15,11 @@ a tela de entrada e criar card ou postar no mural direto pela API.
 """
 from __future__ import annotations
 
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from contexts.identity.infrastructure.django.models import (
@@ -25,6 +27,7 @@ from contexts.identity.infrastructure.django.models import (
     UserModel,
 )
 from contexts.projects.infrastructure.django.models import (
+    AttachmentModel,
     BoardMessageModel,
     CardCommentModel,
     CardModel,
@@ -37,6 +40,20 @@ from contexts.projects.interface.api.notification_views import notify
 from shared.domain.errors import NotFoundError, ValidationError
 
 MAX_MESSAGE_LEN = 2000
+
+# Imagem, não arquivo qualquer: é anexo de cliente sem conta, numa rota sem
+# autenticação — superfície de abuso bem maior que o upload autenticado (que
+# nem valida isso). Whitelist de mimetype + teto de tamanho é o mínimo aqui.
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+class PublicCardCreateThrottle(AnonRateThrottle):
+    """Throttle só desta rota — o projeto não tinha NENHUM throttle em lugar
+    nenhum; criar card (e agora subir imagem) por um link sem login pede um
+    limite, senão é convite a encher o disco de anexo."""
+
+    scope = "public_card_create"
 
 
 def _get_public_project(token: str) -> ProjectModel:
@@ -65,7 +82,16 @@ def _ser_comment(c: CardCommentModel) -> dict:
     }
 
 
-def _ser_public_card(card: CardModel) -> dict:
+def _ser_public_attachment(a: AttachmentModel, request: Request) -> dict:
+    return {
+        "id": str(a.id),
+        "filename": a.filename,
+        "url": request.build_absolute_uri(a.file.url) if a.file else None,
+        "mime_type": a.mime_type,
+    }
+
+
+def _ser_public_card(card: CardModel, request: Request) -> dict:
     assignee = UserModel.objects.filter(id=card.assignee_id).first() if card.assignee_id else None
     return {
         "id": str(card.id),
@@ -82,6 +108,10 @@ def _ser_public_card(card: CardModel) -> dict:
         "comments": [
             _ser_comment(c)
             for c in card.comments.select_related("author").order_by("created_at")
+        ],
+        "attachments": [
+            _ser_public_attachment(a, request)
+            for a in card.attachments.order_by("created_at")
         ],
     }
 
@@ -140,7 +170,7 @@ class PublicBoardView(APIView):
         )
         cards = (
             cards_qs.select_related("project")
-            .prefetch_related("comments__author")
+            .prefetch_related("comments__author", "attachments")
             .order_by("status", "rank", "order", "number")
         )
         return Response(
@@ -148,17 +178,23 @@ class PublicBoardView(APIView):
                 "project": {"name": project.name, "key": project.key},
                 "allow_create": project.public_allow_create,
                 "columns": [_ser_column(c) for c in columns],
-                "cards": [_ser_public_card(c) for c in cards],
+                "cards": [_ser_public_card(c, request) for c in cards],
             }
         )
 
 
 class PublicCardCreateView(APIView):
     """POST /api/public/boards/<token>/cards/ — só cria; nunca altera o que
-    já existe. 403 quando o projeto não liberou criação pública."""
+    já existe. 403 quando o projeto não liberou criação pública.
+
+    Aceita `image` (multipart) opcional junto do mesmo POST — cliente descreve
+    o que precisa e já anexa um print/foto sem precisar de uma segunda
+    requisição (que exigiria autenticação em qualquer outro fluxo de anexo)."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+    throttle_classes = [PublicCardCreateThrottle]
 
     def post(self, request: Request, token: str) -> Response:
         try:
@@ -177,6 +213,13 @@ class PublicCardCreateView(APIView):
         if not title:
             raise ValidationError("Informe um título.")
         description = str(request.data.get("description") or "")
+
+        image = request.FILES.get("image")
+        if image is not None:
+            if image.content_type not in ALLOWED_IMAGE_TYPES:
+                raise ValidationError("Anexo precisa ser uma imagem (PNG, JPEG, WEBP ou GIF).")
+            if image.size > MAX_IMAGE_BYTES:
+                raise ValidationError("Imagem muito grande (máximo 8MB).")
 
         status_slug = str(request.data.get("status") or "")
         column = (
@@ -203,7 +246,13 @@ class PublicCardCreateView(APIView):
             # o próprio time criou — útil pra saber de onde veio a sugestão.
             source="public_link",
         )
-        return Response(_ser_public_card(card), status=201)
+        if image is not None:
+            # author=None: veio de fora, sem conta — ver comentário no model.
+            AttachmentModel.objects.create(
+                card=card, author=None, filename=image.name, file=image,
+                mime_type=image.content_type, size=image.size,
+            )
+        return Response(_ser_public_card(card, request), status=201)
 
 
 class PublicMessageListCreateView(APIView):

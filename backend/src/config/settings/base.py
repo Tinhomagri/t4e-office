@@ -139,6 +139,12 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "shared.interface.exception_handler.domain_exception_handler",
+    # Só a criação de card pelo board público declara `throttle_classes` hoje —
+    # é a única rota sem login que aceita upload de arquivo. Rate vive aqui
+    # porque o throttle de escopo do DRF exige a taxa no settings, não na view.
+    "DEFAULT_THROTTLE_RATES": {
+        "public_card_create": "20/hour",
+    },
 }
 
 # Em dev, ativa a conta no cadastro (email vai só pro console). Em prod, False:
