@@ -6,11 +6,11 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Keyboard, MessageSquare, Mic, MicOff, Smile, Video, VideoOff, Volume2, VolumeX } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
 
 import type { AvatarConfig, Direction } from "@/features/avatar/avatar.types"
 import { useAuthStore } from "@/features/auth/auth.store"
-import { useMembers } from "@/features/workspace/workspace.hooks"
+import { CardDrawer } from "@/features/boards/CardDrawer"
+import { useCards, useMembers, useSprints } from "@/features/workspace/workspace.hooks"
 import { EASE } from "@/shared/lib/motion"
 import { Kbd, cx } from "@/shared/ui/primitives"
 
@@ -96,7 +96,16 @@ export function OfficeRoom({
   const myRole = (members.data ?? []).find((m) => m.user_id === me?.id)?.role ?? null
   const canManageDesks = myRole === "owner" || myRole === "admin"
 
-  const navigate = useNavigate()
+  // Card aberto a partir do clique num colega no jogo — abre o drawer POR
+  // CIMA do próprio Escritório em vez de navegar pro board (a pessoa nem
+  // precisa sair da cena pra ver o card). O projeto do card clicado pode ser
+  // diferente de qualquer projeto que o visitante já tenha em foco, então
+  // cards/sprints desse projeto são buscados à parte daqui.
+  const [officeCard, setOfficeCard] = useState<{ projectId: string; cardId: string } | null>(null)
+  const officeCards = useCards(officeCard?.projectId ?? null)
+  const officeSprints = useSprints(officeCard?.projectId ?? null)
+  const officeCardFull = officeCards.data?.find((c) => c.id === officeCard?.cardId) ?? null
+
   const [hoverUserId, setHoverUserId] = useState<string | null>(null)
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   // Espelho de hoverPos lido dentro do onCanvasMouseMove (callback estável).
@@ -122,6 +131,10 @@ export function OfficeRoom({
     hoverCloseTimerRef.current = window.setTimeout(closeHoverNow, 100)
   }, [cancelHoverClose, closeHoverNow])
   useEffect(() => cancelHoverClose, [cancelHoverClose])
+  const openOfficeCard = useCallback((projectId: string, cardId: string) => {
+    setOfficeCard({ projectId, cardId })
+    closeHoverNow()
+  }, [closeHoverNow])
   const activeCard = useActiveCard(queryWorkspaceId, hoverUserId, canManageDesks)
   const myActiveCard = useActiveCard(queryWorkspaceId, me?.id ?? null, true)
   const roomMembers = room.data
@@ -451,16 +464,16 @@ export function OfficeRoom({
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
 
-    // Clicou num colega com card ativo: abre o board dele direto no card,
-    // em vez de andar até lá — é o mesmo hit-test do hover, então só
-    // navega quando já temos o card carregado pra esse usuário (evita
-    // clique cru virar navegação errada por causa de uma resposta velha).
+    // Clicou num colega com card ativo: abre o card num drawer por cima do
+    // próprio jogo, em vez de andar até lá — é o mesmo hit-test do hover,
+    // então só abre quando já temos o card carregado pra esse usuário (evita
+    // clique cru virar abertura errada por causa de uma resposta velha).
     if (canManageDesks) {
       const clickedUserId = engine.hoverSeatAt(localX, localY)
       if (clickedUserId && clickedUserId === hoverUserId && hoveredCard?.active) {
         const card = hoveredCard.cards?.[0]
         if (card) {
-          navigate(`/app/boards?project=${card.project_id}&card=${card.id}`)
+          openOfficeCard(card.project_id, card.id)
           return
         }
       }
@@ -470,7 +483,7 @@ export function OfficeRoom({
     // clickTo levanta o avatar sem passar pelo onInteract — quem estava
     // sentado na mesa de poker precisa perder a roda de cartas aqui.
     if (!engine.isSeated()) usePokerRoomStore.getState().closeVote()
-  }, [canManageDesks, hoverUserId, hoveredCard, navigate])
+  }, [canManageDesks, hoverUserId, hoveredCard, openOfficeCard])
 
   const onCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -607,7 +620,7 @@ export function OfficeRoom({
                   // O balão fica flutuando POR CIMA do boneco — clicar nele é o
                   // gesto natural (é o que está embaixo do cursor), não só
                   // acertar o pixel exato do avatar por baixo.
-                  onClick={() => navigate(`/app/boards?project=${card.project_id}&card=${card.id}`)}
+                  onClick={() => openOfficeCard(card.project_id, card.id)}
                   className={cx(
                     "cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-white/10",
                     i > 0 && "mt-1.5 border-t border-gray-700 pt-1.5",
@@ -781,6 +794,16 @@ export function OfficeRoom({
           </motion.form>
         )}
       </AnimatePresence>
+
+      {officeCard && (
+        <CardDrawer
+          card={officeCardFull}
+          projectId={officeCard.projectId}
+          sprints={officeSprints.data ?? []}
+          members={members.data ?? []}
+          onClose={() => setOfficeCard(null)}
+        />
+      )}
     </div>
   )
 }
