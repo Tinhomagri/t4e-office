@@ -129,6 +129,8 @@ export interface Card {
   resolved_at?: string | null
   original_estimate_seconds?: number | null
   remaining_estimate_seconds?: number | null
+  // Sinalizador de atenção (igual "Flag" do Jira) — aura laranja + "!" no card.
+  flagged?: boolean
   archived?: boolean
   archived_at?: string | null
   created_at: string | null
@@ -240,6 +242,7 @@ export interface CreateCardInput {
   labels?: string[]
   channel?: string
   publish_date?: string | null
+  flagged?: boolean
 }
 
 export type UpdateCardInput = Partial<CreateCardInput> & { order?: number }

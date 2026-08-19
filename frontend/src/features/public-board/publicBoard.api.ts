@@ -37,6 +37,7 @@ export interface PublicCard {
   due_date: string | null
   comments: PublicComment[]
   attachments: PublicAttachment[]
+  flagged: boolean
 }
 
 export interface PublicColumn {
@@ -77,7 +78,14 @@ export async function getPublicBoard(token: string, code?: string): Promise<Publ
 // (mais leve, é o caso comum). O backend aceita os dois no mesmo endpoint.
 export async function createPublicCard(
   token: string,
-  input: { title: string; description?: string; status?: string; code?: string; image?: File },
+  input: {
+    title: string
+    description?: string
+    status?: string
+    code?: string
+    image?: File
+    flagged?: boolean
+  },
 ): Promise<PublicCard> {
   if (input.image) {
     const form = new FormData()
@@ -85,6 +93,7 @@ export async function createPublicCard(
     if (input.description) form.append("description", input.description)
     if (input.status) form.append("status", input.status)
     if (input.code) form.append("code", input.code)
+    if (input.flagged) form.append("flagged", "true")
     form.append("image", input.image)
     const { data } = await publicApi.post<PublicCard>(`/public/boards/${token}/cards/`, form, {
       headers: { "Content-Type": "multipart/form-data" },

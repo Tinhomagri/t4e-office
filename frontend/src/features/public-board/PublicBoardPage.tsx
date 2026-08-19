@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import axios from "axios"
-import { ChevronsRight, Image as ImageIcon, Lock, MessageSquare, Paperclip, Plus, Send, X } from "lucide-react"
+import { AlertTriangle, ChevronsRight, Image as ImageIcon, Lock, MessageSquare, Paperclip, Plus, Send, X } from "lucide-react"
 
 import {
   useCreatePublicCard,
@@ -18,6 +18,7 @@ import {
   usePublicMessages,
 } from "./publicBoard.hooks"
 import type { PublicCard, PublicColumn } from "./publicBoard.api"
+import { cx } from "@/shared/ui/primitives"
 
 function accessCodeStorageKey(token: string) {
   return `public-board-access-${token}`
@@ -330,6 +331,7 @@ function Column({
   const [description, setDescription] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [flagged, setFlagged] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const create = useCreatePublicCard(token, code)
 
@@ -350,6 +352,7 @@ function Column({
     setTitle("")
     setDescription("")
     clearImage()
+    setFlagged(false)
     setAdding(false)
   }
 
@@ -361,6 +364,7 @@ function Column({
       description: description.trim() || undefined,
       status: column.slug,
       image: image ?? undefined,
+      flagged,
     })
     reset()
   }
@@ -388,8 +392,18 @@ function Column({
             <button
               key={card.id}
               onClick={() => onOpenCard(card)}
-              className="w-full rounded-xl border border-white/[0.05] bg-white/[0.04] p-3 text-left shadow-sm transition-all hover:border-white/10 hover:bg-white/[0.08]"
+              className={cx(
+                "relative w-full rounded-xl border p-3 text-left shadow-sm transition-all",
+                card.flagged
+                  ? "border-orange-500/40 bg-orange-500/[0.06] shadow-[0_0_14px_-2px_rgba(249,115,22,0.35)] hover:border-orange-400/60"
+                  : "border-white/[0.05] bg-white/[0.04] hover:border-white/10 hover:bg-white/[0.08]",
+              )}
             >
+              {card.flagged && (
+                <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-orange-500 text-white shadow-[0_0_6px_rgba(249,115,22,0.6)]">
+                  <AlertTriangle className="size-3" fill="currentColor" strokeWidth={1.5} />
+                </span>
+              )}
               <p className="text-[13px] font-medium leading-snug text-white/95">{card.title}</p>
               <div className="mt-2.5 flex items-center justify-between">
                 <span className="font-mono text-[11px] text-white/30">{card.ref}</span>
@@ -459,6 +473,17 @@ function Column({
                 className="hidden"
               />
 
+              <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-white/60">
+                <input
+                  type="checkbox"
+                  checked={flagged}
+                  onChange={(e) => setFlagged(e.target.checked)}
+                  className="size-3.5 accent-orange-500"
+                />
+                <AlertTriangle className="size-3.5 text-orange-400" />
+                Marcar como urgente
+              </label>
+
               <div className="flex gap-1.5">
                 <button
                   onClick={submit}
@@ -501,6 +526,11 @@ function CardDetail({ card, onClose }: { card: PublicCard; onClose: () => void }
           <X className="size-4" />
         </button>
         <span className="font-mono text-xs text-white/40">{card.ref}</span>
+        {card.flagged && (
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-medium text-orange-400">
+            <AlertTriangle className="size-3" /> Urgente
+          </span>
+        )}
         <h2 className="mt-1 text-lg font-semibold leading-snug">{card.title}</h2>
 
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-white/50">

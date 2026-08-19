@@ -23,6 +23,7 @@ import { createPortal } from "react-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BarChart3,
@@ -1957,8 +1958,23 @@ export function CardCell({
         dragging && "shadow-pop ring-1 ring-ink/10",
         isEpic ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800" : "border-paper-200 dark:border-ink-700",
         isDone && "opacity-60",
+        // Flag de atenção: cliente marcou na criação (ou o time marcou depois)
+        // — aura laranja pra saltar aos olhos na varredura do board.
+        card.flagged &&
+          "border-orange-400/70 dark:border-orange-500/60 shadow-[0_0_0_1px_rgba(251,146,60,0.35),0_0_16px_-4px_rgba(249,115,22,0.5)]",
       )}
     >
+      {card.flagged && (
+        // O card pai é overflow-hidden (recorta os cantos arredondados) — um
+        // badge protruso (-top/-right negativo) seria cortado. Fica encostado
+        // por dentro em vez de "pendurado" na borda.
+        <span
+          title="Marcado como urgente"
+          className="absolute right-1.5 top-1.5 z-10 grid size-5 place-items-center rounded-full bg-orange-500 text-white shadow-[0_0_6px_rgba(249,115,22,0.6)]"
+        >
+          <AlertTriangle className="size-3" strokeWidth={2.5} />
+        </span>
+      )}
       {/* Sem barra de prioridade: o sinal já vem do PriorityIcon no rodapé, e a
           faixa colorida cheia (que ainda engrossava no hover) era o que fazia o
           board parecer carregado ao lado do Jira. */}

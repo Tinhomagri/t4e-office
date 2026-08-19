@@ -90,6 +90,7 @@ class CreateCardSerializer(serializers.Serializer):
     )
     channel = serializers.CharField(required=False, allow_blank=True, max_length=30)
     publish_date = serializers.DateField(required=False, allow_null=True)
+    flagged = serializers.BooleanField(required=False, default=False)
 
 
 class UpdateCardSerializer(serializers.Serializer):
@@ -127,6 +128,7 @@ class UpdateCardSerializer(serializers.Serializer):
         required=False, allow_null=True, min_value=0
     )
     archived = serializers.BooleanField(required=False)
+    flagged = serializers.BooleanField(required=False)
 
 
 class CardSerializer(serializers.Serializer):
@@ -159,6 +161,7 @@ class CardSerializer(serializers.Serializer):
     resolved_at = serializers.DateTimeField(allow_null=True, default=None)
     original_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
     remaining_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
+    flagged = serializers.BooleanField(default=False)
     archived = serializers.BooleanField(default=False)
     archived_at = serializers.DateTimeField(allow_null=True, default=None)
     # Só as telas que misturam projetos (Meu Dia) preenchem isto; nas listagens

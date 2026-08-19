@@ -113,6 +113,7 @@ def _ser_public_card(card: CardModel, request: Request) -> dict:
             _ser_public_attachment(a, request)
             for a in card.attachments.order_by("created_at")
         ],
+        "flagged": card.flagged,
     }
 
 
@@ -213,6 +214,9 @@ class PublicCardCreateView(APIView):
         if not title:
             raise ValidationError("Informe um título.")
         description = str(request.data.get("description") or "")
+        # Vem como bool (JSON) ou string (multipart, quando tem imagem junto) —
+        # normaliza os dois formatos pro mesmo teste.
+        flagged = str(request.data.get("flagged") or "").strip().lower() in ("true", "1", "on")
 
         image = request.FILES.get("image")
         if image is not None:
@@ -245,6 +249,7 @@ class PublicCardCreateView(APIView):
             # Marca a origem: card de fora do time, não confundir com o que
             # o próprio time criou — útil pra saber de onde veio a sugestão.
             source="public_link",
+            flagged=flagged,
         )
         if image is not None:
             # author=None: veio de fora, sem conta — ver comentário no model.

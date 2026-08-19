@@ -112,6 +112,9 @@ class Card:
     # horas. Sem os dois não há "restante vs gasto" — só total gasto.
     original_estimate_seconds: int | None = None
     remaining_estimate_seconds: int | None = None
+    # Sinalizador de atenção (igual "Flag" do Jira) — aura laranja + "!" no
+    # card. Cliente marca na criação pelo link público; time também alterna.
+    flagged: bool = False
     # Arquivar preserva histórico sem poluir board/relatórios; deletar perdia o
     # rastro do que foi decidido.
     archived_at: datetime | None = None

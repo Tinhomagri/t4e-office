@@ -43,6 +43,7 @@ _TRACKED = [
     "original_estimate_seconds",
     "remaining_estimate_seconds",
     "archived_at",
+    "flagged",
 ]
 
 
@@ -72,6 +73,7 @@ def _repr(card: Card) -> dict[str, str]:
             "" if card.remaining_estimate_seconds is None else str(card.remaining_estimate_seconds)
         ),
         "archived_at": "" if card.archived_at is None else str(card.archived_at),
+        "flagged": "1" if card.flagged else "",
     }
 
 
@@ -124,6 +126,7 @@ class UpdateCard:
         original_estimate_seconds=_UNSET,
         remaining_estimate_seconds=_UNSET,
         archived=_UNSET,
+        flagged=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
         if card is None:
@@ -185,6 +188,8 @@ class UpdateCard:
                 card.archived_at = datetime.now(UTC)
             elif not archived:
                 card.archived_at = None
+        if flagged is not _UNSET:
+            card.flagged = flagged
 
         # Desfecho. O explícito do cliente vence; na ausência dele, mover para uma
         # coluna `done` resolve como entregue e sair dela reabre. `resolved_at`

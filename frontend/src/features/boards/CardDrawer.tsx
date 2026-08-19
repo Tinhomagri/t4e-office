@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import {
+  AlertTriangle,
   Calendar,
   Check,
   CheckSquare,
@@ -303,6 +304,20 @@ export function CardDrawer({
             </nav>
 
           <div className="flex shrink-0 items-center gap-0.5">
+            {can("edit_issue") && (
+              <ToolbarButton
+                label={draft.flagged ? "Remover sinalização de urgência" : "Sinalizar como urgente"}
+                onClick={() => persist({ flagged: !draft.flagged })}
+                className={draft.flagged ? "hover:bg-orange-50 dark:hover:bg-orange-500/10" : undefined}
+              >
+                {/* Cor vai no ícone, não no botão: o botão já tem text-paper-400
+                    fixo, e className só se SOMA (cx concatena) — as duas classes
+                    de cor competiam e o cinza vencia por ordem no stylesheet. */}
+                <AlertTriangle
+                  className={cx("size-4", draft.flagged ? "text-orange-500 fill-orange-500/25" : undefined)}
+                />
+              </ToolbarButton>
+            )}
             <ToolbarButton label="Copiar link" onClick={copyLink}>
               <Share2 className="size-4" />
             </ToolbarButton>

@@ -80,6 +80,7 @@ def _card_to_entity(row: CardModel) -> Card:
         resolved_at=row.resolved_at,
         original_estimate_seconds=row.original_estimate_seconds,
         remaining_estimate_seconds=row.remaining_estimate_seconds,
+        flagged=row.flagged,
         archived_at=row.archived_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -166,6 +167,7 @@ class DjangoCardRepository(CardRepository):
             resolved_at=card.resolved_at,
             original_estimate_seconds=card.original_estimate_seconds,
             remaining_estimate_seconds=card.remaining_estimate_seconds,
+            flagged=card.flagged,
             archived_at=card.archived_at,
         )
         return _card_to_entity(row)
@@ -211,6 +213,7 @@ class DjangoCardRepository(CardRepository):
             resolved_at=card.resolved_at,
             original_estimate_seconds=card.original_estimate_seconds,
             remaining_estimate_seconds=card.remaining_estimate_seconds,
+            flagged=card.flagged,
             archived_at=card.archived_at,
         )
         row = CardModel.objects.get(id=card.id)

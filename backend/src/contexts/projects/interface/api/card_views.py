@@ -72,6 +72,7 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "resolved_at": card.resolved_at.isoformat() if card.resolved_at else None,
         "original_estimate_seconds": card.original_estimate_seconds,
         "remaining_estimate_seconds": card.remaining_estimate_seconds,
+        "flagged": card.flagged,
         "archived": card.is_archived,
         "archived_at": card.archived_at.isoformat() if card.archived_at else None,
         "created_at": card.created_at.isoformat() if card.created_at else None,
@@ -152,6 +153,7 @@ def card_row(cm, project_key: str, extra: dict | None = None) -> dict:
         "resolved_at": cm.resolved_at,
         "original_estimate_seconds": cm.original_estimate_seconds,
         "remaining_estimate_seconds": cm.remaining_estimate_seconds,
+        "flagged": cm.flagged,
         "archived": cm.archived_at is not None,
         "archived_at": cm.archived_at,
     }

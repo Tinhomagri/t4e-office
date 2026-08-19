@@ -48,6 +48,7 @@ class CreateCard:
         labels: list[str] | None = None,
         channel: str = "",
         publish_date=None,
+        flagged: bool = False,
     ) -> Card:
         project = self.project_repository.get(project_id=project_id)
         if project is None:
@@ -80,5 +81,6 @@ class CreateCard:
             labels=labels or [],
             channel=channel,
             publish_date=publish_date,
+            flagged=flagged,
         )
         return self.card_repository.create(card=card)

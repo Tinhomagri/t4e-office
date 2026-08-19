@@ -91,6 +91,18 @@ def test_atribui_epico_via_patch(scenario):
     assert resp.json()["epic_id"] == str(epic.id)
 
 
+def test_time_alterna_flag_de_atencao_via_patch(scenario):
+    p = scenario["project"]
+    card = _card(p, 1, flagged=True)  # veio marcado pelo cliente
+    resp = scenario["client"].patch(
+        f"/api/cards/{card.id}/", {"flagged": False}, format="json"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["flagged"] is False
+    card.refresh_from_db()
+    assert card.flagged is False
+
+
 def test_iniciar_sprint_exige_cards_e_unicidade(scenario):
     p = scenario["project"]
     client = scenario["client"]

@@ -146,6 +146,37 @@ def test_criar_card_publico_funciona_quando_liberado(cenario):
 
 
 @pytest.mark.django_db
+def test_criar_card_publico_com_flag_de_atencao(cenario):
+    """Cliente marca o card como urgente na criação — aura laranja + "!" no
+    board (renderização é frontend, aqui só confirma que o dado persiste e
+    volta na resposta)."""
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Urgente", "flagged": True},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert r.data["flagged"] is True
+    novo = CardModel.objects.get(id=r.data["id"])
+    assert novo.flagged is True
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_sem_flag_fica_false(cenario):
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/", {"title": "Normal"}, format="json"
+    )
+    assert r.status_code == 201
+    assert r.data["flagged"] is False
+
+
+@pytest.mark.django_db
 def test_criar_card_publico_com_imagem_anexa_sem_autor(cenario):
     """Cliente sem conta consegue anexar print/foto junto do card — anexo
     nasce sem autor (author=None), só o time tem conta pra isso."""

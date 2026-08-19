@@ -280,6 +280,10 @@ class CardModel(models.Model):
     # Tempo em segundos, para casar com WorklogModel.time_seconds.
     original_estimate_seconds = models.PositiveIntegerField(null=True, blank=True)
     remaining_estimate_seconds = models.PositiveIntegerField(null=True, blank=True)
+    # Sinalizador de atenção (igual "Flag" do Jira) — aura laranja + "!" no
+    # card. Cliente marca na criação pelo link público quando é urgente; time
+    # também pode marcar/desmarcar depois.
+    flagged = models.BooleanField(default=False)
     # Arquivado sai do board e dos relatórios, mas preserva o histórico.
     archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
