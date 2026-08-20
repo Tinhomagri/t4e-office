@@ -2,9 +2,11 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   useDisconnectButton,
+  useMediaDeviceSelect,
   useTrackToggle,
   useTracks,
 } from "@livekit/components-react"
+import type { TrackReferenceOrPlaceholder } from "@livekit/components-core"
 import "@livekit/components-styles"
 import { ROOM_OPTIONS } from "./roomOptions"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -12,6 +14,8 @@ import { Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   BarChart3,
+  Check,
+  ChevronUp,
   Clock,
   Loader2,
   LogIn,
@@ -27,7 +31,7 @@ import {
   VideoOff,
   X,
 } from "lucide-react"
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 
 import { useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { extractApiError } from "@/shared/api/client"
@@ -85,9 +89,23 @@ export function MeetingsPage() {
   })
 
   const leave = async () => {
+    // A barra de abas/endereço do navegador não é algo que a página consiga
+    // esconder sozinha — só a Fullscreen API tira isso do caminho de verdade.
+    // Sair da call também sai do fullscreen, senão o resto do app (Boards,
+    // sidebar) ficaria preso em tela cheia sem motivo.
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {})
     if (session) await meetApi.leaveRoom(session.room.id).catch(() => {})
     setSession(null)
     qc.invalidateQueries({ queryKey: ["meeting-rooms", activeWorkspaceId] })
+  }
+
+  // Só funciona chamada durante um gesto do usuário (o clique em "Criar
+  // sala"/"Entrar") — por isso é chamada direto no onClick, síncrona, e não
+  // num efeito reagindo à sessão (aí já teria perdido a permissão do browser).
+  const enterFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    }
   }
 
   if (!activeWorkspaceId) return null
@@ -132,7 +150,10 @@ export function MeetingsPage() {
               className="w-full sm:w-56"
             />
             <Button
-              onClick={() => create.mutate()}
+              onClick={() => {
+                enterFullscreen()
+                create.mutate()
+              }}
               loading={create.isPending}
               disabled={!name.trim()}
               icon={<Plus className="size-4" />}
@@ -312,7 +333,10 @@ export function MeetingsPage() {
                   size="sm"
                   variant={live ? "primary" : "outline"}
                   className="mt-3 w-full"
-                  onClick={() => join.mutate(room.id)}
+                  onClick={() => {
+                    enterFullscreen()
+                    join.mutate(room.id)
+                  }}
                   loading={join.isPending && join.variables === room.id}
                   icon={<LogIn className="size-3.5" />}
                 >
@@ -540,6 +564,70 @@ function CallButton({
   )
 }
 
+// Setinha no canto do botão de mic/câmera pra trocar de dispositivo — sem
+// isto a pessoa fica presa no mic/câmera que o navegador escolheu por padrão
+// na primeira vez, igual o ControlBar padrão da lib já deixava de fazer.
+function DeviceMenu({
+  kind,
+  label,
+}: {
+  kind: "audioinput" | "videoinput"
+  label: string
+}) {
+  const [open, setOpen] = useState(false)
+  const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({
+    kind,
+    requestPermissions: true,
+  })
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={`Escolher ${label}`}
+        title={`Escolher ${label}`}
+        className="absolute -right-1 -top-1 z-10 grid size-5 place-items-center rounded-full bg-ink-700 text-white ring-2 ring-ink-950 hover:bg-ink-600"
+      >
+        <ChevronUp className="size-3" />
+      </button>
+      {open && (
+        <>
+          {/* Fecha ao clicar fora — não precisa fechar sozinho ao escolher
+              porque cada opção já fecha explicitamente no onClick. */}
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="scrollbar-slim-dark absolute bottom-full left-1/2 z-30 mb-3 max-h-60 w-64 -translate-x-1/2 overflow-y-auto rounded-lg bg-ink-800 p-1 shadow-lg">
+            {devices.length === 0 && (
+              <p className="px-3 py-2 text-xs text-white/50">Nenhum dispositivo encontrado</p>
+            )}
+            {devices.map((d, i) => (
+              <button
+                key={d.deviceId}
+                type="button"
+                onClick={() => {
+                  setActiveMediaDevice(d.deviceId)
+                  setOpen(false)
+                }}
+                className={cx(
+                  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] text-white hover:bg-white/10",
+                  d.deviceId === activeDeviceId && "bg-white/10",
+                )}
+              >
+                {d.deviceId === activeDeviceId ? (
+                  <Check className="size-3.5 shrink-0" />
+                ) : (
+                  <span className="size-3.5 shrink-0" />
+                )}
+                <span className="truncate">{d.label || `${label} ${i + 1}`}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 function MeetControlBar() {
   const mic = useTrackToggle({ source: Track.Source.Microphone })
   const camera = useTrackToggle({ source: Track.Source.Camera })
@@ -548,20 +636,26 @@ function MeetControlBar() {
 
   return (
     <div className="flex items-center justify-center gap-3 bg-ink-950 py-4">
-      <CallButton
-        variant={mic.enabled ? "default" : "off"}
-        onClick={mic.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
-        label={mic.enabled ? "Desativar microfone" : "Ativar microfone"}
-      >
-        {mic.enabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
-      </CallButton>
-      <CallButton
-        variant={camera.enabled ? "default" : "off"}
-        onClick={camera.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
-        label={camera.enabled ? "Desativar câmera" : "Ativar câmera"}
-      >
-        {camera.enabled ? <Video className="size-5" /> : <VideoOff className="size-5" />}
-      </CallButton>
+      <div className="relative">
+        <CallButton
+          variant={mic.enabled ? "default" : "off"}
+          onClick={mic.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+          label={mic.enabled ? "Desativar microfone" : "Ativar microfone"}
+        >
+          {mic.enabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+        </CallButton>
+        <DeviceMenu kind="audioinput" label="Microfone" />
+      </div>
+      <div className="relative">
+        <CallButton
+          variant={camera.enabled ? "default" : "off"}
+          onClick={camera.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+          label={camera.enabled ? "Desativar câmera" : "Ativar câmera"}
+        >
+          {camera.enabled ? <Video className="size-5" /> : <VideoOff className="size-5" />}
+        </CallButton>
+        <DeviceMenu kind="videoinput" label="Câmera" />
+      </div>
       <CallButton
         variant={screenShare.enabled ? "sharing" : "default"}
         onClick={screenShare.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
@@ -580,16 +674,125 @@ function MeetControlBar() {
   )
 }
 
+// Tela compartilhada quase nunca tem a mesma proporção do espaço disponível
+// (desktop 16:9/16:10 dentro de um recorte mais largo). `object-fit: contain`
+// sozinho deixa a sobra como TARJA PRETA dentro do próprio quadro — dá a
+// impressão de espaço vazio/quebrado. Aqui o quadro em si é redimensionado
+// pra proporção real do vídeo (lida direto do elemento <video>) e centralizado
+// no espaço disponível — a sobra vira o fundo escuro ao redor, não uma barra
+// dura colada no vídeo.
+function SpotlightTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
+  const outerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [videoRatio, setVideoRatio] = useState<number | null>(null)
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null)
+
+  // Acha o <video> real (só existe depois que o ParticipantTile termina de
+  // montar/anexar a track) e lê a proporção nativa dele.
+  useEffect(() => {
+    setVideoRatio(null)
+    let raf = 0
+    let video: HTMLVideoElement | null = null
+    const onLoaded = () => {
+      if (video && video.videoWidth && video.videoHeight) {
+        setVideoRatio(video.videoWidth / video.videoHeight)
+      }
+    }
+    const findVideo = () => {
+      video = innerRef.current?.querySelector("video") ?? null
+      if (video) {
+        onLoaded()
+        video.addEventListener("loadedmetadata", onLoaded)
+        video.addEventListener("resize", onLoaded)
+      } else {
+        raf = requestAnimationFrame(findVideo)
+      }
+    }
+    findVideo()
+    return () => {
+      cancelAnimationFrame(raf)
+      video?.removeEventListener("loadedmetadata", onLoaded)
+      video?.removeEventListener("resize", onLoaded)
+    }
+    // `trackRef` é recriado a cada emissão do `useTracks` (nova identidade de
+    // objeto mesmo sem mudar a track de verdade) — usar ele como dependência
+    // reiniciava a busca do <video> a cada render. participant+source é o
+    // que muda de verdade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackRef.participant.identity, trackRef.source])
+
+  // Faz o "contain" na mão: `width:100%` + `aspect-ratio` não encolhe a
+  // largura de volta quando o `max-height` corta a altura calculada — o
+  // resultado prático era nenhuma mudança (a caixa ficava do tamanho do
+  // container do mesmo jeito, só que agora com a MATEMÁTICA certa aqui).
+  useEffect(() => {
+    const el = outerRef.current
+    if (!el || !videoRatio) {
+      setBox(null)
+      return
+    }
+    const update = () => {
+      const cw = el.clientWidth
+      const ch = el.clientHeight
+      if (!cw || !ch) return
+      const containerRatio = cw / ch
+      if (containerRatio > videoRatio) {
+        const h = ch
+        setBox({ w: h * videoRatio, h })
+      } else {
+        const w = cw
+        setBox({ w, h: w / videoRatio })
+      }
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [videoRatio])
+
+  return (
+    <div ref={outerRef} className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+      <div ref={innerRef} style={box ? { width: box.w, height: box.h } : { width: "100%", height: "100%" }}>
+        <ParticipantTile trackRef={trackRef} style={{ width: "100%", height: "100%" }} />
+      </div>
+    </div>
+  )
+}
+
 function VideoStage() {
-  const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-      // Sem placeholder: uma tela não compartilhada não deve ocupar um quadro
-      // vazio na grade.
-      { source: Track.Source.ScreenShare, withPlaceholder: false },
-    ],
+  const cameraTracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: true }],
     { onlySubscribed: false },
   )
+  // Sem placeholder: uma tela não compartilhada não deve virar quadro vazio.
+  const screenTracks = useTracks(
+    [{ source: Track.Source.ScreenShare, withPlaceholder: false }],
+    { onlySubscribed: false },
+  )
+
+  if (screenTracks.length > 0) {
+    // Estilo Meet: quem compartilha a tela domina o espaço; o resto vira uma
+    // faixa de miniaturas ao lado. Antes a tela compartilhada entrava na
+    // mesma grade dos outros, do MESMO tamanho — parecia que tinha entrado
+    // gente nova na call, não que alguém tinha compartilhado algo.
+    const spotlight = screenTracks[0]
+    return (
+      <div className="meet-video-stage flex min-h-0 flex-1 gap-2 overflow-hidden bg-ink-950 p-2">
+        <SpotlightTile trackRef={spotlight} />
+        {cameraTracks.length > 0 && (
+          <div className="scrollbar-slim-dark flex w-[180px] shrink-0 flex-col gap-2 overflow-y-auto">
+            {cameraTracks.map((track, i) => (
+              <ParticipantTile
+                key={`${track.participant.identity}-${track.source}-${i}`}
+                trackRef={track}
+                style={{ width: "100%", height: "120px", flexShrink: 0 }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // Estilo Meet: quadros do mesmo tamanho preenchendo o espaço, sem sobrar
   // célula vazia quando a contagem não é um quadrado perfeito (3, 5, 6, 7...).
@@ -597,13 +800,13 @@ function VideoStage() {
   // e a 4ª célula fica preta. Aqui é flex-wrap com todo quadro do mesmo
   // tamanho: a última linha incompleta centraliza (`justify-content: center`)
   // em vez de deixar vão à direita.
-  const count = tracks.length || 1
+  const count = cameraTracks.length || 1
   const columns = Math.max(1, Math.ceil(Math.sqrt(count)))
   const rows = Math.max(1, Math.ceil(count / columns))
 
   return (
     <div className="meet-video-stage flex min-h-0 flex-1 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
-      {tracks.map((track, i) => (
+      {cameraTracks.map((track, i) => (
         <ParticipantTile
           key={`${track.participant.identity}-${track.source}-${i}`}
           trackRef={track}
