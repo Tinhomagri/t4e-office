@@ -1,8 +1,8 @@
 import {
-  ControlBar,
-  GridLayout,
   ParticipantTile,
   RoomAudioRenderer,
+  useDisconnectButton,
+  useTrackToggle,
   useTracks,
 } from "@livekit/components-react"
 import "@livekit/components-styles"
@@ -15,7 +15,11 @@ import {
   Clock,
   Loader2,
   LogIn,
+  Mic,
+  MicOff,
+  Phone,
   Plus,
+  ScreenShare,
   TrendingUp,
   Trash2,
   Users,
@@ -359,7 +363,7 @@ export function MeetingsPage() {
               >
                 <VideoStage />
                 <RoomAudioRenderer />
-                <ControlBar />
+                <MeetControlBar />
               </LiveKitRoom>
             </Suspense>
           </motion.div>
@@ -501,6 +505,81 @@ function MetricTile({
   )
 }
 
+// Barra de controle estilo Meet: botões redondos só com ícone (sem o texto em
+// inglês "Microphone/Camera/Share screen/Leave" do ControlBar padrão da lib).
+function CallButton({
+  variant = "default",
+  onClick,
+  label,
+  children,
+}: {
+  /** off = mic/câmera desligados (vermelho); sharing = tela sendo
+   * compartilhada agora (azul da marca); danger = encerrar chamada. */
+  variant?: "default" | "off" | "sharing" | "danger"
+  onClick: React.MouseEventHandler<HTMLButtonElement>
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={cx(
+        "grid size-12 place-items-center rounded-full transition-colors",
+        variant === "danger" || variant === "off"
+          ? "bg-red-600 text-white hover:bg-red-500"
+          : variant === "sharing"
+            ? "bg-brand-600 text-white hover:bg-brand-500"
+            : "bg-white/10 text-white hover:bg-white/20",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function MeetControlBar() {
+  const mic = useTrackToggle({ source: Track.Source.Microphone })
+  const camera = useTrackToggle({ source: Track.Source.Camera })
+  const screenShare = useTrackToggle({ source: Track.Source.ScreenShare })
+  const { buttonProps: disconnectProps } = useDisconnectButton({})
+
+  return (
+    <div className="flex items-center justify-center gap-3 bg-ink-950 py-4">
+      <CallButton
+        variant={mic.enabled ? "default" : "off"}
+        onClick={mic.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+        label={mic.enabled ? "Desativar microfone" : "Ativar microfone"}
+      >
+        {mic.enabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+      </CallButton>
+      <CallButton
+        variant={camera.enabled ? "default" : "off"}
+        onClick={camera.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+        label={camera.enabled ? "Desativar câmera" : "Ativar câmera"}
+      >
+        {camera.enabled ? <Video className="size-5" /> : <VideoOff className="size-5" />}
+      </CallButton>
+      <CallButton
+        variant={screenShare.enabled ? "sharing" : "default"}
+        onClick={screenShare.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+        label={screenShare.enabled ? "Parar compartilhamento" : "Compartilhar tela"}
+      >
+        <ScreenShare className="size-5" />
+      </CallButton>
+      <CallButton
+        variant="danger"
+        onClick={disconnectProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
+        label="Sair da chamada"
+      >
+        <Phone className="size-5 rotate-[135deg]" />
+      </CallButton>
+    </div>
+  )
+}
+
 function VideoStage() {
   const tracks = useTracks(
     [
@@ -512,9 +591,28 @@ function VideoStage() {
     { onlySubscribed: false },
   )
 
+  // Estilo Meet: quadros do mesmo tamanho preenchendo o espaço, sem sobrar
+  // célula vazia quando a contagem não é um quadrado perfeito (3, 5, 6, 7...).
+  // O `GridLayout` da lib é uma grade fixa NxN — com 3 pessoas ele monta 2x2
+  // e a 4ª célula fica preta. Aqui é flex-wrap com todo quadro do mesmo
+  // tamanho: a última linha incompleta centraliza (`justify-content: center`)
+  // em vez de deixar vão à direita.
+  const count = tracks.length || 1
+  const columns = Math.max(1, Math.ceil(Math.sqrt(count)))
+  const rows = Math.max(1, Math.ceil(count / columns))
+
   return (
-    <GridLayout tracks={tracks} className={cx("min-h-0 flex-1")}>
-      <ParticipantTile />
-    </GridLayout>
+    <div className="meet-video-stage flex min-h-0 flex-1 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
+      {tracks.map((track, i) => (
+        <ParticipantTile
+          key={`${track.participant.identity}-${track.source}-${i}`}
+          trackRef={track}
+          style={{
+            width: `calc(${100 / columns}% - 0.5rem)`,
+            height: `calc(${100 / rows}% - 0.5rem)`,
+          }}
+        />
+      ))}
+    </div>
   )
 }

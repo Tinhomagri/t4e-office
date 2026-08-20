@@ -18,6 +18,14 @@
   display: none;
 }
 
+/* Quadro de chamada estilo Meet: cantos mais arredondados e leve sombra —
+   o padrão da lib (--border-radius: 0.5rem, sem sombra) parecia genérico. */
+.meet-video-stage .lk-participant-tile {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 @layer base {
   :root {
     color-scheme: light;
