@@ -16,11 +16,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.estimation.infrastructure.django.models import PokerSessionModel
+from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.meetings.infrastructure.django.models import (
     MeetingParticipantModel,
     MeetingRoomModel,
 )
-from contexts.meetings.infrastructure.livekit_token import issue_token
+from contexts.meetings.infrastructure.livekit_token import end_live_session, issue_token
 from contexts.meetings.interface.api.serializers import (
     CreateRoomSerializer,
     JoinRoomSerializer,
@@ -42,6 +43,16 @@ def _assert_member(workspace_id: str, user_id: str) -> None:
         workspace_id=str(workspace_id), user_id=user_id
     ):
         raise PermissionDeniedError("Você não tem acesso a este workspace.")
+
+
+def _assert_admin(workspace_id: str, user_id: str) -> None:
+    role = (
+        MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id)
+        .values_list("role", flat=True)
+        .first()
+    )
+    if role not in ("owner", "admin"):
+        raise PermissionDeniedError("Só admin do workspace pode encerrar a chamada de todo mundo.")
 
 
 def _history_of(room: MeetingRoomModel) -> list[dict]:
@@ -260,6 +271,28 @@ class RoomCloseView(APIView):
         _assert_member(str(room.workspace_id), _uid(request))
         room.closed_at = timezone.now()
         room.save(update_fields=["closed_at"])
+        MeetingParticipantModel.objects.filter(room=room, left_at=None).update(
+            left_at=timezone.now()
+        )
+        return Response(_room_dict(room))
+
+
+class RoomEndCallView(APIView):
+    """POST /api/meetings/rooms/<room_id>/end-call/ — derruba todo mundo que
+    está ao vivo AGORA, sem encerrar a sala (`closed_at` continua nulo).
+
+    Existe separado do `close/` porque sala fixa (daily, reunião recorrente)
+    precisa continuar existindo pra amanhã — só admin tira todo mundo da
+    ligação de hoje, a sala em si sobrevive."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, room_id: str) -> Response:
+        room = MeetingRoomModel.objects.filter(id=room_id).first()
+        if room is None:
+            raise NotFoundError("Sala não encontrada.")
+        _assert_admin(str(room.workspace_id), _uid(request))
+        end_live_session(room=room.slug)
         MeetingParticipantModel.objects.filter(room=room, left_at=None).update(
             left_at=timezone.now()
         )

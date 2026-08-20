@@ -19,6 +19,7 @@ import {
   Clock,
   Loader2,
   LogIn,
+  LogOut,
   Mic,
   MicOff,
   Phone,
@@ -33,7 +34,8 @@ import {
 } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 
-import { useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useAuthStore } from "@/features/auth/auth.store"
+import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { extractApiError } from "@/shared/api/client"
 import { Button, Input, Spinner, cx } from "@/shared/ui/primitives"
 import * as meetApi from "./meetings.api"
@@ -48,12 +50,19 @@ const LiveKitRoom = lazy(() =>
 export function MeetingsPage() {
   const { activeWorkspaceId } = useWorkspaces()
   const qc = useQueryClient()
+  const me = useAuthStore((s) => s.user)
+  const { data: members } = useMembers(activeWorkspaceId)
+  const myRole = (members ?? []).find((m) => m.user_id === me?.id)?.role ?? null
+  const isAdmin = myRole === "owner" || myRole === "admin"
   const [session, setSession] = useState<JoinResult | null>(null)
   const [name, setName] = useState("")
   const [tab, setTab] = useState<"open" | "history">("open")
   // Encerrar é irreversível: guarda o id da sala aguardando confirmação em vez
   // de fechar no primeiro clique.
   const [confirmClose, setConfirmClose] = useState<string | null>(null)
+  // Idem, mas pra "tirar todo mundo da chamada" — ação separada de encerrar
+  // a sala (essa aqui não apaga a sala fixa, só derruba quem tá ao vivo).
+  const [confirmEndCall, setConfirmEndCall] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
 
   const { data: rooms, isLoading } = useQuery({
@@ -81,6 +90,11 @@ export function MeetingsPage() {
       setConfirmClose(null)
       qc.invalidateQueries({ queryKey: ["meeting-rooms", activeWorkspaceId] })
     },
+  })
+
+  const endCallForEveryone = useMutation({
+    mutationFn: (roomId: string) => meetApi.endCallForEveryone(roomId),
+    onSuccess: () => setConfirmEndCall(null),
   })
 
   const join = useMutation({
@@ -322,6 +336,37 @@ export function MeetingsPage() {
                     </button>
                   </div>
                 ) : null}
+                {/* Sala fixa (daily, recorrente) tem gente ao vivo há tempo
+                    demais e ninguém sabe encerrar — admin tira todo mundo
+                    sem apagar a sala (amanhã ela continua lá). */}
+                {confirmEndCall === room.id ? (
+                  <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-danger/10 p-1.5">
+                    <span className="flex-1 pl-1 text-[11px] text-danger">
+                      Encerrar a chamada pra todo mundo?
+                    </span>
+                    <button
+                      onClick={() => endCallForEveryone.mutate(room.id)}
+                      className="rounded px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger/10"
+                    >
+                      Encerrar
+                    </button>
+                    <button
+                      onClick={() => setConfirmEndCall(null)}
+                      className="rounded px-2 py-1 text-[11px] text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : null}
+                {live && isAdmin && (
+                  <button
+                    onClick={() => setConfirmEndCall(room.id)}
+                    title="Encerrar chamada para todos"
+                    className="absolute right-9 top-2 rounded-lg p-1.5 text-paper-400 opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <LogOut className="size-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => setConfirmClose(room.id)}
                   title="Encerrar sala"

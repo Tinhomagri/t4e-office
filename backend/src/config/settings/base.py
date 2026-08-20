@@ -193,6 +193,12 @@ LIVEKIT_API_SECRET = env(
 )
 # URL que o NAVEGADOR usa para falar com o SFU (não a interna do compose).
 LIVEKIT_URL = env("LIVEKIT_URL", default="ws://localhost:7880")
+# Diferente da de cima: esta é chamada só pelo BACKEND, direto no serviço
+# `livekit` da mesma rede docker — nunca passa pelo Traefik/TLS público, então
+# não precisa de configuração extra em produção (o serviço se chama "livekit"
+# nos dois compose, dev e prod). Usada pra ações administrativas (encerrar
+# sessão ao vivo de uma sala), nunca pelo cliente.
+LIVEKIT_ADMIN_URL = env("LIVEKIT_ADMIN_URL", default="http://livekit:7880")
 
 
 # Camada de canais para tempo real (presença, poker). O Redis é o que permite um processo

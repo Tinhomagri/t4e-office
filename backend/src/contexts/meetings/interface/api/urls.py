@@ -6,6 +6,7 @@ from contexts.meetings.interface.api.views import (
     OfficeRoomJoinView,
     PokerRoomJoinView,
     RoomCloseView,
+    RoomEndCallView,
     RoomJoinView,
     RoomLeaveView,
     RoomListCreateView,
@@ -19,4 +20,9 @@ urlpatterns = [
     path("poker/join/", PokerRoomJoinView.as_view(), name="poker-meeting-join"),
     path("rooms/<uuid:room_id>/leave/", RoomLeaveView.as_view(), name="meeting-leave"),
     path("rooms/<uuid:room_id>/close/", RoomCloseView.as_view(), name="meeting-close"),
+    path(
+        "rooms/<uuid:room_id>/end-call/",
+        RoomEndCallView.as_view(),
+        name="meeting-end-call",
+    ),
 ]

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+import httpx
 import jwt
 from django.conf import settings
 
@@ -61,3 +62,43 @@ def issue_token(
         },
     }
     return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def _admin_token(room: str) -> str:
+    """Token curtíssimo (1min) só pra uma chamada administrativa no SFU — nunca
+    entra numa sala, então não precisa da validade longa do token de entrada."""
+    key = settings.LIVEKIT_API_KEY
+    secret = settings.LIVEKIT_API_SECRET
+    now = int(time.time())
+    payload = {
+        "iss": key,
+        "sub": key,
+        "nbf": now,
+        "exp": now + 60,
+        # `roomCreate` é o grant que o LiveKit exige pra DeleteRoom (gestão de
+        # sala), não `roomAdmin` (que é por-participante numa sala já aberta).
+        "video": {"roomCreate": True, "roomAdmin": True, "room": room},
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def end_live_session(*, room: str) -> None:
+    """Derruba TODO MUNDO que está ao vivo na sala agora, sem mexer no nosso
+    registro de sala (`MeetingRoomModel`) — pensado pra sala fixa (daily,
+    reunião recorrente): a próxima pessoa que entrar cria uma sessão nova no
+    SFU do zero, mesma sala, sem precisar recriar nada aqui.
+
+    Chama a API HTTP do LiveKit direto (Twirp) em vez do SDK oficial — mesmo
+    motivo do resto do arquivo: uma dependência a menos no cold start.
+    """
+    token = _admin_token(room)
+    resp = httpx.post(
+        f"{settings.LIVEKIT_ADMIN_URL}/twirp/livekit.RoomService/DeleteRoom",
+        json={"room": room},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    # 404 do Twirp = sala já não tinha sessão ao vivo (todo mundo já tinha
+    # saído sozinho) — não é erro, é exatamente o resultado que queríamos.
+    if resp.status_code not in (200, 404):
+        resp.raise_for_status()

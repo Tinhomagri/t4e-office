@@ -95,3 +95,11 @@ export async function closeRoom(roomId: string): Promise<MeetingRoom> {
   const { data } = await api.post<MeetingRoom>(`/meetings/rooms/${roomId}/close/`)
   return data
 }
+
+// Derruba quem estiver ao vivo na sala AGORA, sem encerrar a sala em si —
+// pensado pra sala fixa (daily, recorrente): amanhã a sala continua lá,
+// só a chamada de hoje termina pra todo mundo. Só admin do workspace.
+export async function endCallForEveryone(roomId: string): Promise<MeetingRoom> {
+  const { data } = await api.post<MeetingRoom>(`/meetings/rooms/${roomId}/end-call/`)
+  return data
+}
