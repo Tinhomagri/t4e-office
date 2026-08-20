@@ -138,7 +138,7 @@ export function KanbanView({
   // antigos (o backend nem lista) — economiza rede e DOM em board grande.
   // "Ver mais antigos" troca pra buscar tudo mesmo, de propósito.
   const [showOldDone, setShowOldDone] = useState(false)
-  const { data: cards } = useCards(projectId, undefined, showOldDone)
+  const { data: cards, isLoading: cardsLoading } = useCards(projectId, undefined, showOldDone)
   const { data: sprints } = useSprints(projectId)
   const { data: members } = useMembers(workspaceId)
   const updateCard = useUpdateCard(projectId)
@@ -498,8 +498,14 @@ export function KanbanView({
 
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
+          {/* Card ainda carregando: mostra esqueleto das colunas em vez do
+              "Backlog sem cards" — sem isto, todo board com muitos cards
+              piscava "vazio" por um instante antes dos dados chegarem, dando
+              a impressão de que o board tinha zerado. */}
+          {cardsLoading && <BoardSkeleton columnsCount={columns.length || 4} />}
+
           {/* Board vazio (sem cards no scope atual) */}
-          {scopeCards.length === 0 && (
+          {!cardsLoading && scopeCards.length === 0 && (
             <EmptyState
               icon={<Layers className="size-6" />}
               title={scope.kind === "sprint" ? "Sprint sem cards" : "Backlog sem cards"}
@@ -513,6 +519,7 @@ export function KanbanView({
           )}
 
           {/* Kanban — full width breakout (alinhado ao padding do main: 4 no mobile, 6 no sm+) */}
+          {!cardsLoading && (
           <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-4 scrollbar-slim sm:-mx-6 sm:px-6">
             <DndContext
               sensors={sensors}
@@ -621,6 +628,7 @@ export function KanbanView({
               )}
             </DndContext>
           </div>
+          )}
         </div>
 
         {insightsOpen && (
@@ -1067,6 +1075,39 @@ function SwimlaneBoard({
 }
 
 // ─── column ──────────────────────────────────────────────────────────────────
+
+// Placeholder de coluna enquanto os cards ainda não chegaram — mesma forma
+// do Kanban de verdade (cabeçalho + cards empilhados), só com barras cinza
+// pulsando, pra não parecer que o board zerou por um instante.
+function BoardSkeleton({ columnsCount }: { columnsCount: number }) {
+  return (
+    <div className="flex gap-3 overflow-hidden">
+      {Array.from({ length: columnsCount }).map((_, i) => (
+        <div key={i} className="w-[272px] shrink-0 rounded-xl bg-paper-50 dark:bg-ink-800/60 p-2">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div className="h-4 w-24 animate-pulse rounded bg-paper-200 dark:bg-ink-700" />
+            <div className="h-4 w-6 animate-pulse rounded bg-paper-200 dark:bg-ink-700" />
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, j) => (
+              <div
+                key={j}
+                className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-2.5"
+              >
+                <div className="h-3.5 w-full animate-pulse rounded bg-paper-200 dark:bg-ink-700" />
+                <div className="mt-1.5 h-3.5 w-2/3 animate-pulse rounded bg-paper-200 dark:bg-ink-700" />
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="h-3 w-10 animate-pulse rounded bg-paper-200 dark:bg-ink-700" />
+                  <div className="size-5 animate-pulse rounded-full bg-paper-200 dark:bg-ink-700" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function Column({
   status,
