@@ -392,7 +392,9 @@ export function MeetingCallOverlay() {
   const { data: members } = useMembers(activeWorkspaceId)
   const role = (members ?? []).find((m) => m.user_id === me?.id)?.role
   const canModerate = role === "owner" || role === "admin" || session?.room.created_by === me?.id
-  const [layout, setLayout] = useState<"floating" | "fullscreen">("floating")
+  // Igual ao Meet, a entrada na sala sempre começa ocupando a tela inteira.
+  // A janela flutuante é uma ação explícita de minimizar, nunca o padrão.
+  const [layout, setLayout] = useState<"floating" | "fullscreen">("fullscreen")
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
   const leave = async () => { if (session) await meetApi.leaveRoom(session.room.id).catch(() => {}); setSession(null) }
   useEffect(() => {
@@ -403,15 +405,24 @@ export function MeetingCallOverlay() {
   }, [pipWindow])
   useEffect(() => { if (!session && pipWindow && !pipWindow.closed) pipWindow.close() }, [session, pipWindow])
   const openPip = async () => {
+    if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return }
     const api = (document as Document & { documentPictureInPicture?: { requestWindow: (options?: { width?: number; height?: number }) => Promise<Window> } }).documentPictureInPicture
-    if (!api) { window.open(window.location.href, "t4e-meeting", "popup,width=1100,height=760,resizable=yes"); return }
-    const next = await api.requestWindow({ width: 1100, height: 760 })
+    // Document PiP é o comportamento mais próximo do Meet. Em navegadores
+    // sem essa API, abre uma janela vazia e porta a call atual para ela —
+    // nunca uma nova página do sistema.
+    const next = api
+      ? await api.requestWindow({ width: 1100, height: 760 })
+      : window.open("", "t4e-meeting", "popup,width=1100,height=760,resizable=yes")
+    if (!next) return
+    next.document.head.replaceChildren(...Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).map((node) => node.cloneNode(true)))
+    next.document.body.style.margin = "0"
+    next.document.body.style.height = "100vh"
     next.document.body.className = "dark bg-[#101011]"
     next.document.title = session?.room.name || "Reunião"
     setPipWindow(next)
   }
   if (!session) return null
-  const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[60] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
+  const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-700 bg-ink-900 px-3"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span><button onClick={() => setLayout((v) => v === "fullscreen" ? "floating" : "fullscreen")} title={layout === "fullscreen" ? "Janela flutuante" : "Tela cheia"} className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200">{layout === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button><button onClick={() => void openPip()} title="Abrir pop-up persistente" className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200"><PictureInPicture2 className="size-4" /></button><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
     <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><RoomAudioRenderer /></LiveKitRoom></Suspense>
   </motion.div>
