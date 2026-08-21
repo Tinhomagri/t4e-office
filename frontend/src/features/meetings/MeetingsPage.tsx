@@ -701,7 +701,7 @@ function CallButton({
       title={label}
       aria-label={label}
       className={cx(
-        "grid size-12 place-items-center rounded-full transition-colors",
+        "grid size-8 shrink-0 place-items-center rounded-full transition-colors min-[360px]:size-10 sm:size-12 [&_svg]:size-3.5 min-[360px]:[&_svg]:size-4 sm:[&_svg]:size-5",
         variant === "danger" || variant === "off"
           ? "bg-red-600 text-white hover:bg-red-500"
           : variant === "sharing"
@@ -737,7 +737,7 @@ function DeviceMenu({
         onClick={() => setOpen((v) => !v)}
         aria-label={`Escolher ${label}`}
         title={`Escolher ${label}`}
-        className="absolute -right-1 -top-1 z-10 grid size-5 place-items-center rounded-full bg-ink-700 text-white ring-2 ring-ink-950 hover:bg-ink-600"
+        className="absolute -right-0.5 -top-0.5 z-10 grid size-4 place-items-center rounded-full bg-ink-700 text-white ring-1 ring-ink-950 hover:bg-ink-600 min-[360px]:size-5 min-[360px]:ring-2"
       >
         <ChevronUp className="size-3" />
       </button>
@@ -785,8 +785,8 @@ function MeetControlBar({ onChat, onPeople, peopleCount }: { onChat: () => void;
   const { buttonProps: disconnectProps } = useDisconnectButton({})
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-ink-950 py-4">
-      <div className="relative">
+    <div className="scrollbar-slim-dark flex max-w-full items-center justify-start gap-1 overflow-x-auto bg-ink-950 px-2 py-2 min-[360px]:justify-center min-[360px]:gap-2 min-[360px]:py-3 sm:gap-3 sm:py-4">
+      <div className="relative shrink-0">
         <CallButton
           variant={mic.enabled ? "default" : "off"}
           onClick={mic.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
@@ -796,7 +796,7 @@ function MeetControlBar({ onChat, onPeople, peopleCount }: { onChat: () => void;
         </CallButton>
         <DeviceMenu kind="audioinput" label="Microfone" />
       </div>
-      <div className="relative">
+      <div className="relative shrink-0">
         <CallButton
           variant={camera.enabled ? "default" : "off"}
           onClick={camera.buttonProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
