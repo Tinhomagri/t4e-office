@@ -242,6 +242,12 @@ class ProjectDetailView(APIView):
             project.public_token = secrets.token_urlsafe(24)
         elif action == "revoke":
             project.public_token = None
+            # Mural é do link, não do projeto pra sempre: revogar sem apagar
+            # deixava a conversa antiga acessível de novo pra quem pegasse um
+            # token novo gerado depois — reset junto com o link.
+            from contexts.projects.infrastructure.django.models import BoardMessageModel
+
+            BoardMessageModel.objects.filter(project=project).delete()
 
         # Código de acesso ao board: curto de propósito — alguém vai DIGITAR
         # isto, não colar de um link. Alfabeto sem 0/O/1/I/L pra não confundir

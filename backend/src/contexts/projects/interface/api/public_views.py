@@ -259,8 +259,15 @@ class PublicCardCreateView(APIView):
         ultimo = CardModel.objects.filter(project=project).order_by("-number").first()
         numero = (ultimo.number + 1) if ultimo else 1
 
+        # Mesmo escopo que o GET deste board mostra: se existe sprint ativa,
+        # o card tem que nascer nela — senão ele vai pro backlog e desaparece
+        # tanto do board público quanto do Kanban do time (os dois só
+        # mostram a sprint ativa por padrão).
+        active_sprint = SprintModel.objects.filter(project=project, status="active").first()
+
         card = CardModel.objects.create(
             project=project,
+            sprint=active_sprint,
             number=numero,
             title=title[:200],
             description=description,

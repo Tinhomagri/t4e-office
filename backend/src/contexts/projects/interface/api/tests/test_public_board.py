@@ -286,6 +286,44 @@ def test_admin_gera_e_revoga_o_link(cenario):
 
 
 @pytest.mark.django_db
+def test_revogar_o_link_apaga_o_mural(cenario):
+    """Revogar não pode deixar a conversa antiga acessível de novo pra quem
+    pegar um token novo gerado depois pro mesmo projeto."""
+    projeto = cenario["projeto"]
+    BoardMessageModel.objects.create(
+        project=projeto, author_name="Cliente", body="Mensagem antiga", from_team=False,
+    )
+    assert BoardMessageModel.objects.filter(project=projeto).count() == 1
+
+    r = _admin(cenario["dono"]).patch(
+        f"/api/projects/{projeto.id}/", {"public_token_action": "revoke"}, format="json"
+    )
+    assert r.status_code == 200
+    assert not BoardMessageModel.objects.filter(project=projeto).exists()
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_entra_na_sprint_ativa(cenario):
+    """Card criado pelo cliente tinha nascido sem sprint (backlog), então
+    desaparecia tanto do board do cliente quanto do Kanban do time quando
+    havia sprint ativa (os dois só mostram a sprint ativa por padrão)."""
+    projeto = cenario["projeto"]
+    ativa = SprintModel.objects.create(project=projeto, name="Ativa", status="active")
+    projeto.public_allow_create = True
+    projeto.save(update_fields=["public_allow_create"])
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/", {"title": "Sugestão do cliente"}, format="json"
+    )
+    assert r.status_code == 201
+    novo = CardModel.objects.get(id=r.data["id"])
+    assert novo.sprint_id == ativa.id
+
+    r = APIClient().get("/api/public/boards/tok-123/")
+    assert any(c["id"] == str(novo.id) for c in r.data["cards"])
+
+
+@pytest.mark.django_db
 def test_mural_leitura_nao_precisa_de_codigo(cenario):
     BoardMessageModel.objects.create(
         project=cenario["projeto"], author_name="Cliente", body="Quando sai a próxima entrega?",
