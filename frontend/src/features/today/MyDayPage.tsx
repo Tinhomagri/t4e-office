@@ -54,6 +54,7 @@ import { useWorkspaceActivities } from "@/features/sales/sales.hooks"
 import { closeDateState, formatDate } from "@/features/sales/sales.shared"
 import type { DealActivity } from "@/features/sales/sales.types"
 import { cx } from "@/shared/ui/primitives"
+import { useSpaceStore } from "@/features/shell/space.store"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog",
@@ -236,6 +237,8 @@ function sprintWindow(sprint: Sprint | null): { start: string; end: string } | n
 
 export function MyDayPage() {
   const user = useAuthStore((s) => s.user)
+  const activeSpace = useSpaceStore((s) => s.activeSpace)
+  const isCommercialSpace = activeSpace === "comercial"
   const { activeWorkspaceId } = useWorkspaces()
   // Cards e sprints vêm de /api/me/work/, que agrega TODOS os workspaces da
   // pessoa. O workspace ativo abaixo só serve ao comercial, cujo endpoint de
@@ -245,7 +248,7 @@ export function MyDayPage() {
 
   // Follow-ups do comercial: tarefas de negócio atribuídas a mim e ainda abertas.
   // O "Meu Dia" reúne o trabalho de todas as frentes, não só o dos boards.
-  const { data: salesTasks } = useWorkspaceActivities(activeWorkspaceId, {
+  const { data: salesTasks } = useWorkspaceActivities(isCommercialSpace ? activeWorkspaceId : null, {
     kind: "task",
     assigneeId: user?.id,
     pending: true,
@@ -403,6 +406,10 @@ export function MyDayPage() {
           <div className="grid items-start gap-4 lg:grid-cols-12">
             <div className="space-y-4 lg:col-span-8">
               <motion.div variants={itemVariants}>
+                <FocusPanel cards={focusCards} featured />
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
                 <BurndownCard
                   data={burndown}
                   sprintName={reports?.burndown.sprint?.name ?? activeSprint?.name ?? null}
@@ -410,10 +417,6 @@ export function MyDayPage() {
                   loading={!!activeSprint && reportsLoading}
                   hasSprint={!!activeSprint}
                 />
-              </motion.div>
-
-              <motion.div variants={itemVariants}>
-                <FocusPanel cards={focusCards} />
               </motion.div>
 
               <div className="grid items-start gap-4 xl:grid-cols-2">
@@ -455,27 +458,31 @@ export function MyDayPage() {
                 />
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <MiniPanel
-                  title="A fazer"
-                  icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
-                  cards={my.todo}
-                  empty="Fila limpa."
-                />
-              </motion.div>
+              {isCommercialSpace && (
+                <>
+                  <motion.div variants={itemVariants}>
+                    <MiniPanel
+                      title="A fazer"
+                      icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
+                      cards={my.todo}
+                      empty="Fila limpa."
+                    />
+                  </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <MiniPanel
-                  title="Em revisão"
-                  icon={<Sparkles className="size-4 text-warning" />}
-                  cards={my.review}
-                  empty="Nenhum card em revisão."
-                />
-              </motion.div>
+                  <motion.div variants={itemVariants}>
+                    <MiniPanel
+                      title="Em revisão"
+                      icon={<Sparkles className="size-4 text-warning" />}
+                      cards={my.review}
+                      empty="Nenhum card em revisão."
+                    />
+                  </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <SalesFollowUpsPanel tasks={salesTasks ?? []} />
-              </motion.div>
+                  <motion.div variants={itemVariants}>
+                    <SalesFollowUpsPanel tasks={salesTasks ?? []} />
+                  </motion.div>
+                </>
+              )}
 
               <motion.div variants={itemVariants}>
                 <MyTotals
@@ -721,9 +728,9 @@ function BurndownCard({
   )
 }
 
-function FocusPanel({ cards }: { cards: BoardCard[] }) {
+function FocusPanel({ cards, featured = false }: { cards: BoardCard[]; featured?: boolean }) {
   return (
-    <div className="surface lift p-5">
+    <div className={cx("surface lift p-5", featured && "border-brand-300 shadow-brand-glow dark:border-brand-500/40")}>
       <PanelHead
         icon={CircleDot}
         title="Seu foco agora"

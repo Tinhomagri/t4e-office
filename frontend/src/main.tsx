@@ -17,7 +17,19 @@ import "./index.css"
 import "react-datepicker/dist/react-datepicker.css"
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      // Dados comuns ficam frescos por 30s: trocar de tela não dispara uma
+      // nova chamada para cada componente que acabou de montar.
+      staleTime: 30_000,
+      // Mantém listas e detalhes em memória por 10min para voltar à tela
+      // instantaneamente, sem deixar o cache crescer indefinidamente.
+      gcTime: 10 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+  },
   // Feedback global de erro em qualquer mutation/query sem tocar cada hook.
   mutationCache: new MutationCache({
     onError: (err) => toast.error(extractApiError(err)),

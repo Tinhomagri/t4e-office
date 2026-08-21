@@ -102,3 +102,14 @@ def end_live_session(*, room: str) -> None:
     # saído sozinho) — não é erro, é exatamente o resultado que queríamos.
     if resp.status_code not in (200, 404):
         resp.raise_for_status()
+
+
+def remove_participant(*, room: str, identity: str) -> None:
+    token = _admin_token(room)
+    resp = httpx.post(
+        f"{settings.LIVEKIT_ADMIN_URL}/twirp/livekit.RoomService/RemoveParticipant",
+        json={"room": room, "identity": identity},
+        headers={"Authorization": f"Bearer {token}"}, timeout=10,
+    )
+    if resp.status_code not in (200, 404):
+        resp.raise_for_status()

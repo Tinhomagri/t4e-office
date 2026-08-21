@@ -103,3 +103,7 @@ export async function endCallForEveryone(roomId: string): Promise<MeetingRoom> {
   const { data } = await api.post<MeetingRoom>(`/meetings/rooms/${roomId}/end-call/`)
   return data
 }
+
+export async function removeParticipant(roomId: string, identity: string): Promise<void> {
+  await api.post(`/meetings/rooms/${roomId}/remove-participant/`, { identity })
+}

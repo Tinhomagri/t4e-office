@@ -143,7 +143,7 @@ function CardLayoutCard({ config, canEdit, onSave }: TabProps) {
       title="Layout do card"
       description="Escolha o que aparece no card do quadro. O título é sempre visível."
     >
-      <div className="divide-y divide-paper-200 dark:divide-ink-800">
+      <div className="grid gap-x-5 sm:grid-cols-2">
         {config.available_card_fields.map((field) => (
           <SettingRow key={field} label={FIELD_LABEL[field] ?? field}>
             <Toggle

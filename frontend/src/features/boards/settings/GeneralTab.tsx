@@ -1,7 +1,7 @@
 // Aba "Geral" — identidade do projeto: avatar, nome, chave, categoria, lead.
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Globe2, Lock, Trash2, Upload } from "lucide-react"
+import { Check, Globe2, Lock, Trash2, Upload, Users } from "lucide-react"
 
 import { useSquads } from "@/features/poker/poker.hooks"
 import {
@@ -196,7 +196,7 @@ export function GeneralTab({
         </div>
       </SettingsCard>
 
-      <AccessCard project={project} canEdit={canEdit} update={update} />
+      <AccessCard project={project} members={members} canEdit={canEdit} update={update} />
 
       <MuralNotificationsCard
         project={project}
@@ -426,10 +426,12 @@ function MuralNotificationsCard({
 
 function AccessCard({
   project,
+  members,
   canEdit,
   update,
 }: {
   project: ProjectDetail
+  members: Member[]
   canEdit: boolean
   update: ReturnType<typeof useUpdateProject>
 }) {
@@ -450,10 +452,21 @@ function AccessCard({
     )
   }
 
+  const selectedUsers = new Set(project.access_user_ids ?? [])
+  const toggleUser = (userId: string) => {
+    const next = new Set(selectedUsers)
+    if (next.has(userId)) next.delete(userId)
+    else next.add(userId)
+    update.mutate(
+      { access_user_ids: [...next] },
+      { onError: () => toast.error("Não foi possível atualizar as pessoas com acesso.") },
+    )
+  }
+
   return (
     <SettingsCard
       title="Acesso ao board"
-      description="Quem enxerga este projeto: restrito (squad dona + convidados) ou aberto a todo o workspace."
+      description="Combine uma squad, pessoas escolhidas ou abra para todo o workspace."
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Visibilidade">
@@ -488,7 +501,7 @@ function AccessCard({
             </button>
           </div>
         </Field>
-        <Field label="Squad dona" hint="Opcional — todo o time da squad ganha acesso.">
+        <Field label="Squad com acesso" hint="Opcional — toda a squad ganha acesso.">
           <Select
             value={project.squad_id ?? ""}
             disabled={!canEdit || project.visibility === "workspace"}
@@ -502,6 +515,38 @@ function AccessCard({
             ))}
           </Select>
         </Field>
+      </div>
+      <div className="mt-4 border-t border-paper-200 pt-3 dark:border-ink-800">
+        <div className="mb-2 flex items-center gap-2">
+          <Users className="size-3.5 text-brand-500" />
+          <p className="text-[13px] font-medium text-ink dark:text-paper">Pessoas com acesso direto</p>
+          <span className="text-[11px] text-paper-500">{selectedUsers.size} selecionada{selectedUsers.size === 1 ? "" : "s"}</span>
+        </div>
+        <div className="grid max-h-44 gap-1.5 overflow-y-auto sm:grid-cols-2">
+          {members.map((member) => {
+            const selected = selectedUsers.has(member.user_id)
+            return (
+              <button
+                key={member.user_id}
+                type="button"
+                disabled={!canEdit || project.visibility === "workspace"}
+                onClick={() => toggleUser(member.user_id)}
+                className={cx(
+                  "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+                  selected
+                    ? "border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-500/50 dark:bg-brand-500/15 dark:text-brand-300"
+                    : "border-paper-200 text-paper-600 hover:border-brand-300 dark:border-ink-700 dark:text-ink-200 dark:hover:border-brand-500/50",
+                  (!canEdit || project.visibility === "workspace") && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <span className={cx("grid size-5 place-items-center rounded-md border", selected ? "border-brand-500 bg-brand-500 text-white" : "border-paper-300 dark:border-ink-600")}>
+                  {selected && <Check className="size-3" />}
+                </span>
+                <span className="min-w-0 truncate">{member.name}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </SettingsCard>
   )

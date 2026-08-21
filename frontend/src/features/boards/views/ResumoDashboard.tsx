@@ -30,7 +30,6 @@ import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { cx } from "@/shared/ui/primitives"
 import { PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL } from "../board.shared"
 import {
-  byAssignee,
   completionTrend,
   countBy,
   creationTrend,
@@ -38,9 +37,10 @@ import {
   shortDay,
   shortMonth,
   topNSlices,
+  isDelivered,
   type Slice,
 } from "./resumo.metrics"
-import type { Card, CardStatus, CardType, Member } from "@/features/workspace/workspace.types"
+import type { Card, CardPriority, CardStatus } from "@/features/workspace/workspace.types"
 
 /** Paleta validada para CVD/contraste. A escolha dentro dela é por chave
  * (ver `hueMap`), nunca pela posição da fatia no ranking. */
@@ -531,10 +531,8 @@ function DetailsTable({ cards }: { cards: Card[] }) {
 
 export function ResumoDashboard({
   cards,
-  members,
 }: {
   cards: Card[]
-  members: Member[]
 }) {
   const statusSlices = useMemo(
     () =>
@@ -549,26 +547,43 @@ export function ResumoDashboard({
     [cards],
   )
 
-  const typeSlices = useMemo(
+  const prioritySlices = useMemo(
     () =>
       topNSlices(
         countBy(
           cards,
-          (c) => c.type as CardType,
-          (k) => TYPE_LABEL[k] ?? k,
+          (c) => c.priority as CardPriority,
+          (k) => PRIORITY_LABEL[k] ?? k,
         ),
         MAX_SLICES,
       ),
     [cards],
   )
 
-  const assigneeSlices = useMemo(() => byAssignee(cards, members, MAX_SLICES), [cards, members])
+  const deadlineSlices = useMemo(
+    () =>
+      countBy(
+        cards,
+        (card) => {
+          if (!card.due_date) return "no_deadline"
+          if (isDelivered(card)) return "completed"
+          return new Date(card.due_date).getTime() < Date.now() ? "overdue" : "upcoming"
+        },
+        (key) => ({
+          no_deadline: "Sem prazo",
+          overdue: "Atrasados",
+          upcoming: "Com prazo futuro",
+          completed: "Concluídos",
+        }[key] ?? key),
+      ).sort((a, b) => b.value - a.value),
+    [cards],
+  )
 
   // As séries das tendências reusam as fatias já ranqueadas: assim a mesma
   // categoria mantém a mesma cor entre o donut e a pilha. Um card fora do top-N
   // cai em "Outros" nos dois lugares.
   const statusKeys = useMemo(() => new Set(statusSlices.map((s) => s.key)), [statusSlices])
-  const typeKeys = useMemo(() => new Set(typeSlices.map((s) => s.key)), [typeSlices])
+  const priorityKeys = useMemo(() => new Set(prioritySlices.map((s) => s.key)), [prioritySlices])
 
   const creationRows = useMemo(
     () =>
@@ -585,11 +600,11 @@ export function ResumoDashboard({
     () =>
       completionTrend(
         cards,
-        typeSlices.map((s) => s.key),
-        (c) => (typeKeys.has(c.type) ? c.type : "__other__"),
+        prioritySlices.map((s) => s.key),
+        (c) => (priorityKeys.has(c.priority) ? c.priority : "__other__"),
         12,
       ),
-    [cards, typeSlices, typeKeys],
+    [cards, prioritySlices, priorityKeys],
   )
 
   const leadRows = useMemo(() => leadTimeByWeek(cards, 12), [cards])
@@ -600,8 +615,8 @@ export function ResumoDashboard({
         {/* `index` monta a escada: cada painel entra logo depois do anterior,
             na ordem de leitura, em vez de tudo aparecer no mesmo quadro. */}
         <DonutPanel title="Tickets por status" slices={statusSlices} index={0} />
-        <DonutPanel title="Tickets por tipo" slices={typeSlices} index={1} />
-        <DonutPanel title="Tickets por responsável" slices={assigneeSlices} index={2} />
+        <DonutPanel title="Tickets por prioridade" slices={prioritySlices} index={1} />
+        <DonutPanel title="Tickets por prazo" slices={deadlineSlices} index={2} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -620,7 +635,7 @@ export function ResumoDashboard({
         <StackedTrendPanel
           title="Tendência de conclusão — 12 meses"
           rows={completionRows}
-          series={typeSlices}
+          series={prioritySlices}
           xKey="month"
           xFormat={shortMonth}
           index={5}

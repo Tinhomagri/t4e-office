@@ -9,6 +9,7 @@ export interface LoginPayload {
 export interface RegisterPayload {
   email: string
   full_name: string
+  avatar_url?: string | null
   password: string
 }
 
@@ -21,6 +22,7 @@ export interface AuthUser {
   id: string
   email: string
   full_name: string
+  avatar_url?: string | null
 }
 
 export interface ForgotPasswordPayload {

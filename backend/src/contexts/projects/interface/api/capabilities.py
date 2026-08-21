@@ -94,6 +94,8 @@ def can_browse(project: ProjectModel, user_id: str) -> bool:
         squad_id=project.squad_id, user_id=user_id
     ).exists():
         return True
+    if str(user_id) in {str(value) for value in (project.access_user_ids or [])}:
+        return True
     return ProjectRoleMemberModel.objects.filter(
         role__project_id=project.id, user_id=user_id
     ).exists()

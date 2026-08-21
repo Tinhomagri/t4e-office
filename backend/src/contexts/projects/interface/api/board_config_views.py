@@ -93,6 +93,7 @@ def _ser_project(project: ProjectModel) -> dict:
             str(project.default_assignee_id) if project.default_assignee_id else None
         ),
         "squad_id": str(project.squad_id) if project.squad_id else None,
+        "access_user_ids": [str(value) for value in (project.access_user_ids or [])],
         "visibility": project.visibility,
         "deadline": project.deadline.isoformat() if project.deadline else None,
         "created_at": project.created_at.isoformat(),
@@ -189,6 +190,21 @@ class ProjectDetailView(APIView):
                 if not pertence:
                     raise ValidationError("Squad não encontrada neste workspace.")
             project.squad_id = squad_id
+
+        if "access_user_ids" in request.data:
+            from contexts.identity.infrastructure.django.models import MembershipModel
+
+            raw_ids = request.data["access_user_ids"] or []
+            ids = list(dict.fromkeys(str(value) for value in raw_ids))
+            valid_ids = {
+                str(uid)
+                for uid in MembershipModel.objects.filter(
+                    workspace_id=project.workspace_id, user_id__in=ids
+                ).values_list("user_id", flat=True)
+            }
+            if len(valid_ids) != len(ids):
+                raise ValidationError("Algum usuário não pertence a este workspace.")
+            project.access_user_ids = ids
 
         if "deadline" in request.data:
             raw_deadline = request.data["deadline"]

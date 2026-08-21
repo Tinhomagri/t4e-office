@@ -37,6 +37,26 @@ export async function fetchMe(): Promise<AuthUser> {
   return data
 }
 
+export async function updateProfile(payload: { full_name?: string; avatar_image?: string }): Promise<AuthUser> {
+  const { data } = await api.patch<AuthUser>("/auth/me/", payload)
+  return data
+}
+
+export async function profileImageDataUri(file: File | null): Promise<string> {
+  if (!file) return ""
+  const bitmap = await createImageBitmap(file)
+  try {
+    const size = 256
+    const canvas = document.createElement("canvas")
+    canvas.width = size; canvas.height = size
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Não foi possível processar a imagem.")
+    const side = Math.min(bitmap.width, bitmap.height)
+    ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, size, size)
+    return canvas.toDataURL("image/webp", 0.82)
+  } finally { bitmap.close() }
+}
+
 // Confirma o email via token recebido no link (ativa a conta)
 export async function verifyEmail(
   payload: VerifyEmailPayload,

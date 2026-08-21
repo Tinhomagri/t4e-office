@@ -39,6 +39,7 @@ export interface Project {
   template?: ProjectTemplate
   squad_id: string | null
   visibility: ProjectVisibility
+  access_user_ids?: string[]
   avatar_emoji: string
   avatar_color: string
   avatar_url: string | null
@@ -79,6 +80,7 @@ export interface UpdateProjectInput {
   default_assignee_id?: string | null
   squad_id?: string | null
   visibility?: ProjectVisibility
+  access_user_ids?: string[]
   public_allow_create?: boolean
   // Só o servidor decide o valor do token — isto só pede a ação.
   public_token_action?: "generate" | "revoke"

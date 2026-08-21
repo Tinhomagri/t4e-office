@@ -3,6 +3,7 @@ import {
   Menu,
   CalendarClock,
   Check,
+  Camera,
   ChevronDown,
   ChevronsUpDown,
   History,
@@ -24,10 +25,12 @@ import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { profileImageDataUri, updateProfile } from "@/features/auth/auth.api"
 import { ChatHeadsWidget } from "@/features/boards/ChatHeadsWidget"
 import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
 import { NotificationBell } from "@/features/boards/NotificationBell"
 import { AgendaPanel } from "@/features/integrations/AgendaPanel"
+import { MeetingCallOverlay } from "@/features/meetings/MeetingsPage"
 import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import {
   Avatar,
@@ -236,6 +239,7 @@ export function AppShell() {
           <UserMenu
             name={user?.full_name}
             email={user?.email}
+            avatarUrl={user?.avatar_url}
             status={status}
             onLogout={handleLogout}
           />
@@ -337,6 +341,7 @@ export function AppShell() {
       <CopilotChatWidget />
       <ChatHeadsWidget />
       <AgendaPanel open={agendaOpen} onClose={() => setAgendaOpen(false)} />
+      <MeetingCallOverlay />
     </div>
   )
 }
@@ -452,16 +457,36 @@ function TopIcon({
 function UserMenu({
   name,
   email,
+  avatarUrl,
   status,
   onLogout,
 }: {
   name?: string
   email?: string
+  avatarUrl?: string | null
   status: PresenceStatus
   onLogout: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draftName, setDraftName] = useState(name ?? "")
+  const [draftAvatar, setDraftAvatar] = useState(avatarUrl ?? null)
+  const [saving, setSaving] = useState(false)
+  const setUser = useAuthStore((s) => s.setUser)
+  const fileRef = useRef<HTMLInputElement>(null)
   const reduce = useReducedMotion()
+
+  useEffect(() => { setDraftName(name ?? ""); setDraftAvatar(avatarUrl ?? null) }, [name, avatarUrl])
+
+  async function saveProfile() {
+    if (!draftName.trim()) return
+    setSaving(true)
+    try {
+      const updated = await updateProfile({ full_name: draftName.trim(), avatar_image: draftAvatar ?? "" })
+      setUser(updated)
+      setEditing(false)
+    } finally { setSaving(false) }
+  }
 
   return (
     <div className="relative ml-1">
@@ -472,7 +497,7 @@ function UserMenu({
         aria-label="Conta"
         className="grid place-items-center rounded-full focus-ring"
       >
-        <Avatar initials={initials(name)} status={status} />
+        {avatarUrl ? <img src={avatarUrl} alt="Foto de perfil" className="size-8 rounded-full object-cover ring-2 ring-paper dark:ring-ink-700" /> : <Avatar initials={initials(name)} status={status} />}
       </button>
 
       <AnimatePresence>
@@ -488,12 +513,12 @@ function UserMenu({
               className="absolute right-0 top-11 z-20 w-64 origin-top-right rounded-lg border border-paper-200 bg-paper p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800"
             >
               <div className="px-2.5 py-2">
-                <p className="truncate text-[13px] font-semibold text-ink dark:text-paper">
-                  {name ?? "Usuário"}
-                </p>
+                <div className="flex items-center gap-2"><span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-brand-500/20 text-xs font-semibold text-brand-600">{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials(name)}</span><div className="min-w-0"><p className="truncate text-[13px] font-semibold text-ink dark:text-paper">{name ?? "Usuário"}</p>
                 <p className="truncate text-[12px] text-paper-500">{email}</p>
+                </div></div>
               </div>
               <div className="my-1 h-px bg-paper-100 dark:bg-white/5" />
+              {!editing ? <button role="menuitem" onClick={() => setEditing(true)} className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-ink hover:bg-paper-100 dark:text-paper-200 dark:hover:bg-white/5"><Camera className="size-4 text-paper-500" /> Editar perfil</button> : <div className="space-y-2 px-2 py-2"><button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-2 rounded-lg border border-dashed border-paper-300 p-2 text-xs text-paper-600 dark:border-ink-600 dark:text-paper-300"><span className="grid size-8 place-items-center overflow-hidden rounded-full bg-brand-500/20 text-brand-600">{draftAvatar ? <img src={draftAvatar} alt="" className="size-full object-cover" /> : initials(draftName)}</span>Escolher foto</button><input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) setDraftAvatar(await profileImageDataUri(file)); e.target.value = "" }} /><input value={draftName} onChange={(e) => setDraftName(e.target.value)} className="h-8 w-full rounded-lg border border-paper-300 bg-paper px-2 text-xs text-ink dark:border-ink-600 dark:bg-ink-900 dark:text-paper" placeholder="Nome completo" /><div className="flex justify-end gap-1"><button onClick={() => setEditing(false)} className="rounded px-2 py-1 text-xs text-paper-500">Cancelar</button><button disabled={saving} onClick={saveProfile} className="rounded bg-brand-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50">{saving ? "Salvando…" : "Salvar"}</button></div></div>}
               <button
                 role="menuitem"
                 onClick={onLogout}

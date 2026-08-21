@@ -10,6 +10,7 @@ from contexts.meetings.interface.api.views import (
     RoomJoinView,
     RoomLeaveView,
     RoomListCreateView,
+    RoomRemoveParticipantView,
 )
 
 urlpatterns = [
@@ -25,4 +26,5 @@ urlpatterns = [
         RoomEndCallView.as_view(),
         name="meeting-end-call",
     ),
+    path("rooms/<uuid:room_id>/remove-participant/", RoomRemoveParticipantView.as_view(), name="meeting-remove-participant"),
 ]

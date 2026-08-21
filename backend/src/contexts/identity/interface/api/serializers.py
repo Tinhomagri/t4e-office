@@ -16,6 +16,7 @@ class UserSerializer(serializers.Serializer):
     id = serializers.CharField()
     email = serializers.EmailField()
     full_name = serializers.CharField()
+    avatar_url = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
 
 class CreateWorkspaceSerializer(serializers.Serializer):

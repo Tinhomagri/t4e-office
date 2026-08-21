@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Columns3, LayoutGrid, SlidersHorizontal } from "lucide-react"
 
 import {
+  useMembers,
   useProject,
   useProjectAccess,
   useProjectPermissions,
@@ -34,14 +35,15 @@ export function BoardSettingsPage() {
 
   const { data: project, isLoading, isError } = useProject(projectId)
   const { data: access } = useProjectAccess(projectId)
+  const { data: workspaceMembers } = useMembers(project?.workspace_id ?? null)
   const { can } = useProjectPermissions(projectId)
 
   const canAdminister = can("administer_project")
   const canManageWorkflow = can("manage_workflow")
 
   const members = useMemo(
-    () => (access ?? []).map((m) => ({ user_id: m.user_id, name: m.name })),
-    [access],
+    () => (workspaceMembers ?? access ?? []).map((m) => ({ user_id: m.user_id, name: m.name })),
+    [access, workspaceMembers],
   )
 
   if (isLoading) {

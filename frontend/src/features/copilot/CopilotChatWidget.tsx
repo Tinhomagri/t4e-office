@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 
 import { cx } from "@/shared/ui/primitives"
 import {
@@ -128,6 +128,8 @@ function loadMessages(ws: string): ChatItem[] {
 }
 
 export function CopilotChatWidget() {
+  const location = useLocation()
+  const isBoardRoute = /^\/app\/boards(?:\/|$)/.test(location.pathname)
   const { activeWorkspaceId } = useWorkspaces()
   // O Copiloto é comum a todos os spaces; mandar o space ativo faz o agente
   // começar pelo domínio que o usuário está olhando.
@@ -286,6 +288,10 @@ export function CopilotChatWidget() {
       prev.map((m, i) => (i === index ? { ...m, actions: [], done: [] } : m)),
     )
   }
+
+  // O copiloto é contextual ao trabalho do board. Fora dele, inclusive em
+  // reuniões, não deve ocupar espaço nem capturar atenção.
+  if (!isBoardRoute) return null
 
   return (
     <>

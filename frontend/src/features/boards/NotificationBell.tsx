@@ -92,12 +92,12 @@ export function NotificationBell() {
         {toastQueue.map((n) => (
           <div
             key={n.id}
-            className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white dark:bg-ink-900 p-3 shadow-lg min-w-72 max-w-80 pointer-events-auto animate-in slide-in-from-right-8 fade-in duration-300"
+            className="flex items-start gap-3 rounded-xl border border-paper-200 bg-white p-3 shadow-lg min-w-72 max-w-80 pointer-events-auto animate-in slide-in-from-right-8 fade-in duration-300 dark:border-ink-700 dark:bg-ink-900"
           >
             <span className="text-lg leading-none">{TYPE_ICON[n.type] ?? "🔔"}</span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-800 truncate">{n.title}</p>
-              {n.body && <p className="text-xs text-gray-500 mt-0.5 truncate">{n.body}</p>}
+              <p className="truncate text-sm font-medium text-ink dark:text-paper-100">{n.title}</p>
+              {n.body && <p className="mt-0.5 truncate text-xs text-paper-500 dark:text-ink-300">{n.body}</p>}
             </div>
           </div>
         ))}
@@ -105,10 +105,10 @@ export function NotificationBell() {
 
       {/* Panel */}
       {open && (
-        <div className="absolute right-0 top-10 z-50 w-96 rounded-2xl border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 shadow-xl">
+        <div className="absolute right-0 top-10 z-50 w-96 overflow-hidden rounded-2xl border border-paper-200 bg-white shadow-xl dark:border-ink-700 dark:bg-ink-900">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-paper-100 dark:border-ink-800 px-4 py-3">
-            <span className="font-semibold text-sm text-gray-800">
+            <span className="text-sm font-semibold text-ink dark:text-paper-100">
               Notificações {unreadCount > 0 && <span className="ml-1 text-red-500">({unreadCount} novas)</span>}
             </span>
             {unreadCount > 0 && (
@@ -124,7 +124,7 @@ export function NotificationBell() {
           {/* List */}
           <div className="max-h-96 overflow-y-auto">
             {!notifications?.length && (
-              <div className="py-10 text-center text-sm text-gray-400">
+              <div className="py-10 text-center text-sm text-paper-500 dark:text-ink-300">
                 Nenhuma notificação
               </div>
             )}
@@ -133,25 +133,25 @@ export function NotificationBell() {
                 key={n.id}
                 onClick={() => handleNotifClick(n)}
                 className={cx(
-                  "w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-paper-50 dark:hover:bg-ink-900",
-                  !n.read && "bg-blue-50/40",
+                  "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-paper-50 dark:hover:bg-ink-800",
+                  !n.read && "bg-blue-50/40 dark:bg-brand-900/20",
                 )}
               >
                 <span className="mt-0.5 text-base leading-none">{TYPE_ICON[n.type] ?? "🔔"}</span>
                 <div className="min-w-0 flex-1">
-                  <p className={cx("text-sm truncate", !n.read ? "font-semibold text-gray-900" : "text-gray-700")}>
+                  <p className={cx("truncate text-sm", !n.read ? "font-semibold text-ink dark:text-paper-100" : "text-paper-700 dark:text-paper-300")}>
                     {n.title}
                   </p>
                   {n.body && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">{n.body}</p>
+                    <p className="mt-0.5 truncate text-xs text-paper-500 dark:text-ink-300">{n.body}</p>
                   )}
-                  <p className="text-[10px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                  <p className="mt-1 text-[10px] text-paper-400 dark:text-ink-400">{timeAgo(n.created_at)}</p>
                 </div>
                 {!n.read && (
                   <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-500 shrink-0" />
                 )}
                 {n.link && (
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-300 mt-1" />
+                  <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-paper-400 dark:text-ink-400" />
                 )}
               </button>
             ))}
@@ -161,7 +161,7 @@ export function NotificationBell() {
             <div className="border-t border-paper-100 dark:border-ink-800 px-4 py-2">
               <button
                 onClick={() => { markAll.mutate(); setOpen(false) }}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600"
+                className="flex items-center gap-1.5 text-xs text-paper-500 hover:text-ink dark:text-ink-300 dark:hover:text-paper-100"
               >
                 <Check className="h-3 w-3" /> Limpar todas
               </button>

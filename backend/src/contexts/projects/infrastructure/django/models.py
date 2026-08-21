@@ -43,6 +43,10 @@ class ProjectModel(models.Model):
         null=True,
         blank=True,
     )
+    # Pessoas escolhidas manualmente para enxergar o board, além da squad.
+    # Lista de UUIDs mantém a configuração leve e permite combinar os dois
+    # caminhos de acesso sem criar uma tabela de relacionamento para cada board.
+    access_user_ids = models.JSONField(default=list, blank=True)
     description = models.TextField(blank=True, default="")
     # Categoria livre para agrupar projetos no portfólio (equivalente ao "Categoria" do Jira).
     category = models.CharField(max_length=40, blank=True, default="")

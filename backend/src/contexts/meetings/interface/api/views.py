@@ -21,7 +21,7 @@ from contexts.meetings.infrastructure.django.models import (
     MeetingParticipantModel,
     MeetingRoomModel,
 )
-from contexts.meetings.infrastructure.livekit_token import end_live_session, issue_token
+from contexts.meetings.infrastructure.livekit_token import end_live_session, issue_token, remove_participant
 from contexts.meetings.interface.api.serializers import (
     CreateRoomSerializer,
     JoinRoomSerializer,
@@ -297,6 +297,23 @@ class RoomEndCallView(APIView):
             left_at=timezone.now()
         )
         return Response(_room_dict(room))
+
+
+class RoomRemoveParticipantView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, room_id: str) -> Response:
+        room = MeetingRoomModel.objects.filter(id=room_id).first()
+        if room is None:
+            raise NotFoundError("Sala não encontrada.")
+        uid = _uid(request)
+        _assert_admin(str(room.workspace_id), uid)
+        identity = str(request.data.get("identity", ""))
+        if not identity or identity == uid:
+            return Response({"detail": "Participante inválido."}, status=status.HTTP_400_BAD_REQUEST)
+        remove_participant(room=room.slug, identity=identity)
+        MeetingParticipantModel.objects.filter(room=room, user_id=identity, left_at=None).update(left_at=timezone.now())
+        return Response({"ok": True})
 
 
 def _minutes(joined_at, left_at, closed_at, now) -> int:

@@ -1,6 +1,8 @@
 import {
   ParticipantTile,
   RoomAudioRenderer,
+  useRoomContext,
+  useParticipants,
   useDisconnectButton,
   useMediaDeviceSelect,
   useTrackToggle,
@@ -28,6 +30,8 @@ import {
   TrendingUp,
   Trash2,
   Users,
+  MessageCircle,
+  Send,
   Video,
   VideoOff,
   X,
@@ -39,7 +43,7 @@ import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { extractApiError } from "@/shared/api/client"
 import { Button, Input, Spinner, cx } from "@/shared/ui/primitives"
 import * as meetApi from "./meetings.api"
-import type { JoinResult } from "./meetings.api"
+import { useMeetingSessionStore } from "./meeting.session.store"
 
 // O SDK do LiveKit puxa o engine WebRTC inteiro. Carregar sob demanda mantém o
 // bundle inicial do app fora do caminho de quem nunca abre uma reunião.
@@ -54,7 +58,7 @@ export function MeetingsPage() {
   const { data: members } = useMembers(activeWorkspaceId)
   const myRole = (members ?? []).find((m) => m.user_id === me?.id)?.role ?? null
   const isAdmin = myRole === "owner" || myRole === "admin"
-  const [session, setSession] = useState<JoinResult | null>(null)
+  const setSession = useMeetingSessionStore((s) => s.setSession)
   const [name, setName] = useState("")
   const [tab, setTab] = useState<"open" | "history">("open")
   // Encerrar é irreversível: guarda o id da sala aguardando confirmação em vez
@@ -71,6 +75,7 @@ export function MeetingsPage() {
     enabled: !!activeWorkspaceId,
     // Sala nova de um colega precisa aparecer sem F5; o custo é uma query leve.
     refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 
   const create = useMutation({
@@ -101,26 +106,6 @@ export function MeetingsPage() {
     mutationFn: (roomId: string) => meetApi.joinRoom(roomId),
     onSuccess: (result) => setSession(result),
   })
-
-  const leave = async () => {
-    // A barra de abas/endereço do navegador não é algo que a página consiga
-    // esconder sozinha — só a Fullscreen API tira isso do caminho de verdade.
-    // Sair da call também sai do fullscreen, senão o resto do app (Boards,
-    // sidebar) ficaria preso em tela cheia sem motivo.
-    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {})
-    if (session) await meetApi.leaveRoom(session.room.id).catch(() => {})
-    setSession(null)
-    qc.invalidateQueries({ queryKey: ["meeting-rooms", activeWorkspaceId] })
-  }
-
-  // Só funciona chamada durante um gesto do usuário (o clique em "Criar
-  // sala"/"Entrar") — por isso é chamada direto no onClick, síncrona, e não
-  // num efeito reagindo à sessão (aí já teria perdido a permissão do browser).
-  const enterFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(() => {})
-    }
-  }
 
   if (!activeWorkspaceId) return null
 
@@ -165,7 +150,6 @@ export function MeetingsPage() {
             />
             <Button
               onClick={() => {
-                enterFullscreen()
                 create.mutate()
               }}
               loading={create.isPending}
@@ -379,7 +363,6 @@ export function MeetingsPage() {
                   variant={live ? "primary" : "outline"}
                   className="mt-3 w-full"
                   onClick={() => {
-                    enterFullscreen()
                     join.mutate(room.id)
                   }}
                   loading={join.isPending && join.variables === room.id}
@@ -393,53 +376,23 @@ export function MeetingsPage() {
         </div>
       )}
 
-      <AnimatePresence>
-        {session && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col bg-ink-950"
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-ink-700 px-4 py-2.5">
-              <p className="truncate text-sm font-semibold text-paper-200">
-                {session.room.name}
-              </p>
-              <button
-                onClick={leave}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 transition-colors hover:bg-ink-800 hover:text-paper-200"
-              >
-                <X className="size-4" /> Sair
-              </button>
-            </div>
-            <Suspense
-              fallback={
-                <div className="grid flex-1 place-items-center">
-                  <Loader2 className="size-6 animate-spin text-paper-400" />
-                </div>
-              }
-            >
-              <LiveKitRoom
-                token={session.token}
-                serverUrl={session.url}
-                connect
-                video
-                audio
-                options={ROOM_OPTIONS}
-                onDisconnected={leave}
-                data-lk-theme="default"
-                className="flex min-h-0 flex-1 flex-col"
-              >
-                <VideoStage />
-                <RoomAudioRenderer />
-                <MeetControlBar />
-              </LiveKitRoom>
-            </Suspense>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
+}
+
+export function MeetingCallOverlay() {
+  const session = useMeetingSessionStore((s) => s.session)
+  const setSession = useMeetingSessionStore((s) => s.setSession)
+  const { activeWorkspaceId } = useWorkspaces()
+  const me = useAuthStore((s) => s.user)
+  const { data: members } = useMembers(activeWorkspaceId)
+  const role = (members ?? []).find((m) => m.user_id === me?.id)?.role
+  const canModerate = role === "owner" || role === "admin" || session?.room.created_by === me?.id
+  const leave = async () => { if (session) await meetApi.leaveRoom(session.room.id).catch(() => {}); setSession(null) }
+  return <AnimatePresence>{session && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed bottom-4 right-4 z-[60] flex h-[min(78vh,720px)] w-[min(92vw,1080px)] flex-col overflow-hidden rounded-2xl border border-ink-700 bg-ink-950 shadow-2xl">
+    <div className="flex h-11 shrink-0 items-center gap-3 border-b border-ink-700 bg-ink-900 px-4"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
+    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><RoomAudioRenderer /></LiveKitRoom></Suspense>
+  </motion.div>}</AnimatePresence>
 }
 
 /** Grade de vídeo: câmeras + quem está compartilhando tela. */
@@ -574,6 +527,52 @@ function MetricTile({
   )
 }
 
+function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModerate: boolean }) {
+  const room = useRoomContext()
+  const participants = useParticipants()
+  const [chatOpen, setChatOpen] = useState(false)
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>([])
+  const [draft, setDraft] = useState("")
+  useEffect(() => {
+    const onData = (payload: Uint8Array, participant?: { name?: string; identity?: string }) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload))
+        if (data.target && data.target !== room.localParticipant.identity) return
+        if (data.type === "chat") setMessages((old) => [...old, { from: participant?.name || participant?.identity || "Participante", text: String(data.text), time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }])
+        if (data.type === "moderation") {
+          if (data.action === "mute") void room.localParticipant.setMicrophoneEnabled(false)
+          if (data.action === "camera") void room.localParticipant.setCameraEnabled(false)
+        }
+      } catch { /* mensagens desconhecidas não afetam a chamada */ }
+    }
+    room.on("dataReceived", onData)
+    return () => { room.off("dataReceived", onData) }
+  }, [room])
+  const send = () => {
+    const text = draft.trim()
+    if (!text) return
+    void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "chat", text: text.slice(0, 500) })), { reliable: true })
+    setMessages((old) => [...old, { from: "Você", text, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }])
+    setDraft("")
+  }
+  return (
+    <div className="flex min-h-0 flex-1 basis-0 flex-col">
+      <div className="flex min-h-0 flex-1 basis-0">
+        <VideoStage />
+        {(chatOpen || peopleOpen) && <aside className="flex w-72 shrink-0 flex-col border-l border-ink-700 bg-ink-900 text-paper-200">
+          <div className="flex items-center justify-between border-b border-ink-700 px-3 py-3 text-sm font-semibold">
+            {chatOpen ? "Chat da reunião" : "Participantes"}
+            <button onClick={() => { setChatOpen(false); setPeopleOpen(false) }} className="text-paper-400 hover:text-white"><X className="size-4" /></button>
+          </div>
+          {chatOpen ? <><div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{messages.length === 0 && <p className="text-xs text-paper-500">Nenhuma mensagem ainda.</p>}{messages.map((m, i) => <div key={i} className="rounded-lg bg-white/5 p-2"><div className="flex justify-between text-[10px] text-paper-500"><span>{m.from}</span><span>{m.time}</span></div><p className="mt-1 break-words text-sm">{m.text}</p></div>)}</div><form onSubmit={(e) => { e.preventDefault(); send() }} className="flex gap-2 border-t border-ink-700 p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escreva uma mensagem" className="min-w-0 flex-1 rounded-lg bg-ink-800 px-3 py-2 text-xs outline-none ring-brand-500 focus:ring-1" /><button className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white"><Send className="size-4" /></button></form></> : <div className="space-y-2 overflow-y-auto p-3">{participants.map((p) => <div key={p.identity} className="flex items-center gap-2 rounded-lg bg-white/5 p-2 text-xs"><span className="grid size-7 place-items-center rounded-full bg-brand-500/20 text-[10px]">{initialsOf(p.name || p.identity)}</span><span className="min-w-0 flex-1 truncate">{p.name || p.identity}</span>{canModerate && p.identity !== room.localParticipant.identity && <button title="Remover participante" onClick={() => void meetApi.removeParticipant(roomId, p.identity)} className="rounded p-1 text-red-300 hover:bg-red-500/20"><LogOut className="size-3.5" /></button>}</div>)}</div>}
+        </aside>}
+      </div>
+      <MeetControlBar onChat={() => { setChatOpen((v) => !v); setPeopleOpen(false) }} onPeople={() => { setPeopleOpen((v) => !v); setChatOpen(false) }} peopleCount={participants.length} />
+    </div>
+  )
+}
+
 // Barra de controle estilo Meet: botões redondos só com ícone (sem o texto em
 // inglês "Microphone/Camera/Share screen/Leave" do ControlBar padrão da lib).
 function CallButton({
@@ -673,7 +672,7 @@ function DeviceMenu({
   )
 }
 
-function MeetControlBar() {
+function MeetControlBar({ onChat, onPeople, peopleCount }: { onChat: () => void; onPeople: () => void; peopleCount: number }) {
   const mic = useTrackToggle({ source: Track.Source.Microphone })
   const camera = useTrackToggle({ source: Track.Source.Camera })
   const screenShare = useTrackToggle({ source: Track.Source.ScreenShare })
@@ -708,6 +707,8 @@ function MeetControlBar() {
       >
         <ScreenShare className="size-5" />
       </CallButton>
+      <CallButton onClick={onChat} label="Abrir chat"><MessageCircle className="size-5" /></CallButton>
+      <CallButton onClick={onPeople} label={`Participantes (${peopleCount})`}><Users className="size-5" /></CallButton>
       <CallButton
         variant="danger"
         onClick={disconnectProps.onClick as React.MouseEventHandler<HTMLButtonElement>}
@@ -822,7 +823,7 @@ function VideoStage() {
     // gente nova na call, não que alguém tinha compartilhado algo.
     const spotlight = screenTracks[0]
     return (
-      <div className="meet-video-stage flex min-h-0 flex-1 gap-2 overflow-hidden bg-ink-950 p-2">
+      <div className="meet-video-stage flex min-h-0 flex-1 basis-0 gap-2 overflow-hidden bg-ink-950 p-2">
         <SpotlightTile trackRef={spotlight} />
         {cameraTracks.length > 0 && (
           <div className="scrollbar-slim-dark flex w-[180px] shrink-0 flex-col gap-2 overflow-y-auto">
@@ -850,7 +851,7 @@ function VideoStage() {
   const rows = Math.max(1, Math.ceil(count / columns))
 
   return (
-    <div className="meet-video-stage flex min-h-0 flex-1 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
+    <div className="meet-video-stage flex min-h-0 flex-1 basis-0 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
       {cameraTracks.map((track, i) => (
         <ParticipantTile
           key={`${track.participant.identity}-${track.source}-${i}`}

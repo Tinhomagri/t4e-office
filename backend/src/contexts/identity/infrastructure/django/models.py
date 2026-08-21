@@ -49,6 +49,8 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, help_text="Email de login")
     full_name = models.CharField(max_length=200, help_text="Nome completo")
+    # Data URI otimizado, sem depender de disco local no deploy serverless.
+    avatar_image = models.TextField(blank=True, default="")
     is_active = models.BooleanField(default=False)  # ativo apenas após verificar email
     email_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False, help_text="Acesso ao admin")

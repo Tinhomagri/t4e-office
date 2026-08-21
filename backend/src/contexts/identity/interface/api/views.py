@@ -292,7 +292,7 @@ class MeView(APIView):
             user_id=str(user.id)
         )
         data = UserSerializer(
-            {"id": str(user.id), "email": user.email, "full_name": user.full_name}
+            {"id": str(user.id), "email": user.email, "full_name": user.full_name, "avatar_url": user.avatar_image or None}
         ).data
         # Inclui workspaces para o frontend saber em qual contexto operar.
         data["workspaces"] = WorkspaceListItemSerializer(
@@ -300,6 +300,25 @@ class MeView(APIView):
             many=True,
         ).data
         return Response(data)
+
+    def patch(self, request: Request) -> Response:
+        user = request.user
+        if "full_name" in request.data:
+            name = str(request.data["full_name"] or "").strip()
+            if not name:
+                raise ValidationError("O nome não pode ficar vazio.")
+            if len(name) > 200:
+                raise ValidationError("O nome deve ter no máximo 200 caracteres.")
+            user.full_name = name
+        if "avatar_image" in request.data:
+            image = str(request.data["avatar_image"] or "")
+            if image and not image.startswith(("data:image/", "https://", "http://")):
+                raise ValidationError("Imagem de perfil inválida.")
+            if len(image) > 700_000:
+                raise ValidationError("Imagem de perfil grande demais.")
+            user.avatar_image = image
+        user.save(update_fields=["full_name", "avatar_image"])
+        return Response({"id": str(user.id), "email": user.email, "full_name": user.full_name, "avatar_url": user.avatar_image or None})
 
 
 class WorkspaceCreateView(APIView):

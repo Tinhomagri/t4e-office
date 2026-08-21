@@ -48,17 +48,20 @@ export function Toggle({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      data-state={checked ? "on" : "off"}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
         "relative h-5 w-9 shrink-0 rounded-full transition-colors focus-ring",
-        checked ? "bg-brand-500" : "bg-paper-300 dark:bg-ink-700",
+        checked
+          ? "bg-brand-600 shadow-[0_0_0_2px_rgba(14,102,228,0.18)] dark:bg-brand-500"
+          : "bg-paper-300 dark:bg-ink-600",
         disabled && "cursor-not-allowed opacity-50",
       )}
     >
       <span
         className={cx(
-          "absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
+          "absolute top-0.5 size-4 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform",
           checked ? "translate-x-[18px]" : "translate-x-0.5",
         )}
       />
@@ -77,7 +80,7 @@ export function SettingRow({
   children: ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-1.5">
+    <div className="flex min-h-10 items-center justify-between gap-4 border-b border-paper-100 py-1.5 last:border-b-0 dark:border-ink-800/70">
       <div className="min-w-0">
         <p className="text-[13px] text-ink dark:text-paper">{label}</p>
         {hint && <p className="text-[11px] text-paper-500">{hint}</p>}

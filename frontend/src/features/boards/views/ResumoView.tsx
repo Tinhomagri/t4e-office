@@ -161,7 +161,7 @@ export function ResumoView({
       </div>
 
       {/* Dashboard: donuts por status/tipo/responsável, tendências e detalhes. */}
-      <ResumoDashboard cards={cards} members={members} />
+      <ResumoDashboard cards={cards} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Visão geral do status */}
