@@ -1,4 +1,5 @@
 import Highlight from "@tiptap/extension-highlight"
+import Image from "@tiptap/extension-image"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import TaskItem from "@tiptap/extension-task-item"
@@ -46,6 +47,8 @@ export type AiAction =
   | "acceptance_criteria"
   | "change_tone"
   | "translate"
+
+export type PastedAttachment = { url: string; name: string; mimeType: string }
 
 // Ações que precisam de um alvo abrem um submenu em vez de rodar direto.
 // Os valores espelham os catálogos de `writing_skills.py` no backend.
@@ -100,7 +103,7 @@ export function RichEditor({
   onAiAssist?: (text: string, action: AiAction, target?: string) => Promise<string>
   /** Arquivos copiados (print, foto ou documento) são entregues ao dono do
    * editor; texto/HTML continua pelo pipeline nativo do Tiptap. */
-  onPasteFiles?: (files: File[]) => void | Promise<void>
+  onPasteFiles?: (files: File[]) => Promise<PastedAttachment[]>
 }) {
   const onPasteFilesRef = useRef(onPasteFiles)
   onPasteFilesRef.current = onPasteFiles
@@ -109,20 +112,36 @@ export function RichEditor({
       StarterKit.configure({ link: false }),
       Placeholder.configure({ placeholder }),
       Link.configure({ openOnClick: false, autolink: true }),
+      Image.configure({
+        allowBase64: false,
+        HTMLAttributes: { class: "my-3 max-h-[420px] max-w-full rounded-xl border border-paper-200 object-contain dark:border-ink-700" },
+      }),
       Highlight,
       TaskList,
       TaskItem.configure({ nested: true }),
     ],
     content: value || "",
     editorProps: {
-      handlePaste: (_view, event) => {
+      handlePaste: (view, event) => {
         const itemFiles = Array.from(event.clipboardData?.items ?? [])
           .filter((item) => item.kind === "file")
           .map((item) => item.getAsFile())
           .filter((file): file is File => file !== null)
         const files = itemFiles.length > 0 ? itemFiles : Array.from(event.clipboardData?.files ?? [])
         if (files.length === 0 || !onPasteFilesRef.current) return false
-        void onPasteFilesRef.current(files)
+        void onPasteFilesRef.current(files).then((attachments) => {
+          for (const attachment of attachments) {
+            const { schema } = view.state
+            if (attachment.mimeType.startsWith("image/") && schema.nodes.image) {
+              const image = schema.nodes.image.create({ src: attachment.url, alt: attachment.name, title: attachment.name })
+              view.dispatch(view.state.tr.replaceSelectionWith(image).scrollIntoView())
+              continue
+            }
+            const mark = schema.marks.link?.create({ href: attachment.url, target: "_blank", rel: "noopener noreferrer" })
+            const text = schema.text(`📎 ${attachment.name}`, mark ? [mark] : [])
+            view.dispatch(view.state.tr.replaceSelectionWith(text).insertText(" ").scrollIntoView())
+          }
+        }).catch(() => {})
         // Se junto do arquivo houver texto, deixa o Tiptap colá-lo normalmente.
         // Print puro não tem texto útil e deve virar somente anexo.
         const hasText = !!event.clipboardData?.getData("text/plain") || !!event.clipboardData?.getData("text/html")
