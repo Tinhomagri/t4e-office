@@ -224,6 +224,7 @@ export interface Member {
   name: string
   email: string
   role: Role
+  avatar_url?: string | null
 }
 
 export interface Invitation {

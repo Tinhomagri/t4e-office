@@ -2,6 +2,7 @@
 import { AvatarCanvas } from "@/features/avatar/AvatarCanvas"
 import { useAvatarsBatch } from "@/features/office/office.hooks"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
+import { useMembers } from "@/features/workspace/workspace.hooks"
 import { cx } from "@/shared/ui/primitives"
 import type { CardPriority, CardStatus, CardType } from "@/features/workspace/workspace.types"
 
@@ -137,9 +138,15 @@ export function ColoredAvatar({
   size?: "xs" | "sm"
 }) {
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const { data: members } = useMembers(workspaceId)
   const { data: avatars } = useAvatarsBatch(workspaceId, userId ? [userId] : [])
+  const profilePhoto = userId ? members?.find((member) => member.user_id === userId)?.avatar_url : null
   const config = userId ? avatars?.[userId] : undefined
   const dim = size === "xs" ? "size-5" : "size-6"
+
+  if (profilePhoto) {
+    return <img src={profilePhoto} alt={name} title={name} className={cx("shrink-0 rounded-full object-cover ring-1 ring-inset ring-white/20 shadow-sm", dim)} />
+  }
 
   if (config) {
     return (

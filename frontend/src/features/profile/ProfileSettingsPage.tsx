@@ -1,4 +1,5 @@
 import { motion } from "framer-motion"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Bell, Camera, Check, ChevronRight, CircleUserRound,
   KeyRound, LockKeyhole, Mail, Palette, Save,
@@ -13,6 +14,7 @@ import { extractApiError } from "@/shared/api/client"
 import { useThemeStore } from "@/shared/theme.store"
 import { Button, Field, Input, Select, Textarea, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
+import type { Member } from "@/features/workspace/workspace.types"
 
 type Section = "profile" | "preferences" | "security"
 
@@ -55,6 +57,7 @@ export function ProfileSettingsPage() {
   const user = useAuthStore((state) => state.user)
   const setUser = useAuthStore((state) => state.setUser)
   const setTheme = useThemeStore((state) => state.set)
+  const queryClient = useQueryClient()
   const [section, setSection] = useState<Section>("profile")
   const [form, setForm] = useState(() => profileFrom(user))
   const [avatar, setAvatar] = useState<string | null>(user?.avatar_url ?? null)
@@ -70,6 +73,11 @@ export function ProfileSettingsPage() {
     try {
       const updated = await updateProfile(fields)
       setUser(updated)
+      queryClient.setQueriesData<Member[]>({ queryKey: ["members"] }, (members) =>
+        members?.map((member) => member.user_id === updated.id
+          ? { ...member, name: updated.full_name, avatar_url: updated.avatar_url }
+          : member),
+      )
       toast.success("Perfil atualizado com sucesso.")
     } catch (error) {
       toast.error(extractApiError(error))

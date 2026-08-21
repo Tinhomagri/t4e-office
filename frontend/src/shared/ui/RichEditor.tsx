@@ -88,6 +88,7 @@ export function RichEditor({
   onChange,
   placeholder = "Escreva uma descrição…",
   onAiAssist,
+  onPasteFiles,
 }: {
   value: string
   onChange: (html: string) => void
@@ -97,7 +98,12 @@ export function RichEditor({
    * `target` vem preenchido nas ações que pedem um alvo (tom, idioma).
    */
   onAiAssist?: (text: string, action: AiAction, target?: string) => Promise<string>
+  /** Arquivos copiados (print, foto ou documento) são entregues ao dono do
+   * editor; texto/HTML continua pelo pipeline nativo do Tiptap. */
+  onPasteFiles?: (files: File[]) => void | Promise<void>
 }) {
+  const onPasteFilesRef = useRef(onPasteFiles)
+  onPasteFilesRef.current = onPasteFiles
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
@@ -109,6 +115,21 @@ export function RichEditor({
     ],
     content: value || "",
     editorProps: {
+      handlePaste: (_view, event) => {
+        const itemFiles = Array.from(event.clipboardData?.items ?? [])
+          .filter((item) => item.kind === "file")
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null)
+        const files = itemFiles.length > 0 ? itemFiles : Array.from(event.clipboardData?.files ?? [])
+        if (files.length === 0 || !onPasteFilesRef.current) return false
+        void onPasteFilesRef.current(files)
+        // Se junto do arquivo houver texto, deixa o Tiptap colá-lo normalmente.
+        // Print puro não tem texto útil e deve virar somente anexo.
+        const hasText = !!event.clipboardData?.getData("text/plain") || !!event.clipboardData?.getData("text/html")
+        if (hasText) return false
+        event.preventDefault()
+        return true
+      },
       attributes: {
         class:
           "prose-sm min-h-[120px] max-w-none px-3 py-2.5 text-sm text-ink dark:text-paper focus:outline-none " +
@@ -268,6 +289,7 @@ export function RichEditor({
         )}
       </div>
       <EditorContent editor={editor} />
+      {onPasteFiles && <p className="border-t border-paper-100 px-3 py-1.5 text-[11px] text-paper-400 dark:border-ink-800">Cole texto normalmente ou use Ctrl+V para anexar prints, fotos e documentos.</p>}
     </div>
   )
 }

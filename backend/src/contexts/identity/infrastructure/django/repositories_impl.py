@@ -117,6 +117,7 @@ class DjangoMembershipRepository(MembershipRepository):
                 name=r.user.full_name,
                 email=r.user.email,
                 role=r.role,
+                avatar_url=r.user.avatar_image or None,
             )
             for r in rows
         ]

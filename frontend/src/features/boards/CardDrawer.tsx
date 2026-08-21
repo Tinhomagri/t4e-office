@@ -194,6 +194,7 @@ export function CardDrawer({
   onOpenCard?: (card: Card) => void
 }) {
   const updateCard = useUpdateCard(projectId)
+  const pasteUpload = useUploadAttachment(card?.id ?? null)
   const deleteCard = useDeleteCard(projectId)
   const { can } = useProjectPermissions(projectId)
   const { data: allCards } = useCards(projectId)
@@ -358,6 +359,14 @@ export function CardDrawer({
                 value={draft.description}
                 onChange={(html) => set("description", html)}
                 placeholder="Adicione uma descrição detalhada…"
+                onPasteFiles={async (files) => {
+                  try {
+                    for (const file of files) await pasteUpload.mutateAsync(file)
+                    toast.success(files.length === 1 ? "Arquivo colado e adicionado aos anexos." : `${files.length} arquivos adicionados aos anexos.`)
+                  } catch (error) {
+                    toast.error(errMsg(error))
+                  }
+                }}
                 // Sem workspace ativo não há IA configurada para chamar, então
                 // o menu de IA nem aparece.
                 onAiAssist={

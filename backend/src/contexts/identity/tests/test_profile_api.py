@@ -1,7 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from contexts.identity.infrastructure.django.models import UserModel
+from contexts.identity.infrastructure.django.models import MembershipModel, UserModel, WorkspaceModel
 
 
 @pytest.fixture
@@ -55,3 +55,13 @@ def test_change_password_requires_current_password(client, user):
     assert success.status_code == 200
     user.refresh_from_db()
     assert user.check_password("nova-senha-123")
+
+
+def test_workspace_members_exposes_profile_photo(client, user):
+    user.avatar_image = "data:image/webp;base64,foto"
+    user.save(update_fields=["avatar_image"])
+    workspace = WorkspaceModel.objects.create(name="T4E", slug="t4e-avatar", owner=user)
+    MembershipModel.objects.create(workspace=workspace, user=user, role="owner")
+    response = client.get(f"/api/auth/workspaces/{workspace.id}/members/")
+    assert response.status_code == 200
+    assert response.data[0]["avatar_url"] == "data:image/webp;base64,foto"
