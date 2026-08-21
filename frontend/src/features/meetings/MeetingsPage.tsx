@@ -427,14 +427,15 @@ export function MeetingCallOverlay() {
   }, [pipWindow, portalHost, session])
   const openPip = useCallback(async () => {
     if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return }
-    const api = (document as Document & { documentPictureInPicture?: { requestWindow: (options?: { width?: number; height?: number }) => Promise<Window> } }).documentPictureInPicture
-    // Document PiP é o comportamento mais próximo do Meet. Em navegadores
-    // sem essa API, abre uma janela vazia e porta a call atual para ela —
-    // nunca uma nova página do sistema.
-    const next = api
-      ? await api.requestWindow({ width: 1100, height: 760 })
-      : window.open("", "t4e-meeting", "popup,width=1100,height=760,resizable=yes")
-    if (!next) return
+    const api = (window as Window & typeof globalThis & {
+      documentPictureInPicture?: {
+        requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>
+      }
+    }).documentPictureInPicture
+    // A API vive em `window`, não em `document`. Sem suporte, mantemos a
+    // janela flutuante interna; jamais abrimos outra página do sistema.
+    if (!api) { setLayout("floating"); return }
+    const next = await api.requestWindow({ width: 520, height: 360 })
     next.document.head.replaceChildren(...Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).map((node) => node.cloneNode(true)))
     next.document.body.style.margin = "0"
     next.document.body.style.height = "100vh"
