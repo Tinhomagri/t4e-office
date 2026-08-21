@@ -63,6 +63,7 @@ class MemberSerializer(serializers.Serializer):
     name = serializers.CharField()
     email = serializers.EmailField()
     role = serializers.CharField()
+    avatar_url = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
 
 _ROLES = ["admin", "member"]

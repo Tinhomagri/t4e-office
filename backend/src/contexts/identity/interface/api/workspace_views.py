@@ -53,7 +53,7 @@ class MembersView(APIView):
         )
         data = MemberSerializer(
             [
-                {"user_id": m.user_id, "name": m.name, "email": m.email, "role": m.role}
+                {"user_id": m.user_id, "name": m.name, "email": m.email, "role": m.role, "avatar_url": m.avatar_url}
                 for m in members
             ],
             many=True,
