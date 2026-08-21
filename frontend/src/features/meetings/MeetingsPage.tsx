@@ -424,7 +424,7 @@ export function MeetingCallOverlay() {
   if (!session) return null
   const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-700 bg-ink-900 px-3"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span><button onClick={() => setLayout((v) => v === "fullscreen" ? "floating" : "fullscreen")} title={layout === "fullscreen" ? "Janela flutuante" : "Tela cheia"} className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200">{layout === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button><button onClick={() => void openPip()} title="Abrir pop-up persistente" className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200"><PictureInPicture2 className="size-4" /></button><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
-    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><RoomAudioRenderer /></LiveKitRoom></Suspense>
+    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><AutoPictureInPicture /><RoomAudioRenderer /></LiveKitRoom></Suspense>
   </motion.div>
   return <AnimatePresence>{pipWindow ? createPortal(content, pipWindow.document.body) : content}</AnimatePresence>
 }
@@ -898,4 +898,34 @@ function VideoStage() {
       ))}
     </div>
   )
+}
+
+/** Mantém a call visível ao trocar de aba, como o Meet. O atributo nativo
+ * permite que Chrome/Edge promovam o vídeo sem uma segunda interação; a
+ * chamada explícita cobre os navegadores que liberam PiP nessa transição. */
+function AutoPictureInPicture() {
+  useEffect(() => {
+    const configureVideos = () => {
+      document.querySelectorAll<HTMLVideoElement>(".meet-video-stage video").forEach((video) => {
+        ;(video as HTMLVideoElement & { autoPictureInPicture?: boolean }).autoPictureInPicture = true
+      })
+    }
+    const pickVideo = () => Array.from(document.querySelectorAll<HTMLVideoElement>(".meet-video-stage video"))
+      .find((video) => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0)
+    const onVisibilityChange = () => {
+      configureVideos()
+      if (document.visibilityState !== "hidden" || document.pictureInPictureElement) return
+      const video = pickVideo()
+      if (video?.requestPictureInPicture) void video.requestPictureInPicture().catch(() => {})
+    }
+    const observer = new MutationObserver(configureVideos)
+    observer.observe(document.body, { childList: true, subtree: true })
+    configureVideos()
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [])
+  return null
 }
