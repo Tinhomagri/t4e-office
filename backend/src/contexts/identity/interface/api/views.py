@@ -41,6 +41,7 @@ from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoWorkspaceRepository,
 )
 from contexts.identity.interface.api.serializers import (
+    ChangePasswordSerializer,
     CreateWorkspaceSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -50,6 +51,32 @@ from contexts.identity.interface.api.serializers import (
 from shared.domain.errors import NotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
+
+PROFILE_FIELDS = {
+    "job_title": 120,
+    "phone": 40,
+    "bio": 500,
+    "location": 120,
+    "timezone": 64,
+}
+PROFILE_CHOICES = {
+    "language": {"pt-BR", "en-US", "es"},
+    "theme": {"system", "light", "dark"},
+    "density": {"comfortable", "compact"},
+    "availability": {"available", "focus", "away", "offline"},
+}
+
+
+def _profile_data(user: UserModel) -> dict:
+    return {
+        "id": str(user.id), "email": user.email, "full_name": user.full_name,
+        "avatar_url": user.avatar_image or None, "job_title": user.job_title,
+        "phone": user.phone, "bio": user.bio, "location": user.location,
+        "timezone": user.timezone, "language": user.language, "theme": user.theme,
+        "density": user.density, "notification_preferences": user.notification_preferences,
+        "availability": user.availability, "has_usable_password": user.has_usable_password(),
+        "date_joined": user.date_joined,
+    }
 
 
 def _google_login_provider() -> GoogleOAuthProvider:
@@ -291,9 +318,7 @@ class MeView(APIView):
         workspaces = ListWorkspaces(DjangoWorkspaceRepository()).execute(
             user_id=str(user.id)
         )
-        data = UserSerializer(
-            {"id": str(user.id), "email": user.email, "full_name": user.full_name, "avatar_url": user.avatar_image or None}
-        ).data
+        data = _profile_data(user)
         # Inclui workspaces para o frontend saber em qual contexto operar.
         data["workspaces"] = WorkspaceListItemSerializer(
             [{"id": w.id, "name": w.name, "slug": w.slug} for w in workspaces],
@@ -303,6 +328,7 @@ class MeView(APIView):
 
     def patch(self, request: Request) -> Response:
         user = request.user
+        changed = []
         if "full_name" in request.data:
             name = str(request.data["full_name"] or "").strip()
             if not name:
@@ -310,6 +336,7 @@ class MeView(APIView):
             if len(name) > 200:
                 raise ValidationError("O nome deve ter no máximo 200 caracteres.")
             user.full_name = name
+            changed.append("full_name")
         if "avatar_image" in request.data:
             image = str(request.data["avatar_image"] or "")
             if image and not image.startswith(("data:image/", "https://", "http://")):
@@ -317,8 +344,48 @@ class MeView(APIView):
             if len(image) > 700_000:
                 raise ValidationError("Imagem de perfil grande demais.")
             user.avatar_image = image
-        user.save(update_fields=["full_name", "avatar_image"])
-        return Response({"id": str(user.id), "email": user.email, "full_name": user.full_name, "avatar_url": user.avatar_image or None})
+            changed.append("avatar_image")
+        for field, max_length in PROFILE_FIELDS.items():
+            if field not in request.data:
+                continue
+            value = str(request.data[field] or "").strip()
+            if len(value) > max_length:
+                raise ValidationError(f"{field} deve ter no máximo {max_length} caracteres.")
+            setattr(user, field, value)
+            changed.append(field)
+        for field, choices in PROFILE_CHOICES.items():
+            if field not in request.data:
+                continue
+            value = str(request.data[field] or "")
+            if value not in choices:
+                raise ValidationError(f"Valor inválido para {field}.")
+            setattr(user, field, value)
+            changed.append(field)
+        if "notification_preferences" in request.data:
+            preferences = request.data["notification_preferences"]
+            if not isinstance(preferences, dict):
+                raise ValidationError("Preferências de notificação inválidas.")
+            allowed = {"email", "desktop", "mentions", "meetings", "daily_digest"}
+            user.notification_preferences = {key: bool(value) for key, value in preferences.items() if key in allowed}
+            changed.append("notification_preferences")
+        if changed:
+            user.save(update_fields=changed)
+        return Response(_profile_data(user))
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        current = serializer.validated_data["current_password"]
+        if user.has_usable_password() and not user.check_password(current):
+            return Response({"detail": "Senha atual incorreta."}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return Response({"message": "Senha alterada com sucesso."})
 
 
 class WorkspaceCreateView(APIView):

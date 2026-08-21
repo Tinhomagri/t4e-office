@@ -23,6 +23,22 @@ export interface AuthUser {
   email: string
   full_name: string
   avatar_url?: string | null
+  job_title?: string
+  phone?: string
+  bio?: string
+  location?: string
+  timezone?: string
+  language?: "pt-BR" | "en-US" | "es"
+  theme?: "system" | "light" | "dark"
+  density?: "comfortable" | "compact"
+  notification_preferences?: Record<string, boolean>
+  availability?: "available" | "focus" | "away" | "offline"
+  has_usable_password?: boolean
+  date_joined?: string
+}
+
+export type ProfileUpdatePayload = Partial<Omit<AuthUser, "id" | "email" | "avatar_url" | "has_usable_password" | "date_joined">> & {
+  avatar_image?: string
 }
 
 export interface ForgotPasswordPayload {

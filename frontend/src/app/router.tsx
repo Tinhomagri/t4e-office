@@ -26,6 +26,7 @@ import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
 import { MyCardPage } from "@/features/office/mycard/MyCardPage"
 import { OfficePage } from "@/features/office/OfficePage"
 import { PokerPage } from "@/features/poker/PokerPage"
+import { ProfileSettingsPage } from "@/features/profile/ProfileSettingsPage"
 import { MemberPortfolioPage } from "@/features/portfolio/MemberPortfolioPage"
 import { PortfolioPage } from "@/features/portfolio/PortfolioPage"
 import { ProjectPortfolioPage } from "@/features/portfolio/ProjectPortfolioPage"
@@ -137,6 +138,7 @@ export const appRoutes: RouteObject[] = [
   { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
   { path: "integrations", element: <IntegrationsPage /> },
   { path: "reunioes", element: <MeetingsPage /> },
+  { path: "perfil", element: <ProfileSettingsPage /> },
   { path: "chat", element: <ChatPage /> },
   { path: "desks", element: <DesksManagerPage /> },
   // Meu Card nasceu no PC do escritório, mas é uma tela do produto como outra

@@ -5,6 +5,7 @@ import type {
   ForgotPasswordPayload,
   LoginPayload,
   MessageResponse,
+  ProfileUpdatePayload,
   RegisterPayload,
   ResetPasswordPayload,
   TokenPair,
@@ -37,8 +38,13 @@ export async function fetchMe(): Promise<AuthUser> {
   return data
 }
 
-export async function updateProfile(payload: { full_name?: string; avatar_image?: string }): Promise<AuthUser> {
+export async function updateProfile(payload: ProfileUpdatePayload): Promise<AuthUser> {
   const { data } = await api.patch<AuthUser>("/auth/me/", payload)
+  return data
+}
+
+export async function changePassword(payload: { current_password: string; new_password: string }): Promise<MessageResponse> {
+  const { data } = await api.post<MessageResponse>("/auth/me/change-password/", payload)
   return data
 }
 

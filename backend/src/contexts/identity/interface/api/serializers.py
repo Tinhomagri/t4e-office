@@ -17,6 +17,21 @@ class UserSerializer(serializers.Serializer):
     email = serializers.EmailField()
     full_name = serializers.CharField()
     avatar_url = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    job_title = serializers.CharField(allow_blank=True, required=False)
+    phone = serializers.CharField(allow_blank=True, required=False)
+    bio = serializers.CharField(allow_blank=True, required=False)
+    location = serializers.CharField(allow_blank=True, required=False)
+    timezone = serializers.CharField(allow_blank=True, required=False)
+    language = serializers.CharField(allow_blank=True, required=False)
+    theme = serializers.CharField(allow_blank=True, required=False)
+    density = serializers.CharField(allow_blank=True, required=False)
+    notification_preferences = serializers.DictField(required=False)
+    availability = serializers.CharField(allow_blank=True, required=False)
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, allow_blank=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
 
 
 class CreateWorkspaceSerializer(serializers.Serializer):

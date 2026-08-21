@@ -3,7 +3,6 @@ import {
   Menu,
   CalendarClock,
   Check,
-  Camera,
   ChevronDown,
   ChevronsUpDown,
   History,
@@ -25,7 +24,6 @@ import { useThemeStore } from "@/shared/theme.store"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
-import { profileImageDataUri, updateProfile } from "@/features/auth/auth.api"
 import { ChatHeadsWidget } from "@/features/boards/ChatHeadsWidget"
 import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
 import { NotificationBell } from "@/features/boards/NotificationBell"
@@ -232,7 +230,7 @@ export function AppShell() {
           >
             <CalendarClock className="size-[18px]" strokeWidth={1.9} />
           </TopIcon>
-          <TopIcon label="Configurações">
+          <TopIcon label="Configurações" onClick={() => navigate("/app/perfil")}>
             <Settings className="size-[18px]" strokeWidth={1.9} />
           </TopIcon>
 
@@ -467,26 +465,9 @@ function UserMenu({
   status: PresenceStatus
   onLogout: () => void
 }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [draftName, setDraftName] = useState(name ?? "")
-  const [draftAvatar, setDraftAvatar] = useState(avatarUrl ?? null)
-  const [saving, setSaving] = useState(false)
-  const setUser = useAuthStore((s) => s.setUser)
-  const fileRef = useRef<HTMLInputElement>(null)
   const reduce = useReducedMotion()
-
-  useEffect(() => { setDraftName(name ?? ""); setDraftAvatar(avatarUrl ?? null) }, [name, avatarUrl])
-
-  async function saveProfile() {
-    if (!draftName.trim()) return
-    setSaving(true)
-    try {
-      const updated = await updateProfile({ full_name: draftName.trim(), avatar_image: draftAvatar ?? "" })
-      setUser(updated)
-      setEditing(false)
-    } finally { setSaving(false) }
-  }
 
   return (
     <div className="relative ml-1">
@@ -518,7 +499,7 @@ function UserMenu({
                 </div></div>
               </div>
               <div className="my-1 h-px bg-paper-100 dark:bg-white/5" />
-              {!editing ? <button role="menuitem" onClick={() => setEditing(true)} className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-ink hover:bg-paper-100 dark:text-paper-200 dark:hover:bg-white/5"><Camera className="size-4 text-paper-500" /> Editar perfil</button> : <div className="space-y-2 px-2 py-2"><button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-2 rounded-lg border border-dashed border-paper-300 p-2 text-xs text-paper-600 dark:border-ink-600 dark:text-paper-300"><span className="grid size-8 place-items-center overflow-hidden rounded-full bg-brand-500/20 text-brand-600">{draftAvatar ? <img src={draftAvatar} alt="" className="size-full object-cover" /> : initials(draftName)}</span>Escolher foto</button><input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) setDraftAvatar(await profileImageDataUri(file)); e.target.value = "" }} /><input value={draftName} onChange={(e) => setDraftName(e.target.value)} className="h-8 w-full rounded-lg border border-paper-300 bg-paper px-2 text-xs text-ink dark:border-ink-600 dark:bg-ink-900 dark:text-paper" placeholder="Nome completo" /><div className="flex justify-end gap-1"><button onClick={() => setEditing(false)} className="rounded px-2 py-1 text-xs text-paper-500">Cancelar</button><button disabled={saving} onClick={saveProfile} className="rounded bg-brand-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50">{saving ? "Salvando…" : "Salvar"}</button></div></div>}
+              <button role="menuitem" onClick={() => { setOpen(false); navigate("/app/perfil") }} className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-ink hover:bg-paper-100 dark:text-paper-200 dark:hover:bg-white/5"><Settings className="size-4 text-paper-500" /> Perfil e configurações</button>
               <button
                 role="menuitem"
                 onClick={onLogout}

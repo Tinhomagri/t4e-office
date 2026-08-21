@@ -3,6 +3,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from contexts.identity.interface.api.views import (
+    ChangePasswordView,
     ForgotPasswordView,
     GoogleLoginCallbackView,
     GoogleLoginUrlView,
@@ -39,6 +40,7 @@ urlpatterns = [
         name="google-login-callback",
     ),
     path("me/", MeView.as_view(), name="me"),
+    path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("workspaces/", WorkspaceCreateView.as_view(), name="workspace-list-create"),
     path(
         "workspaces/<uuid:workspace_id>/members/",

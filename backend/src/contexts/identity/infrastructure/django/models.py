@@ -51,6 +51,16 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=200, help_text="Nome completo")
     # Data URI otimizado, sem depender de disco local no deploy serverless.
     avatar_image = models.TextField(blank=True, default="")
+    job_title = models.CharField(max_length=120, blank=True, default="")
+    phone = models.CharField(max_length=40, blank=True, default="")
+    bio = models.CharField(max_length=500, blank=True, default="")
+    location = models.CharField(max_length=120, blank=True, default="")
+    timezone = models.CharField(max_length=64, blank=True, default="America/Sao_Paulo")
+    language = models.CharField(max_length=10, blank=True, default="pt-BR")
+    theme = models.CharField(max_length=10, blank=True, default="system")
+    density = models.CharField(max_length=12, blank=True, default="comfortable")
+    notification_preferences = models.JSONField(default=dict, blank=True)
+    availability = models.CharField(max_length=12, blank=True, default="available")
     is_active = models.BooleanField(default=False)  # ativo apenas após verificar email
     email_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False, help_text="Acesso ao admin")
