@@ -452,6 +452,24 @@ export function MeetingCallOverlay() {
     document.addEventListener("click", onNavigationClick, true)
     return () => document.removeEventListener("click", onNavigationClick, true)
   }, [openPip, session])
+  // Chrome dispara esta ação ao ocultar a aba de uma videoconferência que tem
+  // mic/câmera ativos. Ao contrário do PiP de <video>, ela nos permite abrir
+  // o Document PiP com a interface completa da chamada (todos os quadros,
+  // chat e controles), exatamente o caso de uso de reuniões.
+  useEffect(() => {
+    if (!session || !navigator.mediaSession) return
+    const mediaSession = navigator.mediaSession as MediaSession & {
+      setActionHandler: (action: string, handler: (() => void) | null) => void
+    }
+    try {
+      mediaSession.setActionHandler("enterpictureinpicture", () => { void openPip() })
+      return () => mediaSession.setActionHandler("enterpictureinpicture", null)
+    } catch {
+      // Navegadores sem Auto PiP continuam com o botão manual e o pop-up na
+      // navegação interna, sem degradar a chamada.
+      return undefined
+    }
+  }, [openPip, session])
   if (!session) return null
   const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-700 bg-ink-900 px-3"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span><button onClick={() => setLayout((v) => v === "fullscreen" ? "floating" : "fullscreen")} title={layout === "fullscreen" ? "Janela flutuante" : "Tela cheia"} className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200">{layout === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button><button onClick={() => void openPip()} title="Abrir pop-up persistente" className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200"><PictureInPicture2 className="size-4" /></button><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
