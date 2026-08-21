@@ -398,6 +398,7 @@ export function MeetingCallOverlay() {
   // A janela flutuante é uma ação explícita de minimizar, nunca o padrão.
   const [layout, setLayout] = useState<"floating" | "fullscreen">("fullscreen")
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
+  const previousPathRef = useRef(location.pathname)
   const leave = async () => { if (session) await meetApi.leaveRoom(session.room.id).catch(() => {}); setSession(null) }
   useEffect(() => {
     if (!pipWindow) return
@@ -426,7 +427,10 @@ export function MeetingCallOverlay() {
   // Ao retornar para a página da reunião, a call volta para a tela cheia
   // principal e a janela auxiliar é fechada.
   useEffect(() => {
-    if (location.pathname.endsWith("/reunioes")) {
+    const wasOnMeetings = previousPathRef.current.endsWith("/reunioes")
+    const isOnMeetings = location.pathname.endsWith("/reunioes")
+    previousPathRef.current = location.pathname
+    if (isOnMeetings && !wasOnMeetings) {
       if (!pipWindow) return
       if (!pipWindow.closed) pipWindow.close()
       setPipWindow(null)
@@ -436,7 +440,7 @@ export function MeetingCallOverlay() {
     // Navegações programáticas (atalhos e menus) não passam por um <a>.
     // Tentamos abrir a mesma janela completa também nesse caminho; se o
     // navegador exigir gesto, o handler de clique acima já o terá aberto.
-    if (session && !pipWindow) void openPip().catch(() => {})
+    if (!isOnMeetings && session && !pipWindow) void openPip().catch(() => {})
   }, [location.pathname, openPip, pipWindow, session])
   // Links da navegação são capturados antes do roteador. Isso mantém o gesto
   // de clique do usuário, exigido pelo navegador para abrir um pop-up, e leva
