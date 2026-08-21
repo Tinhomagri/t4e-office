@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
+import { useLocation } from "react-router-dom"
 import {
   BarChart3,
   Check,
@@ -40,7 +41,7 @@ import {
   VideoOff,
   X,
 } from "lucide-react"
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
@@ -387,6 +388,7 @@ export function MeetingsPage() {
 export function MeetingCallOverlay() {
   const session = useMeetingSessionStore((s) => s.session)
   const setSession = useMeetingSessionStore((s) => s.setSession)
+  const location = useLocation()
   const { activeWorkspaceId } = useWorkspaces()
   const me = useAuthStore((s) => s.user)
   const { data: members } = useMembers(activeWorkspaceId)
@@ -404,7 +406,7 @@ export function MeetingCallOverlay() {
     return () => pipWindow.removeEventListener("pagehide", onClose)
   }, [pipWindow])
   useEffect(() => { if (!session && pipWindow && !pipWindow.closed) pipWindow.close() }, [session, pipWindow])
-  const openPip = async () => {
+  const openPip = useCallback(async () => {
     if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return }
     const api = (document as Document & { documentPictureInPicture?: { requestWindow: (options?: { width?: number; height?: number }) => Promise<Window> } }).documentPictureInPicture
     // Document PiP é o comportamento mais próximo do Meet. Em navegadores
@@ -420,11 +422,40 @@ export function MeetingCallOverlay() {
     next.document.body.className = "dark bg-[#101011]"
     next.document.title = session?.room.name || "Reunião"
     setPipWindow(next)
-  }
+  }, [pipWindow, session?.room.name])
+  // Ao retornar para a página da reunião, a call volta para a tela cheia
+  // principal e a janela auxiliar é fechada.
+  useEffect(() => {
+    if (location.pathname.endsWith("/reunioes")) {
+      if (!pipWindow) return
+      if (!pipWindow.closed) pipWindow.close()
+      setPipWindow(null)
+      setLayout("fullscreen")
+      return
+    }
+    // Navegações programáticas (atalhos e menus) não passam por um <a>.
+    // Tentamos abrir a mesma janela completa também nesse caminho; se o
+    // navegador exigir gesto, o handler de clique acima já o terá aberto.
+    if (session && !pipWindow) void openPip().catch(() => {})
+  }, [location.pathname, openPip, pipWindow, session])
+  // Links da navegação são capturados antes do roteador. Isso mantém o gesto
+  // de clique do usuário, exigido pelo navegador para abrir um pop-up, e leva
+  // a call inteira (grade, chat e controles), não um único vídeo.
+  useEffect(() => {
+    if (!session) return
+    const onNavigationClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null
+      if (!target || target.target === "_blank" || event.defaultPrevented || event.button !== 0) return
+      const destination = new URL(target.href, window.location.href)
+      if (destination.origin === window.location.origin && !destination.pathname.endsWith("/reunioes")) void openPip()
+    }
+    document.addEventListener("click", onNavigationClick, true)
+    return () => document.removeEventListener("click", onNavigationClick, true)
+  }, [openPip, session])
   if (!session) return null
   const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-700 bg-ink-900 px-3"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span><button onClick={() => setLayout((v) => v === "fullscreen" ? "floating" : "fullscreen")} title={layout === "fullscreen" ? "Janela flutuante" : "Tela cheia"} className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200">{layout === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button><button onClick={() => void openPip()} title="Abrir pop-up persistente" className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200"><PictureInPicture2 className="size-4" /></button><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
-    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><AutoPictureInPicture /><RoomAudioRenderer /></LiveKitRoom></Suspense>
+    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><RoomAudioRenderer /></LiveKitRoom></Suspense>
   </motion.div>
   return <AnimatePresence>{pipWindow ? createPortal(content, pipWindow.document.body) : content}</AnimatePresence>
 }
@@ -898,34 +929,4 @@ function VideoStage() {
       ))}
     </div>
   )
-}
-
-/** Mantém a call visível ao trocar de aba, como o Meet. O atributo nativo
- * permite que Chrome/Edge promovam o vídeo sem uma segunda interação; a
- * chamada explícita cobre os navegadores que liberam PiP nessa transição. */
-function AutoPictureInPicture() {
-  useEffect(() => {
-    const configureVideos = () => {
-      document.querySelectorAll<HTMLVideoElement>(".meet-video-stage video").forEach((video) => {
-        ;(video as HTMLVideoElement & { autoPictureInPicture?: boolean }).autoPictureInPicture = true
-      })
-    }
-    const pickVideo = () => Array.from(document.querySelectorAll<HTMLVideoElement>(".meet-video-stage video"))
-      .find((video) => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0)
-    const onVisibilityChange = () => {
-      configureVideos()
-      if (document.visibilityState !== "hidden" || document.pictureInPictureElement) return
-      const video = pickVideo()
-      if (video?.requestPictureInPicture) void video.requestPictureInPicture().catch(() => {})
-    }
-    const observer = new MutationObserver(configureVideos)
-    observer.observe(document.body, { childList: true, subtree: true })
-    configureVideos()
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    return () => {
-      observer.disconnect()
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-    }
-  }, [])
-  return null
 }
