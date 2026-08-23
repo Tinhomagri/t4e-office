@@ -39,7 +39,7 @@ import {
   SubtaskSuggestions,
 } from "@/features/boards/CardAiSuggestions"
 import { RepurposeDialog } from "./RepurposeDialog"
-import { errMsg } from "./board.shared"
+import { ColoredAvatar, errMsg } from "./board.shared"
 import {
   useAddCardComponent,
   useAddCardVersion,
@@ -90,7 +90,7 @@ import type {
   Version,
   Worklog,
 } from "@/features/workspace/workspace.types"
-import { Avatar, Badge, Button, cx, Skeleton } from "@/shared/ui/primitives"
+import { Badge, Button, cx, Skeleton } from "@/shared/ui/primitives"
 import { StatusLozenge } from "@/shared/ui/issue"
 import { RichEditor } from "@/shared/ui/RichEditor"
 import { useQueryClient } from "@tanstack/react-query"
@@ -1528,7 +1528,7 @@ function WorklogSection({ cardId }: { cardId: string }) {
         <ul className="mb-2 space-y-1.5">
           {(worklogs ?? []).map((w: Worklog) => (
             <li key={w.id} className="flex items-start gap-2 rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-2.5 py-1.5">
-              <Avatar initials={initials(w.author_name)} size="sm" />
+              <ColoredAvatar name={w.author_name} userId={w.author_id} size="sm" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-semibold text-ink dark:text-paper">{fmtDuration(w.time_seconds)}</span>
@@ -1658,7 +1658,7 @@ function HistoryLine({ h }: { h: CardHistoryEntry }) {
   const opaque = OPAQUE_FIELDS.has(h.field)
   return (
     <li className="flex gap-2.5">
-      <Avatar initials={initials(h.author_name)} size="sm" />
+      <ColoredAvatar name={h.author_name} userId={h.author_id} size="sm" />
       <div className="min-w-0 flex-1 pt-0.5 text-[13px] text-paper-600">
         <span className="font-medium text-ink dark:text-paper">{h.author_name || "Alguém"}</span>{" "}
         alterou <span className="font-medium">{label}</span>
@@ -1755,7 +1755,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
       <div className="space-y-3">
         {/* Caixa de novo comentário */}
         <div className="flex gap-2.5">
-          <Avatar initials={initials(user?.full_name)} size="sm" />
+          <ColoredAvatar name={user?.full_name ?? ""} userId={user?.id} size="sm" />
             <div className="relative min-w-0 flex-1">
             <textarea
               value={body}
@@ -1778,7 +1778,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
                       onClick={() => pickMention(m)}
                       className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink dark:text-paper hover:bg-paper-100 dark:hover:bg-ink-700"
                     >
-                      <Avatar initials={initials(m.name)} size="sm" />
+                      <ColoredAvatar name={m.name} userId={m.user_id} size="sm" />
                       <span className="truncate">{m.name}</span>
                     </button>
                   </li>
@@ -1855,7 +1855,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
             {displayed.map((item) =>
               item.kind === "comment" ? (
                 <li key={`c-${item.data.id}`} className="flex gap-2.5">
-                  <Avatar initials={initials(item.data.author_name)} size="sm" />
+                  <ColoredAvatar name={item.data.author_name} userId={item.data.author_id} size="sm" />
                   <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-2">
                     <div className="mb-0.5 flex items-center gap-2">
                       <Badge tone="outline" className="rounded-full px-2 py-0.5 text-[10px]">
@@ -1872,7 +1872,7 @@ function Activity({ cardId, members }: { cardId: string; members: Member[] }) {
               ) : (
                 <div key={`h-${item.data.id}`} className="flex gap-2.5">
                   <div className="pt-0.5">
-                    <Avatar initials={initials(item.data.author_name)} size="sm" />
+                    <ColoredAvatar name={item.data.author_name} userId={item.data.author_id} size="sm" />
                   </div>
                   <div className="min-w-0 flex-1 rounded-xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-800 px-3 py-2">
                     <div className="mb-0.5 flex items-center gap-2">

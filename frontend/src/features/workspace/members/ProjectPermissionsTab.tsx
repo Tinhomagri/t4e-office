@@ -3,8 +3,9 @@ import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { Globe2, Lock, RotateCcw, Trash2 } from "lucide-react"
 
 import { toast } from "@/shared/ui/toast"
-import { Avatar, EmptyState, Spinner, cx } from "@/shared/ui/primitives"
+import { EmptyState, Spinner, cx } from "@/shared/ui/primitives"
 
+import { ColoredAvatar } from "@/features/boards/board.shared"
 import * as wsApi from "../workspace.api"
 import { useProjects, useUpdateProject } from "../workspace.hooks"
 import type {
@@ -16,7 +17,6 @@ import { useSquads } from "@/features/poker/poker.hooks"
 import type { Squad } from "@/features/poker/poker.types"
 import {
   errMsg,
-  initials,
   Panel,
   PROJECT_ROLE_LABEL,
   PROJECT_ROLE_OPTIONS,
@@ -254,7 +254,7 @@ export function ProjectPermissionsTab({ workspaceId }: { workspaceId: string }) 
                   >
                     <td className="sticky left-0 z-10 bg-paper dark:bg-ink-900 px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
-                        <Avatar initials={initials(mem.name)} size="sm" />
+                        <ColoredAvatar name={mem.name} userId={mem.user_id} size="sm" />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-ink dark:text-paper">
                             {mem.name}

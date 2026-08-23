@@ -5,7 +5,6 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { toast } from "@/shared/ui/toast"
 import { useSquads } from "@/features/poker/poker.hooks"
 import {
-  Avatar,
   Badge,
   Button,
   EmptyState,
@@ -14,6 +13,7 @@ import {
   Spinner,
 } from "@/shared/ui/primitives"
 
+import { ColoredAvatar } from "@/features/boards/board.shared"
 import {
   useInvitations,
   useInvite,
@@ -25,7 +25,6 @@ import {
 import type { Member, Role } from "../workspace.types"
 import {
   errMsg,
-  initials,
   Panel,
   WORKSPACE_ROLE_LABEL,
 } from "./shared"
@@ -173,7 +172,7 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
                   key={m.user_id}
                   className="flex items-center gap-3 px-5 py-3"
                 >
-                  <Avatar initials={initials(m.name)} />
+                  <ColoredAvatar name={m.name} userId={m.user_id} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-ink dark:text-paper">
                       {m.name}
