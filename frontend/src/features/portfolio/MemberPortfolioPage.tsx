@@ -333,7 +333,7 @@ export function MemberPortfolioPage() {
             ) : (
               <div className="mt-4 space-y-4">
                 {projectRows.map((p) => {
-                  const pct = p.pointsTotal > 0 ? Math.round((p.pointsDone / p.pointsTotal) * 100) : 0
+                  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
                   return (
                     <Link
                       key={p.id}
