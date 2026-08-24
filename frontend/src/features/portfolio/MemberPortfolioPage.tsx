@@ -125,7 +125,11 @@ export function MemberPortfolioPage() {
 
   const total = mine.length
   const done = mine.filter((c) => c.resolution === "done").length
-  const donePct = total ? Math.round((done / total) * 100) : 0
+  // Carga: fatia dos cards abertos do workspace que está com esta pessoa —
+  // quanto mais tarefa aberta em mãos, maior a carga (não é taxa de conclusão).
+  const myOpen = mine.filter((c) => c.resolution !== "done").length
+  const workspaceOpen = cards.filter((c) => c.resolution !== "done" && c.assignee_id).length
+  const loadPct = workspaceOpen ? Math.round((myOpen / workspaceOpen) * 100) : 0
   const pointsTotal = mine.reduce((s, c) => s + (c.points ?? 0), 0)
   const pointsDone = mine.filter((c) => c.resolution === "done").reduce((s, c) => s + (c.points ?? 0), 0)
   const overdue = mine.filter(isOverdue)
@@ -237,7 +241,7 @@ export function MemberPortfolioPage() {
             </div>
           </div>
 
-          <ProgressRing pct={donePct} />
+          <ProgressRing pct={loadPct} />
         </div>
       </div>
 
