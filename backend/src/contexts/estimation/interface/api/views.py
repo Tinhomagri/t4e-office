@@ -300,6 +300,18 @@ class PokerJoinView(APIView):
         return Response(_participant_dict(participant))
 
 
+class PokerLeaveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={204: None})
+    def post(self, request: Request, session_id: str) -> Response:
+        session = _session_or_404(session_id, str(request.user.id))
+        if not session:
+            return Response({"error": "Sessão não encontrada"}, status=404)
+        _participant_repo.leave(session_id, str(request.user.id))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class PokerReactionView(APIView):
     """Manda uma reação para outra pessoa da sala."""
 

@@ -76,6 +76,10 @@ export async function heartbeat(sessionId: string): Promise<void> {
   await api.post(`/poker/${sessionId}/heartbeat/`)
 }
 
+export async function leaveSession(sessionId: string): Promise<void> {
+  await api.post(`/poker/${sessionId}/leave/`)
+}
+
 export async function sendReaction(
   sessionId: string,
   toUserId: string,

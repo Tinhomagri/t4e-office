@@ -15,11 +15,15 @@ export function useSession(sessionId: string | null) {
 /** Cards disponíveis para a fila. `busca` chega ao backend porque a sessão da
  *  squad varre o workspace inteiro — filtrar só no cliente traria uma fatia
  *  arbitrária de milhares de cards. */
-export function usePokerCards(sessionId: string | null, busca = "") {
+export function usePokerCards(sessionId: string | null, busca = "", projectId?: string) {
   const termo = busca.trim()
   return useQuery({
-    queryKey: ["poker-cards", sessionId, termo],
-    queryFn: () => pokerApi.getPokerCards(sessionId!, termo ? { q: termo } : undefined),
+    queryKey: ["poker-cards", sessionId, termo, projectId ?? null],
+    queryFn: () =>
+      pokerApi.getPokerCards(sessionId!, {
+        ...(termo ? { q: termo } : {}),
+        ...(projectId ? { project: projectId } : {}),
+      }),
     enabled: !!sessionId,
     // Mantém a lista anterior enquanto a busca nova viaja: sem isso a coluna
     // pisca em branco a cada tecla.
@@ -34,6 +38,12 @@ export function useHeartbeat(sessionId: string | null) {
     const timer = setInterval(() => pokerApi.heartbeat(sessionId), 10_000)
     return () => clearInterval(timer)
   }, [sessionId])
+}
+
+export function useLeaveSession() {
+  return useMutation({
+    mutationFn: (sessionId: string) => pokerApi.leaveSession(sessionId),
+  })
 }
 
 export function useSquads(workspaceId: string | null) {

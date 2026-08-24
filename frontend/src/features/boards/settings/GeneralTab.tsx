@@ -95,8 +95,10 @@ export function GeneralTab({
     try {
       await updateAvatar.mutateAsync(file)
       toast.success(file ? "Imagem atualizada." : "Imagem removida.")
-    } catch {
-      toast.error("Não foi possível enviar a imagem.")
+    } catch (err) {
+      const detail = (err as { response?: { data?: { error?: string } }; message?: string })
+      const backendDetail = detail?.response?.data?.error
+      toast.error(backendDetail ?? detail?.message ?? "Não foi possível enviar a imagem.")
     }
   }
 

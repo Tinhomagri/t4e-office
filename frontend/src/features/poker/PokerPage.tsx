@@ -11,6 +11,7 @@ import {
   BarChart3,
   Check,
   CheckCircle2,
+  LogOut,
   ChevronDown,
   Eye,
   Link2,
@@ -40,6 +41,7 @@ import {
   useSession,
   usePokerCards,
   useHeartbeat,
+  useLeaveSession,
   useCreateSession,
   useJoinSession,
   useSubmitVote,
@@ -983,6 +985,9 @@ function CardSelector({
   onSelectCard,
   query,
   onQueryChange,
+  projects,
+  projectFilter,
+  onProjectFilterChange,
 }: {
   cards: PokerCard[]
   queueIds: string[]
@@ -990,6 +995,9 @@ function CardSelector({
   onSelectCard: (id: string) => void
   query: string
   onQueryChange: (value: string) => void
+  projects: { id: string; name: string }[]
+  projectFilter: string
+  onProjectFilterChange: (value: string) => void
 }) {
   // Fila primeiro (na ordem da sessão), depois o resto do projeto.
   const inQueue = queueIds
@@ -1045,6 +1053,19 @@ function CardSelector({
         <ListOrdered className="size-4 text-[#579DFF]" aria-hidden />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[#B3B9C4]">Fila de votação</h3>
       </div>
+
+      {/* Restringe a fila a um projeto sem precisar criar outra sala — vazio
+          volta a buscar cards do workspace inteiro, igual antes. */}
+      <select
+        value={projectFilter}
+        onChange={(e) => onProjectFilterChange(e.target.value)}
+        className="mb-2 w-full rounded-lg border border-[#2E3036] bg-[#17191E] px-2 py-1.5 text-xs text-[#F7F8F9] outline-none focus:border-[#0C66E4]"
+      >
+        <option value="">Todos os projetos</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
 
       {/* A sessão da squad enxerga os cards de todos os projetos: sem busca,
           achar um card específico seria rolar milhares. A consulta vai ao
@@ -1702,11 +1723,15 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
   // Busca da fila: com a sessão da squad, a lista vem de TODOS os projetos do
   // workspace — sem busca, escolher um card viraria rolagem infinita.
   const [cardQuery, setCardQuery] = useState("")
-  const { data: allCards = [] } = usePokerCards(sessionId, cardQuery)
+  // Host pode restringir a fila a um projeto específico sem precisar criar
+  // outra sala — "" mantém o comportamento antigo (cards do workspace todo).
+  const [cardProjectFilter, setCardProjectFilter] = useState("")
+  const { data: allCards = [] } = usePokerCards(sessionId, cardQuery, cardProjectFilter || undefined)
   const { data: projects = [] } = useProjects(session?.workspace_id ?? null)
   const submitVote = useSubmitVote(sessionId)
   const updateSession = useUpdateSession(sessionId)
   const applyPoints = useApplyPoints(sessionId)
+  const leaveSession = useLeaveSession()
   const [copied, setCopied] = useState(false)
   const sendReaction = useSendReaction(sessionId)
   const sendEmote = useSendEmote(sessionId)
@@ -1929,6 +1954,12 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     )
   }
 
+  // Sair não encerra a sala para os outros — só tira a própria participação
+  // (o host some da lista de presença, mas a sala segue aberta para quem ficou).
+  const handleLeave = () => {
+    leaveSession.mutate(sessionId, { onSuccess: () => navigate("/app/poker") })
+  }
+
   // A conexão é preguiçosa: o primeiro toggle entra na sala, os seguintes só
   // ligam/desligam a faixa. Sair da página derruba a conexão junto. O botão só
   // acende se a entrada der certo — aceso sem sala parece "liguei e não ligou".
@@ -2089,6 +2120,15 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
                 Encerrar sala
               </button>
             )}
+            <button
+              onClick={handleLeave}
+              disabled={leaveSession.isPending}
+              aria-label="Sair da sala de Planning Poker"
+              className="flex items-center gap-1.5 rounded-full border border-[#2E3036] px-3 py-1 text-xs text-[#B3B9C4] transition-colors hover:border-red-500 hover:text-red-400 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0C66E4]"
+            >
+              <LogOut className="size-3.5" aria-hidden />
+              Sair da sala
+            </button>
             {!me?.avatar_config && <AvatarPrompt onDone={() => refetchSession()} />}
             <StatusPill status={session.status} />
           </div>
@@ -2269,6 +2309,9 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             onSelectCard={handleSelectCard}
             query={cardQuery}
             onQueryChange={setCardQuery}
+            projects={projects}
+            projectFilter={cardProjectFilter}
+            onProjectFilterChange={setCardProjectFilter}
           />
         </div>
       )}

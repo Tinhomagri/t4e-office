@@ -488,7 +488,14 @@ export async function updateProjectAvatar(
 const AVATAR_SIZE = 128
 
 async function shrinkToDataUri(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file)
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    // HEIC (foto padrão do iPhone) e outros formatos que o navegador não decodifica
+    // caem aqui como erro genérico — avisa o usuário a trocar de formato.
+    throw new Error("Formato de imagem não suportado. Use JPEG, PNG ou WebP.")
+  }
   try {
     const canvas = document.createElement("canvas")
     canvas.width = AVATAR_SIZE

@@ -12,7 +12,7 @@ from contexts.identity.infrastructure.django.models import (
     UserModel,
     WorkspaceModel,
 )
-from contexts.projects.infrastructure.django.models import ProjectModel
+from contexts.projects.infrastructure.django.models import CardModel, ProjectModel
 
 CARD_ID = "11111111-1111-1111-1111-111111111111"
 
@@ -113,3 +113,41 @@ def test_heartbeat_de_sala_inexistente_devolve_404(sala):
     missing = "22222222-2222-2222-2222-222222222222"
     resp = _client(sala["host"]).post(f"/api/poker/{missing}/heartbeat/")
     assert resp.status_code == 404
+
+
+# ── Sair da sala ──────────────────────────────────────────────────────────────
+
+def test_participante_sai_da_sala(sala):
+    resp = _client(sala["host"]).post(f"/api/poker/{sala['session'].id}/leave/")
+    assert resp.status_code == 204
+    assert not PokerParticipantModel.objects.filter(
+        session=sala["session"], user=sala["host"]
+    ).exists()
+
+
+def test_estranho_nao_sai_de_sala_de_outro_workspace(sala, estranho):
+    resp = _client(estranho).post(f"/api/poker/{sala['session'].id}/leave/")
+    assert resp.status_code == 403
+
+
+def test_sair_de_sala_inexistente_devolve_404(sala):
+    missing = "22222222-2222-2222-2222-222222222222"
+    resp = _client(sala["host"]).post(f"/api/poker/{missing}/leave/")
+    assert resp.status_code == 404
+
+
+# ── Filtro de projeto na fila de cards ───────────────────────────────────────
+
+def test_filtro_project_restringe_cards_ao_projeto(sala):
+    outro_projeto = ProjectModel.objects.create(
+        workspace=sala["session"].workspace, name="Outro", key="OUT"
+    )
+    CardModel.objects.create(project=sala["session"].project, number=1, title="do projeto da sala")
+    CardModel.objects.create(project=outro_projeto, number=1, title="do outro projeto")
+
+    resp = _client(sala["host"]).get(
+        f"/api/poker/{sala['session'].id}/cards/", {"project": str(outro_projeto.id)}
+    )
+    assert resp.status_code == 200
+    titles = [c["title"] for c in resp.data]
+    assert titles == ["do outro projeto"]

@@ -163,17 +163,6 @@ const CHANNEL_OPTIONS = [
   { value: "site", label: "Site" },
 ]
 
-const AVATAR_GRADIENTS = [
-  "from-violet-500 to-purple-700", "from-blue-500 to-indigo-700",
-  "from-emerald-500 to-teal-700", "from-rose-500 to-pink-700",
-  "from-amber-500 to-orange-700", "from-cyan-500 to-sky-700",
-]
-function avatarGradient(name: string): string {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff
-  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length]
-}
-
 // Drawer de detalhe de card estilo Jira: 2 colunas (conteúdo + painel lateral).
 export function CardDrawer({
   card,
@@ -2312,14 +2301,7 @@ function PersonSelect({
   return (
     <div className="relative flex items-center gap-2">
       {person ? (
-        <span
-          className={cx(
-            "grid size-6 place-items-center rounded-full bg-gradient-to-br font-semibold text-white text-[9px] ring-1 ring-inset ring-white/20 shrink-0",
-            avatarGradient(person.name),
-          )}
-        >
-          {initials(person.name)}
-        </span>
+        <ColoredAvatar name={person.name} userId={person.user_id} size="sm" />
       ) : (
         <span className="grid size-6 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 shrink-0">
           ?
@@ -2362,11 +2344,6 @@ function DateInput({ value, onChange }: { value: string | null; onChange: (v: st
       />
     </div>
   )
-}
-
-function initials(name?: string) {
-  if (!name) return "?"
-  return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
 }
 
 function fmtDateTime(iso: string): string {
