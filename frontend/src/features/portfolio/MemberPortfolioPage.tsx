@@ -210,14 +210,22 @@ export function MemberPortfolioPage() {
         />
         <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <span
-              className={cx(
-                "grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-xl font-bold text-white shadow-brand-glow",
-                grad,
-              )}
-            >
-              {initials}
-            </span>
+            {member.avatar_url ? (
+              <img
+                src={member.avatar_url}
+                alt={member.name}
+                className="size-16 shrink-0 rounded-2xl object-cover shadow-brand-glow"
+              />
+            ) : (
+              <span
+                className={cx(
+                  "grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-xl font-bold text-white shadow-brand-glow",
+                  grad,
+                )}
+              >
+                {initials}
+              </span>
+            )}
             <div>
               <h1 className="text-2xl font-bold text-ink dark:text-paper">{member.name}</h1>
               <p className="mt-1 flex items-center gap-1.5 text-xs text-paper-400">
