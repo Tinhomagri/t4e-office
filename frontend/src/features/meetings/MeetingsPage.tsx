@@ -782,10 +782,13 @@ function DeviceMenu({
         <>
           {/* Fecha ao clicar fora — não precisa fechar sozinho ao escolher
               porque cada opção já fecha explicitamente no onClick. */}
-          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+          {/* Acima do z-[100] do container da sala: o painel mora no body por
+              causa do recorte da barra, então precisa vencer a própria sala no
+              empilhamento — com z-index menor ele fica atrás dela e some. */}
+          <div className="fixed inset-0 z-[120]" onClick={() => setOpen(false)} />
           <div
             style={{ left: pos.left, bottom: pos.bottom }}
-            className="scrollbar-slim-dark fixed z-[61] max-h-60 w-64 -translate-x-1/2 overflow-y-auto rounded-lg bg-ink-800 p-1 shadow-lg"
+            className="scrollbar-slim-dark fixed z-[121] max-h-60 w-64 -translate-x-1/2 overflow-y-auto rounded-lg bg-ink-800 p-1 shadow-lg"
           >
             {devices.length === 0 && (
               <p className="px-3 py-2 text-xs text-white/50">Nenhum dispositivo encontrado</p>
