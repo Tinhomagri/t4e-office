@@ -55,3 +55,29 @@ def test_is_working_reflete_a_coluna_configurada_nao_o_slug_doing(scenario):
     por_id = {c["id"]: c for c in resp.data["cards"]}
     assert por_id[str(card_andamento.id)]["is_working"] is True
     assert por_id[str(card_testes.id)]["is_working"] is False
+
+
+def test_project_template_aparece_no_card_para_distinguir_boards_de_marketing(scenario):
+    """O front usa `project_template` pra separar as abas Boards/Marketing do
+    Meu Dia — sem ele não há como saber, olhando só o card, de que tipo de
+    projeto ele veio."""
+    owner = scenario["owner"]
+    ws = scenario["project"].workspace
+    software_project = scenario["project"]
+    marketing_project = ProjectModel.objects.create(
+        workspace=ws, name="Marketing", key="MKT", template="marketing"
+    )
+    software_card = CardModel.objects.create(
+        project=software_project, number=10, title="Card software", status="todo",
+        assignee=owner,
+    )
+    marketing_card = CardModel.objects.create(
+        project=marketing_project, number=11, title="Card marketing", status="todo",
+        assignee=owner,
+    )
+
+    resp = scenario["client"].get("/api/me/work/")
+    assert resp.status_code == 200
+    por_id = {c["id"]: c for c in resp.data["cards"]}
+    assert por_id[str(software_card.id)]["project_template"] == "software"
+    assert por_id[str(marketing_card.id)]["project_template"] == "marketing"

@@ -171,6 +171,10 @@ class CardSerializer(serializers.Serializer):
     # Só o Meu Dia preenche isto (mistura cards de várias colunas com nomes
     # livres) — os demais consumidores de CardSerializer ficam com o default.
     is_working = serializers.BooleanField(default=False)
+    # Só o Meu Dia preenche isto (decide se o card é de projeto "software" ou
+    # "marketing" para separar as abas Boards/Marketing) — os demais consumidores
+    # de CardSerializer ficam com o default.
+    project_template = serializers.CharField(allow_blank=True, default="")
     # Desde quando o card está numa coluna `is_working` (config do board, não
     # o slug "doing") — null quando o card não está numa coluna dessas.
     doing_since = serializers.DateTimeField(allow_null=True, default=None)

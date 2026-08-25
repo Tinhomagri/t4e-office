@@ -84,6 +84,7 @@ class MyWorkView(APIView):
                     "project_key": cm.project.key,
                     "project_name": cm.project.name,
                     "is_working": (cm.project_id, cm.status) in working_slugs,
+                    "project_template": cm.project.template,
                 },
             )
             for cm in cards
