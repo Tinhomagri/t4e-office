@@ -30,7 +30,7 @@ export function DriveLibraryPage() {
   const input = useRef<HTMLInputElement>(null)
 
   const load = async () => {
-    if (!workspaceId) return
+    if (!workspaceId || configured !== true) return
     setLoading(true)
     try {
       const next = await listDriveFiles(workspaceId, library, { folderId: library === "takes" ? folder?.id : undefined, search })
@@ -44,8 +44,12 @@ export function DriveLibraryPage() {
     if (!workspaceId) return
     void getDriveConfig(workspaceId).then((x) => { setConfigured(x.configured); setCanConfigure(x.can_configure ?? false) }).catch(() => setConfigured(false))
   }, [workspaceId])
-  useEffect(() => { void load() // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, library, folder?.id])
+  useEffect(() => {
+    if (configured === true) void load()
+    // A busca depende do estado de configuração, mas `load` é recriada a cada
+    // render; listar a função aqui causaria um loop de requisições.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, configured, library, folder?.id])
 
   const visible = useMemo(() => files.filter((f) => !search || f.name.toLowerCase().includes(search.toLowerCase())), [files, search])
   const selectFiles = async (selected: FileList | null) => {
@@ -67,6 +71,7 @@ export function DriveLibraryPage() {
   }
 
   if (!workspaceId) return <EmptyState title="Selecione um workspace" description="A biblioteca é separada por workspace." />
+  if (configured === null) return <div className="py-20 text-center text-paper-500">Verificando a configuração do Google Drive…</div>
   if (configured === false) return <><EmptyState title="Google Drive ainda não configurado" description="O dono do workspace precisa informar as credenciais e as duas pastas raiz." action={canConfigure ? <Button onClick={() => setConfigOpen(true)}>Configurar Google Drive</Button> : undefined} /><DriveConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} workspaceId={workspaceId} /></>
 
   return <div className="mx-auto flex max-w-7xl flex-col gap-4 p-4 sm:p-6">
