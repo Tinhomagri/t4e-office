@@ -2421,8 +2421,8 @@ export function useTrafficSales() {
 
 - [ ] **Step 3: Typecheck**
 
-Run: `cd frontend && npm run typecheck` (or `npx tsc --noEmit` if there's no
-dedicated script — check `frontend/package.json` `scripts` first).
+Run: `cd frontend && npm run lint` (this project's `lint` script is `tsc
+--noEmit` — there is no separate `typecheck` script).
 Expected: no new errors from the two new files.
 
 - [ ] **Step 4: Commit**
@@ -3015,8 +3015,8 @@ to the "Performance" group of the marketing space:
 
 - [ ] **Step 4: Typecheck**
 
-Run: `cd frontend && npm run typecheck` (or the project's actual typecheck
-script — confirm the exact name in `frontend/package.json` first).
+Run: `cd frontend && npm run lint` (this project's `lint` script is `tsc
+--noEmit`).
 Expected: no new errors.
 
 - [ ] **Step 5: Manual smoke test**
