@@ -27,6 +27,7 @@ import {
   Video,
   SquareKanban,
   Target,
+  TrendingUp,
   Trophy,
   UserPlus,
   UserSearch,
@@ -139,6 +140,7 @@ export const SPACES: Space[] = [
         heading: "Performance",
         items: [
           { label: "Analytics social", to: "/app/marketing/analytics", icon: BarChart3 },
+          { label: "Tráfego", to: "/app/marketing/trafego", icon: TrendingUp },
           { label: "Redes sociais", to: "/app/marketing/redes", icon: Share2 },
         ],
       },

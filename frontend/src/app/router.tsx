@@ -19,6 +19,7 @@ import { MarketingDeck } from "@/features/marketing/MarketingDeck"
 import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
 import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
 import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
+import { TrafficPage } from "@/features/marketing/TrafficPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
 import { MembersPage } from "@/features/workspace/members/MembersPage"
 import { MyDayPage } from "@/features/today/MyDayPage"
@@ -149,6 +150,7 @@ export const appRoutes: RouteObject[] = [
   { path: "marketing/calendario", element: <EditorialCalendarPage /> },
   { path: "marketing/fila", element: <PublishQueuePage /> },
   { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
+  { path: "marketing/trafego", element: <TrafficPage /> },
   { path: "marketing/redes", element: <SocialAccountsPage /> },
   { path: "avatar", element: <AvatarLabPage /> },
   { path: "copilot", element: <CopilotPage /> },
