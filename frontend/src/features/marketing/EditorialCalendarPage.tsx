@@ -25,6 +25,7 @@ import {
   Clock,
   Copy,
   Eye,
+  FolderOpen,
   List,
   Plus,
   Send,
@@ -44,6 +45,7 @@ import {
   updatePost,
   type ScheduledPost,
 } from "@/features/integrations/social.api"
+import { getDriveConfig, getDrivePublicUrl, listDriveFiles, openDriveFile, type DriveFile } from "@/features/integrations/drive.api"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { EASE, liftCard } from "@/shared/lib/motion"
 import {
@@ -1026,8 +1028,13 @@ function ComposerModal({
 }) {
   const [accountIds, setAccountIds] = useState<string[]>([])
   const [content, setContent] = useState("")
-  const [time, setTime] = useState("09:00")
+  const [scheduledAt, setScheduledAt] = useState("")
   const [mediaUrl, setMediaUrl] = useState("")
+  const [selectedProject, setSelectedProject] = useState<DriveFile | null>(null)
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false)
+  const [projects, setProjects] = useState<DriveFile[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [driveReady, setDriveReady] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -1035,8 +1042,21 @@ function ComposerModal({
     setAccountIds([])
     setContent("")
     setMediaUrl("")
-    setTime("09:00")
-  }, [open, accounts])
+    setSelectedProject(null)
+    setScheduledAt(day ? `${day}T09:00` : "")
+  }, [open, accounts, day])
+
+  useEffect(() => {
+    if (!projectPickerOpen || !workspaceId) return
+    setProjectsLoading(true)
+    void getDriveConfig(workspaceId)
+      .then(async (config) => {
+        setDriveReady(config.configured)
+        setProjects(config.configured ? await listDriveFiles(workspaceId, "projects") : [])
+      })
+      .catch(() => { setDriveReady(false); setProjects([]) })
+      .finally(() => setProjectsLoading(false))
+  }, [projectPickerOpen, workspaceId])
 
   const limit = accountIds.reduce(
     (current, id) => Math.min(current, CHANNEL_LIMIT[accounts.find((a) => a.id === id)?.channel ?? ""] ?? 2200),
@@ -1048,9 +1068,10 @@ function ComposerModal({
     if (!workspaceId || accountIds.length === 0 || !day) return
     setSaving(true)
     try {
+      const resolvedMediaUrl = selectedProject ? await getDrivePublicUrl(workspaceId, selectedProject.id) : mediaUrl
       await Promise.all(accountIds.map((accountId) => schedulePost({
         workspaceId, accountId, content,
-        scheduledAt: new Date(`${day}T${time}`).toISOString(), mediaUrl,
+        scheduledAt: new Date(scheduledAt).toISOString(), mediaUrl: resolvedMediaUrl,
       })))
       toast.success(accountIds.length === 1 ? "Post agendado." : `Post agendado em ${accountIds.length} canais.`)
       onSaved()
@@ -1083,7 +1104,7 @@ function ComposerModal({
           <Button
             size="sm"
             loading={saving}
-            disabled={accountIds.length === 0 || !content.trim() || over}
+            disabled={accountIds.length === 0 || !content.trim() || !scheduledAt || over}
             onClick={() => void submit()}
           >
             Agendar
@@ -1111,8 +1132,8 @@ function ComposerModal({
             </div>
           </Field>
 
-          <Field label="Horário">
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          <Field label="Quando">
+            <Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
           </Field>
 
           <Field label="Conteúdo">
@@ -1132,6 +1153,10 @@ function ComposerModal({
             {content.length}/{limit}
           </p>
 
+          <Field label="Projeto pronto" hint="Selecione o vídeo final na biblioteca.">
+            {selectedProject ? <div className="flex items-center gap-2 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2.5 text-sm text-brand-900 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-100"><FolderOpen className="size-4 shrink-0" /><span className="min-w-0 flex-1 truncate">{selectedProject.name}</span><button type="button" className="text-xs underline" onClick={() => void (workspaceId && openDriveFile(workspaceId, selectedProject.id).catch(() => toast.error("Não foi possível abrir a prévia.")))}>Prévia</button><button type="button" className="text-xs underline" onClick={() => setSelectedProject(null)}>Remover</button></div> : <Button variant="outline" size="sm" icon={<FolderOpen className="size-3.5" />} onClick={() => setProjectPickerOpen(true)}>Selecionar em Projetos prontos</Button>}
+          </Field>
+
           <Field label="Mídia (URL)" hint="Opcional — imagem ou vídeo já hospedado.">
             <Input
               value={mediaUrl}
@@ -1140,6 +1165,9 @@ function ComposerModal({
             />
           </Field>
       </div>
+      <Modal open={projectPickerOpen} onClose={() => setProjectPickerOpen(false)} title="Selecionar projeto pronto" description="Escolha o vídeo final na biblioteca do Google Drive.">
+        {!driveReady && !projectsLoading ? <EmptyState title="Google Drive não configurado" description="Conecte o Drive em Biblioteca de mídia para selecionar projetos prontos." /> : projectsLoading ? <div className="py-8 text-center text-sm text-paper-500">Carregando projetos…</div> : projects.length === 0 ? <EmptyState title="Nenhum projeto pronto" description="Envie o vídeo final na Biblioteca de mídia." /> : <div className="max-h-80 space-y-2 overflow-y-auto">{projects.filter((file) => file.mimeType !== "application/vnd.google-apps.folder").map((file) => <button key={file.id} type="button" onClick={() => { setSelectedProject(file); setProjectPickerOpen(false) }} className="flex w-full items-center gap-3 rounded-lg border border-paper-200 px-3 py-2.5 text-left text-sm hover:bg-paper-50 dark:border-ink-700 dark:hover:bg-ink-800"><FolderOpen className="size-4 text-brand-500" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-[11px] text-paper-500">{file.mimeType.split("/")[0]}</span></button>)}</div>}
+      </Modal>
     </Modal>
   )
 }

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import httpx
+from django.core import signing
 from django.http import StreamingHttpResponse
-from rest_framework.permissions import IsAuthenticated
+from django.urls import reverse
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,6 +26,28 @@ def _workspace_id(request: Request) -> str:
 def _member(request: Request, workspace_id: str) -> None:
     if not DjangoWorkspaceAccess().is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
         raise PermissionDeniedError("Você não tem acesso a este workspace.")
+
+
+def _stream_file(workspace_id: str, file_id: str, mode: str) -> StreamingHttpResponse:
+    if mode not in {"preview", "download"}:
+        raise ValidationError("Modo de arquivo inválido.")
+    item = drive_library.assert_in_library(workspace_id, file_id)
+    if item.get("mimeType", "").startswith("application/vnd.google-apps"):
+        raise ValidationError("Este tipo de arquivo não possui prévia de mídia.")
+    token = drive_library._token(workspace_id)
+    client = httpx.Client(timeout=60)
+    response = client.send(client.build_request("GET", f"https://www.googleapis.com/drive/v3/files/{file_id}", headers={"Authorization": f"Bearer {token}"}, params={"alt": "media", "supportsAllDrives": "true"}), stream=True)
+    if response.status_code >= 400:
+        response.close(); client.close()
+        raise ValidationError("Não foi possível abrir o arquivo no Google Drive.")
+    def stream():
+        try:
+            yield from response.iter_bytes()
+        finally:
+            response.close(); client.close()
+    result = StreamingHttpResponse(stream(), content_type=item.get("mimeType") or "application/octet-stream")
+    result["Content-Disposition"] = f'{"attachment" if mode == "download" else "inline"}; filename="{item.get("name", "arquivo")}"'
+    return result
 
 
 class DriveTakesView(APIView):
@@ -83,32 +107,31 @@ class DriveFileContentView(APIView):
 
     def get(self, request: Request, file_id: str, mode: str):
         workspace_id = _workspace_id(request); _member(request, workspace_id)
-        if mode not in {"preview", "download"}:
-            raise ValidationError("Modo de arquivo inválido.")
-        item = drive_library.assert_in_library(workspace_id, file_id)
-        if item.get("mimeType", "").startswith("application/vnd.google-apps"):
-            raise ValidationError("Este tipo de arquivo não possui prévia de mídia.")
-        token = drive_library._token(workspace_id)
-        client = httpx.Client(timeout=60)
-        response = client.send(
-            client.build_request(
-                "GET", f"https://www.googleapis.com/drive/v3/files/{file_id}",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"alt": "media", "supportsAllDrives": "true"},
-            ),
-            stream=True,
-        )
-        if response.status_code >= 400:
-            response.close(); client.close()
-            raise ValidationError("Não foi possível abrir o arquivo no Google Drive.")
-        content_type = item.get("mimeType") or "application/octet-stream"
-        def stream():
-            try:
-                yield from response.iter_bytes()
-            finally:
-                response.close()
-                client.close()
-        result = StreamingHttpResponse(stream(), content_type=content_type)
-        disposition = "attachment" if mode == "download" else "inline"
-        result["Content-Disposition"] = f'{disposition}; filename="{item.get("name", "arquivo")}"'
-        return result
+        return _stream_file(workspace_id, file_id, mode)
+
+
+class DrivePublicUrlView(APIView):
+    """URL temporária para a plataforma social buscar a mídia escolhida."""
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
+
+    def post(self, request: Request, file_id: str) -> Response:
+        workspace_id = _workspace_id(request); _member(request, workspace_id)
+        drive_library.assert_in_library(workspace_id, file_id)
+        token = signing.dumps({"workspace_id": workspace_id, "file_id": file_id}, salt="drive-public-media")
+        path = reverse("integrations-drive-public-file", kwargs={"file_id": file_id})
+        return Response({"url": request.build_absolute_uri(f"{path}?token={token}")})
+
+
+class DrivePublicFileView(APIView):
+    """Download público apenas com assinatura temporária, sem abrir o Drive."""
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, file_id: str):
+        try:
+            payload = signing.loads(request.query_params.get("token", ""), salt="drive-public-media", max_age=60 * 60 * 24 * 30)
+        except signing.BadSignature:
+            raise ValidationError("Link de mídia inválido ou expirado.") from None
+        if payload.get("file_id") != file_id:
+            raise ValidationError("Link de mídia inválido.")
+        return _stream_file(str(payload["workspace_id"]), file_id, "preview")

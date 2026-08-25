@@ -89,6 +89,11 @@ export async function trashDriveTake(workspaceId: string, fileId: string): Promi
   await api.delete(`/integrations/drive/takes/${fileId}/`, { params: { workspace_id: workspaceId } })
 }
 
+export async function getDrivePublicUrl(workspaceId: string, fileId: string): Promise<string> {
+  const { data } = await api.post<{ url: string }>(`/integrations/drive/files/${fileId}/public-url/`, { workspace_id: workspaceId })
+  return data.url
+}
+
 export async function openDriveFile(workspaceId: string, fileId: string, mode: "preview" | "download" = "preview"): Promise<void> {
   const response = await api.get(`/integrations/drive/files/${fileId}/${mode}/`, {
     params: { workspace_id: workspaceId }, responseType: "blob",

@@ -13,6 +13,8 @@ from contexts.integrations.interface.api.drive_config_views import (
 from contexts.integrations.interface.api.drive_library_views import (
     DriveDaysView,
     DriveFileContentView,
+    DrivePublicFileView,
+    DrivePublicUrlView,
     DriveProjectsView,
     DriveTakesView,
     DriveUploadSessionView,
@@ -38,7 +40,9 @@ urlpatterns = [
     path("drive/days/", DriveDaysView.as_view(), name="integrations-drive-days"),
     path("drive/projects/", DriveProjectsView.as_view(), name="integrations-drive-projects"),
     path("drive/uploads/<str:library>/", DriveUploadSessionView.as_view(), name="integrations-drive-upload-session"),
+    path("drive/files/<str:file_id>/public-url/", DrivePublicUrlView.as_view(), name="integrations-drive-public-url"),
     path("drive/files/<str:file_id>/<str:mode>/", DriveFileContentView.as_view(), name="integrations-drive-file-content"),
+    path("drive/public/<str:file_id>/", DrivePublicFileView.as_view(), name="integrations-drive-public-file"),
     path("oauth/providers/", OAuthProvidersView.as_view(), name="integrations-oauth-providers"),
     path(
         "oauth/credentials/",
