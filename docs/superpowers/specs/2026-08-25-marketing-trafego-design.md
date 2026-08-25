@@ -70,8 +70,15 @@ não expira em 60 dias como o token de usuário do Instagram.
 ```python
 META_TRAFFIC_ACCESS_TOKEN = os.environ.get("META_TRAFFIC_ACCESS_TOKEN", "")
 META_AD_ACCOUNT_ID = os.environ.get("META_AD_ACCOUNT_ID", "")
-TRAFFIC_SHEET_FECHADOS_URL = os.environ.get("TRAFFIC_SHEET_FECHADOS_URL", "")
+META_GRAPH_VERSION = os.environ.get("META_GRAPH_VERSION", "v21.0")
+# Planilha de leads (funil: etapa, cidade/UF, utm_content) — é a SHEET_CSV_URL
+# do T4E OS, distinta da planilha histórica usada na conciliação de vendas.
+TRAFFIC_SHEET_LEADS_URL = os.environ.get("TRAFFIC_SHEET_LEADS_URL", "")
+# Planilha histórica de leads (telefone, nome, origem, anúncio) — usada só na
+# conciliação de vendas, para casar por telefone/nome.
 TRAFFIC_SHEET_HIST_URL = os.environ.get("TRAFFIC_SHEET_HIST_URL", "")
+# Planilha de vendas fechadas (nome, telefone, valor, datas).
+TRAFFIC_SHEET_FECHADOS_URL = os.environ.get("TRAFFIC_SHEET_FECHADOS_URL", "")
 ```
 
 Sem valor configurado → endpoints devolvem `CONFIG_ERROR` (mesmo padrão que
