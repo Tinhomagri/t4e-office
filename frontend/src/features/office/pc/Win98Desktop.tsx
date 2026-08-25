@@ -12,7 +12,7 @@
 // linha do visual 98 — sem erro nenhum para avisar.
 import "./win98.css"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import {
   RouterProvider,
   UNSAFE_LocationContext,
@@ -22,6 +22,7 @@ import {
 
 import { appRoutes } from "@/app/router"
 import { AppShell } from "@/features/shell/AppShell"
+import { useSpaceStore } from "@/features/shell/space.store"
 
 import { appById, isEnabled } from "./apps.registry"
 import { BootScreen } from "./BootScreen"
@@ -119,6 +120,14 @@ export function Win98Desktop() {
 function AppBody({ appId }: { appId: string }) {
   const app = appById(appId)
   const route = app && isEnabled(app) ? app.route : null
+  const setActiveSpace = useSpaceStore((s) => s.setActiveSpace)
+
+  // Marketing agora abre a rota neutra do Meu Dia. Selecionar o space antes
+  // da pintura preserva o mesmo destino que o SpaceSwitcher oferece, mesmo
+  // quando o atalho foi aberto pelo desktop ou pelo menu Iniciar do PC.
+  useLayoutEffect(() => {
+    if (appId === "marketing") setActiveSpace("marketing")
+  }, [appId, setActiveSpace])
 
   // Um router por janela, criado uma única vez: recriar a cada render jogaria
   // a navegação de volta para a rota inicial a cada teclada.

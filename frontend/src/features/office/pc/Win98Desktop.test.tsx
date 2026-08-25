@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
 
+import { useSpaceStore } from "@/features/shell/space.store"
+
 import { usePcStore } from "./pc.store"
 import { Win98Desktop } from "./Win98Desktop"
 
@@ -23,7 +25,10 @@ const renderComQueryClient = () => {
   )
 }
 
-beforeEach(() => usePcStore.getState().shutdown())
+beforeEach(() => {
+  usePcStore.getState().shutdown()
+  useSpaceStore.getState().setActiveSpace("boards")
+})
 
 describe("<Win98Desktop />", () => {
   it("desligado, não renderiza nada", () => {
@@ -59,6 +64,13 @@ describe("<Win98Desktop />", () => {
     usePcStore.getState().openApp("boards", { w: 600, h: 400 })
     renderComQueryClient()
     expect(screen.getByTestId("win98-titlebar")).toBeInTheDocument()
+  })
+
+  it("atalho Marketing abre Meu Dia com o space Marketing selecionado", () => {
+    ligado()
+    usePcStore.getState().openApp("marketing", { w: 600, h: 400 })
+    renderComQueryClient()
+    expect(useSpaceStore.getState().activeSpace).toBe("marketing")
   })
 
   it("app fora do registry mostra aviso em vez de tela branca", () => {
