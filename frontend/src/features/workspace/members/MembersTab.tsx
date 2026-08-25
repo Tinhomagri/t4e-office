@@ -21,6 +21,7 @@ import {
   useRemoveMember,
   useRevokeInvite,
   useUpdateMemberRole,
+  useUpdateMemberSpaces,
 } from "../workspace.hooks"
 import type { Member, Role } from "../workspace.types"
 import {
@@ -28,6 +29,13 @@ import {
   Panel,
   WORKSPACE_ROLE_LABEL,
 } from "./shared"
+import { SPACES, type SpaceId } from "@/features/shell/spaces"
+
+const SPACE_LABEL: Record<SpaceId, string> = {
+  boards: "Boards",
+  marketing: "Marketing",
+  comercial: "Comercial",
+}
 
 const ROLE_TONE: Record<Role, "brand" | "warning" | "neutral"> = {
   owner: "brand",
@@ -42,6 +50,7 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
   const invite = useInvite(workspaceId)
   const revoke = useRevokeInvite(workspaceId)
   const updateRole = useUpdateMemberRole(workspaceId)
+  const updateSpaces = useUpdateMemberSpaces(workspaceId)
   const removeMember = useRemoveMember(workspaceId)
 
   const [email, setEmail] = useState("")
@@ -77,6 +86,20 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
     try {
       await updateRole.mutateAsync({ userId: m.user_id, role })
       toast.success(`Papel de ${m.name} atualizado`)
+    } catch (e) {
+      toast.error(errMsg(e))
+    }
+  }
+
+  // null = irrestrito (todos marcados). Desmarcar o primeiro box é o que faz
+  // a transição de "irrestrito" pra "lista explícita" — sem toggle separado.
+  const handleSpaceToggle = async (m: Member, spaceId: SpaceId, checked: boolean) => {
+    const current = m.allowed_spaces ?? SPACES.map((s) => s.id)
+    const next = checked
+      ? Array.from(new Set([...current, spaceId]))
+      : current.filter((id) => id !== spaceId)
+    try {
+      await updateSpaces.mutateAsync({ userId: m.user_id, allowedSpaces: next })
     } catch (e) {
       toast.error(errMsg(e))
     }
@@ -198,6 +221,31 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
                       ))}
                     </p>
                   </div>
+
+                  {/* Spaces que o membro enxerga — só faz sentido pra role
+                      "member": owner/admin sempre veem tudo. */}
+                  {canManage && m.role === "member" && (
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      {SPACES.map((s) => {
+                        const checked = m.allowed_spaces == null || m.allowed_spaces.includes(s.id)
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex cursor-pointer items-center gap-1 text-[11px] text-paper-500"
+                            title={SPACE_LABEL[s.id]}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-3.5 accent-brand-500 focus-ring"
+                              checked={checked}
+                              onChange={(e) => handleSpaceToggle(m, s.id, e.target.checked)}
+                            />
+                            {SPACE_LABEL[s.id]}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
 
                   {rLock ? (
                     <Badge tone={ROLE_TONE[m.role]} className="capitalize">

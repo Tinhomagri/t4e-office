@@ -125,6 +125,16 @@ export async function updateMemberRole(
   await api.patch(`/auth/workspaces/${workspaceId}/members/${userId}/`, { role })
 }
 
+export async function updateMemberSpaces(
+  workspaceId: string,
+  userId: string,
+  allowedSpaces: string[] | null,
+): Promise<void> {
+  await api.patch(`/auth/workspaces/${workspaceId}/members/${userId}/`, {
+    allowed_spaces: allowedSpaces,
+  })
+}
+
 export async function removeMember(workspaceId: string, userId: string): Promise<void> {
   await api.delete(`/auth/workspaces/${workspaceId}/members/${userId}/`)
 }

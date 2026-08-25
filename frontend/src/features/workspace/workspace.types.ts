@@ -225,6 +225,10 @@ export interface Member {
   email: string
   role: Role
   avatar_url?: string | null
+  // Spaces (SpaceId) que este membro enxerga. `null`/ausente = irrestrito
+  // (vê tudo). Só é relevante para role "member" — owner/admin sempre veem
+  // tudo, independente do valor guardado aqui.
+  allowed_spaces?: string[] | null
 }
 
 export interface Invitation {

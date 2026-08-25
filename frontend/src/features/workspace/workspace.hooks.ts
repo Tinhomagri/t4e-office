@@ -414,6 +414,17 @@ export function useUpdateMemberRole(workspaceId: string | null) {
   })
 }
 
+export function useUpdateMemberSpaces(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, allowedSpaces }: { userId: string; allowedSpaces: string[] | null }) =>
+      wsApi.updateMemberSpaces(workspaceId!, userId, allowedSpaces),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["members", workspaceId] })
+    },
+  })
+}
+
 export function useRemoveMember(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
