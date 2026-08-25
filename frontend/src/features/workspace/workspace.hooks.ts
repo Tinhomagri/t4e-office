@@ -136,6 +136,9 @@ export function useDeleteCard(projectId: string | null) {
 export interface BoardCard extends Card {
   projectKey: string
   projectName: string
+  // Preenchido só pelo Meu Dia (via /api/me/work/) — separa as abas
+  // Boards ("software") de Marketing ("marketing"). Vazio nas outras rotas.
+  project_template?: string
 }
 
 // Agrega cards de TODOS os projetos do workspace (Meu Dia, Relatórios, Portfólio).
@@ -172,8 +175,8 @@ export function useWorkspaceCards(workspaceId: string | null) {
 // requisição só. `useWorkspaceCards` acima serve ao workspace ativo — usar
 // aquilo aqui escondia metade do trabalho de quem participa de mais de um
 // workspace (Boards, Marketing, Comercial) dependendo do seletor no topo.
-export function useMyWork() {
-  const query = useQuery({ queryKey: ["my-work"], queryFn: wsApi.getMyWork })
+export function useMyWork(enabled = true) {
+  const query = useQuery({ queryKey: ["my-work"], queryFn: wsApi.getMyWork, enabled })
 
   // O backend manda `project_key`/`project_name` no card; o resto do app
   // consome `BoardCard` (camelCase), então converte aqui e nada mais muda.

@@ -221,7 +221,7 @@ export async function listCards(
 // requisição. O fan-out por projeto (useWorkspaceCards) só enxerga o workspace
 // ativo, e o "Meu Dia" é sobre a pessoa, não sobre o workspace selecionado.
 export interface MyWork {
-  cards: (Card & { project_key: string; project_name: string })[]
+  cards: (Card & { project_key: string; project_name: string; project_template: string })[]
   sprints: Sprint[]
 }
 

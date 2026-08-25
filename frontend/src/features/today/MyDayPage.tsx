@@ -6,10 +6,12 @@ import {
   CalendarClock,
   CalendarCheck,
   CalendarDays,
+  Check,
   CircleDot,
   ExternalLink,
   Eye,
   Flame,
+  LayoutGrid,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -36,7 +38,9 @@ import {
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useDayEvents, useGoogleStatus } from "@/features/integrations/integrations.hooks"
 import type { CalendarEvent } from "@/features/integrations/integrations.types"
+import { MarketingDeck } from "@/features/marketing/MarketingDeck"
 import {
+  useMembers,
   useMyWork,
   useNotifications,
   useProjectReports,
@@ -50,11 +54,14 @@ import type {
   Notification,
   Sprint,
 } from "@/features/workspace/workspace.types"
-import { useWorkspaceActivities } from "@/features/sales/sales.hooks"
-import { closeDateState, formatDate } from "@/features/sales/sales.shared"
-import type { DealActivity } from "@/features/sales/sales.types"
+import { useToggleActivity, useWorkspaceActivities } from "@/features/sales/sales.hooks"
+import { ACTIVITY_LABEL, closeDateState, formatDate } from "@/features/sales/sales.shared"
+import type { ActivityKind, DealActivity } from "@/features/sales/sales.types"
 import { cx } from "@/shared/ui/primitives"
+import { usePersistedState, SegmentedControl } from "@/shared/ui/command-center"
 import { useSpaceStore } from "@/features/shell/space.store"
+import { SPACES, type SpaceId } from "@/features/shell/spaces"
+import { useMySpaceIds } from "@/features/shell/spaceAccess"
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   backlog: "Backlog",
@@ -143,6 +150,17 @@ export function sliceMyDay(cards: BoardCard[], userId: string | undefined, today
     todo: mine.filter((c) => c.status === "todo"),
     delivered: mine.filter(isDelivered),
   }
+}
+
+/**
+ * Exclui cards de projetos "marketing" — é o que separa a aba Boards (só
+ * trabalho de software) da aba Tudo (tudo junto, sem esse filtro).
+ * `project_template` só vem preenchido no card quando ele chega de
+ * `/api/me/work/` (ver serializers.py); um card sem o campo é tratado como
+ * "software" — o default do backend.
+ */
+export function filterBoardsCards(cards: BoardCard[]): BoardCard[] {
+  return cards.filter((c) => c.project_template !== "marketing")
 }
 
 function formatDateHeader() {
@@ -235,22 +253,132 @@ function sprintWindow(sprint: Sprint | null): { start: string; end: string } | n
   return { start, end: sprint.end_date ?? addDaysISO(start, 14) }
 }
 
+/**
+ * Abas visíveis no seletor do Meu Dia: um space vira aba só se
+ * `useMySpaceIds` disser que o usuário o vê no workspace ativo. "Tudo" não é
+ * space nenhum — está sempre disponível, é o antigo comportamento único da
+ * tela (todo o trabalho, de todo lugar, numa tela só).
+ */
+type MyDayTab = SpaceId | "tudo"
+
+const TAB_ICON: Record<SpaceId, LucideIcon> = Object.fromEntries(
+  SPACES.map((s) => [s.id, s.icon]),
+) as Record<SpaceId, LucideIcon>
+
 export function MyDayPage() {
   const user = useAuthStore((s) => s.user)
   const activeSpace = useSpaceStore((s) => s.activeSpace)
-  const isCommercialSpace = activeSpace === "comercial"
   const { activeWorkspaceId } = useWorkspaces()
+  // Espelha o access-gate da sidebar (spaceAccess.ts): falha fechado enquanto
+  // os membros carregam, owner/admin vê tudo, membro restrito só o que foi
+  // liberado.
+  const membersQuery = useMembers(activeWorkspaceId)
+  const mySpaceIds = useMySpaceIds(activeWorkspaceId)
+
+  // Default: o space que já está ativo no seletor da sidebar, se a pessoa
+  // tiver acesso a ele — senão o primeiro space liberado. Sem nenhum space
+  // liberado (ainda carregando, ou acesso vazio de fato), cai em "Tudo", que
+  // nunca falta.
+  const defaultTab = useMemo<MyDayTab>(() => {
+    if (mySpaceIds.includes(activeSpace)) return activeSpace
+    return mySpaceIds[0] ?? "tudo"
+  }, [mySpaceIds, activeSpace])
+
+  const [tab, setTab] = usePersistedState<MyDayTab>("myday:tab", defaultTab)
+
+  // A escolha persistida pode ter ficado obsoleta (admin revogou o acesso a
+  // um space desde a última visita) — só corrige depois que os membros
+  // terminam de carregar, senão a aba pisca pro fallback a cada F5 antes de
+  // sabermos o acesso real.
+  useEffect(() => {
+    if (membersQuery.isLoading) return
+    const allowed: MyDayTab[] = [...mySpaceIds, "tudo"]
+    if (!allowed.includes(tab)) setTab(defaultTab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membersQuery.isLoading, mySpaceIds, defaultTab])
+
+  const tabOptions = useMemo(() => {
+    const spaceOpts = SPACES.filter((s) => mySpaceIds.includes(s.id)).map((s) => {
+      const Icon = TAB_ICON[s.id]
+      return { value: s.id as MyDayTab, label: s.label, icon: <Icon className="size-3.5" /> }
+    })
+    return [
+      ...spaceOpts,
+      { value: "tudo" as MyDayTab, label: "Tudo", icon: <LayoutGrid className="size-3.5" /> },
+    ]
+  }, [mySpaceIds])
+
+  return (
+    <div className="mx-auto w-full max-w-[1600px] pb-10">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-paper-400 dark:text-ink-500">
+          {formatDateHeader()}
+        </p>
+        {tabOptions.length > 1 && (
+          <SegmentedControl
+            options={tabOptions}
+            value={tab}
+            onChange={setTab}
+            layoutId="myday-tab"
+            ariaLabel="Escolher space do Meu Dia"
+          />
+        )}
+      </div>
+
+      {tab === "marketing" ? (
+        <MarketingDeck />
+      ) : tab === "comercial" ? (
+        <ComercialDayView workspaceId={activeWorkspaceId} userId={user?.id} />
+      ) : (
+        <BoardsDayView
+          userId={user?.id}
+          fullName={user?.full_name}
+          filterMarketing={tab === "boards"}
+          showSalesExtras={tab === "tudo"}
+          salesEnabled={tab === "tudo"}
+          workspaceId={activeWorkspaceId}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Conteúdo "clássico" do Meu Dia — KPIs, foco do dia, burndown, agenda,
+ * atividade recente e a fatia da sprint. É a aba Boards (cards filtrados,
+ * software só) e a aba Tudo (sem filtro, + follow-ups comerciais) ao mesmo
+ * tempo: a diferença entre as duas é só `filterMarketing`/`showSalesExtras`.
+ */
+function BoardsDayView({
+  userId,
+  fullName,
+  filterMarketing,
+  showSalesExtras,
+  salesEnabled,
+  workspaceId,
+}: {
+  userId: string | undefined
+  fullName: string | undefined
+  filterMarketing: boolean
+  showSalesExtras: boolean
+  salesEnabled: boolean
+  workspaceId: string | null
+}) {
   // Cards e sprints vêm de /api/me/work/, que agrega TODOS os workspaces da
-  // pessoa. O workspace ativo abaixo só serve ao comercial, cujo endpoint de
-  // atividades ainda é por workspace.
-  const { cards, sprints, isLoading } = useMyWork()
+  // pessoa — só é buscado enquanto esta view está montada (aba Boards/Tudo).
+  const { cards: allCards, sprints, isLoading } = useMyWork()
+  const cards = useMemo(
+    () => (filterMarketing ? filterBoardsCards(allCards) : allCards),
+    [allCards, filterMarketing],
+  )
   const sprintsLoading = isLoading
 
-  // Follow-ups do comercial: tarefas de negócio atribuídas a mim e ainda abertas.
-  // O "Meu Dia" reúne o trabalho de todas as frentes, não só o dos boards.
-  const { data: salesTasks } = useWorkspaceActivities(isCommercialSpace ? activeWorkspaceId : null, {
+  // Follow-ups do comercial: só a aba Tudo mostra isto (mesmo comportamento
+  // de sempre), e só busca quando `salesEnabled` — não há por que puxar
+  // atividades de negócio enquanto a pessoa está na aba Boards.
+  const { data: salesTasks } = useWorkspaceActivities(salesEnabled ? workspaceId : null, {
     kind: "task",
-    assigneeId: user?.id,
+    assigneeId: userId,
     pending: true,
   })
 
@@ -262,7 +390,6 @@ export function MyDayPage() {
   const { data: notifications } = useNotifications()
 
   const today = todayISO()
-  const userId = user?.id
 
   // Uma passada só sobre os cards, memoizada pela identidade de `cards` (que o
   // react-query mantém estável entre renders). Antes cada `filter` rodava a cada
@@ -321,7 +448,7 @@ export function MyDayPage() {
     }
   }, [activeSprint, my.mine])
 
-  const firstName = user?.full_name?.split(/\s+/)[0] ?? "você"
+  const firstName = fullName?.split(/\s+/)[0] ?? "você"
   // Atrasado primeiro: é o que muda a ordem do dia. Depois em andamento, revisão
   // e por fim a fila. Um Set evita repetir um card atrasado nas listas seguintes.
   const focusCards = useMemo(() => {
@@ -335,13 +462,10 @@ export function MyDayPage() {
   }, [my.overdue, my.inProgress, my.review, my.todo])
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] pb-10">
-      {/* Cabeçalho: data, saudação e o resumo do dia em uma frase. */}
+    <>
+      {/* Cabeçalho: saudação e o resumo do dia em uma frase. */}
       <header className="mb-6">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-paper-400 dark:text-ink-500">
-          {formatDateHeader()}
-        </p>
-        <h1 className="mt-1.5 text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
+        <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
           {greetingFor(new Date().getHours())},{" "}
           <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
             {firstName}
@@ -458,7 +582,7 @@ export function MyDayPage() {
                 />
               </motion.div>
 
-              {isCommercialSpace && (
+              {showSalesExtras && (
                 <>
                   <motion.div variants={itemVariants}>
                     <MiniPanel
@@ -494,6 +618,232 @@ export function MyDayPage() {
             </aside>
           </div>
         </motion.div>
+      )}
+    </>
+  )
+}
+
+const COMERCIAL_ACTIVITY_TONE: Record<ActivityKind, string> = {
+  note: "bg-paper-100 text-paper-600 dark:bg-ink-800 dark:text-paper-400",
+  task: "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300",
+  meeting: "bg-success/10 text-success",
+}
+
+/**
+ * "Meu dia comercial": atividades de negócio (nota, tarefa, reunião)
+ * atribuídas a mim e ainda pendentes, agrupadas por prazo — o mesmo
+ * princípio do "Próximos 7 dias" dos Boards, mas em cima de `DealActivity`
+ * em vez de `BoardCard` (os campos não batem o bastante pra valer uma
+ * abstração genérica só pra isto).
+ */
+function ComercialDayView({
+  workspaceId,
+  userId,
+}: {
+  workspaceId: string | null
+  userId: string | undefined
+}) {
+  // Sem filtro de `kind`: ao contrário do antigo painel de follow-ups (só
+  // tarefas), aqui a ideia é mostrar todo tipo de atividade pendente
+  // atribuída a mim — nota e reunião também pedem atenção no meu dia.
+  const { data, isLoading } = useWorkspaceActivities(workspaceId, {
+    assigneeId: userId,
+    pending: true,
+  })
+  // `dealId` fica nulo de propósito: esta tela não é de um negócio
+  // específico, é uma lista de atividades de vários deals. A mutação só
+  // precisa do id da atividade; a invalidação de `["sales-workspace-activities"]`
+  // (prefixo, casa com qualquer filtro) já basta pra tela refletir a troca —
+  // não há necessidade do contexto do deal que `DealDrawer` usa.
+  const toggleActivity = useToggleActivity(null)
+
+  const activities = data ?? []
+  const today = todayISO()
+
+  const { overdue, dueToday, upcoming, noDate } = useMemo(() => {
+    const overdue: DealActivity[] = []
+    const dueToday: DealActivity[] = []
+    const upcoming: DealActivity[] = []
+    const noDate: DealActivity[] = []
+    for (const a of activities) {
+      const due = a.due_date?.slice(0, 10)
+      if (!due) noDate.push(a)
+      else if (due < today) overdue.push(a)
+      else if (due === today) dueToday.push(a)
+      else upcoming.push(a)
+    }
+    const byDue = (a: DealActivity, b: DealActivity) => (a.due_date ?? "").localeCompare(b.due_date ?? "")
+    overdue.sort(byDue)
+    upcoming.sort(byDue)
+    return { overdue, dueToday, upcoming, noDate }
+  }, [activities, today])
+
+  return (
+    <>
+      <header className="mb-6">
+        <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
+          Meu dia comercial
+        </h1>
+        <p className="mt-1.5 text-sm text-paper-500 dark:text-ink-400">
+          {activities.length > 0 ? (
+            <>
+              Você tem{" "}
+              <span className="font-semibold text-ink dark:text-paper-300">
+                {activities.length} atividade{activities.length > 1 ? "s" : ""} pendente
+                {activities.length > 1 ? "s" : ""}
+              </span>
+              {overdue.length > 0 && (
+                <>
+                  {" · "}
+                  <span className="font-semibold text-danger">
+                    {overdue.length} atrasada{overdue.length > 1 ? "s" : ""}
+                  </span>
+                </>
+              )}
+              .
+            </>
+          ) : (
+            "Nenhuma atividade comercial pendente atribuída a você."
+          )}
+        </p>
+      </header>
+
+      {isLoading ? (
+        <div className="grid place-items-center py-24">
+          <Loader2 className="size-6 animate-spin text-paper-400" />
+        </div>
+      ) : (
+        <motion.div variants={listVariants} initial="hidden" animate="show" className="space-y-4">
+          <motion.section
+            variants={itemVariants}
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            <Stat icon={AlertTriangle} label="Atrasadas" value={overdue.length} accent={overdue.length > 0 ? "text-danger" : undefined} tint="bg-danger/10 text-danger" />
+            <Stat icon={CalendarClock} label="Vencem hoje" value={dueToday.length} accent={dueToday.length > 0 ? "text-warning" : undefined} tint="bg-warning/10 text-warning" />
+            <Stat icon={CalendarCheck} label="Próximos 7 dias" value={upcoming.filter((a) => (a.due_date ?? "") <= addDaysISO(today, 7)).length} tint="bg-sky-500/10 text-sky-500" />
+            <Stat icon={Target} label="Total pendente" value={activities.length} tint="bg-brand-500/10 text-brand-500" />
+          </motion.section>
+
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <motion.div variants={itemVariants}>
+              <ComercialActivityPanel
+                title="Vencendo hoje e atrasadas"
+                icon={<AlertTriangle className="size-4 text-danger" />}
+                activities={[...overdue, ...dueToday]}
+                empty="Nada vencendo — dia tranquilo no comercial."
+                onToggle={(id, done) => toggleActivity.mutate({ activityId: id, done })}
+              />
+            </motion.div>
+
+            <motion.div variants={itemVariants}>
+              <ComercialActivityPanel
+                title="Próximos 7 dias"
+                icon={<CalendarCheck className="size-4 text-paper-500 dark:text-ink-400" />}
+                activities={upcoming.filter((a) => (a.due_date ?? "") <= addDaysISO(today, 7))}
+                empty="Nenhum prazo na próxima semana."
+                onToggle={(id, done) => toggleActivity.mutate({ activityId: id, done })}
+              />
+            </motion.div>
+          </div>
+
+          {noDate.length > 0 && (
+            <motion.div variants={itemVariants}>
+              <ComercialActivityPanel
+                title="Sem prazo"
+                icon={<Target className="size-4 text-paper-500 dark:text-ink-400" />}
+                activities={noDate}
+                empty=""
+                onToggle={(id, done) => toggleActivity.mutate({ activityId: id, done })}
+              />
+            </motion.div>
+          )}
+        </motion.div>
+      )}
+    </>
+  )
+}
+
+function ComercialActivityPanel({
+  title,
+  icon,
+  activities,
+  empty,
+  onToggle,
+}: {
+  title: string
+  icon: React.ReactNode
+  activities: DealActivity[]
+  empty: string
+  onToggle: (activityId: string, done: boolean) => void
+}) {
+  return (
+    <div className="surface lift p-5">
+      <div className="mb-4 flex h-6 items-center gap-2">
+        {icon}
+        <h2 className="text-sm font-semibold text-ink dark:text-paper">{title}</h2>
+        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-paper-100 px-1.5 text-[11px] font-medium text-paper-600 dark:bg-ink-800 dark:text-paper-400">
+          {activities.length}
+        </span>
+      </div>
+      {activities.length === 0 ? (
+        empty && <EmptyNote>{empty}</EmptyNote>
+      ) : (
+        <ul className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
+          {activities.map((a) => {
+            const done = !!a.done_at
+            const state = closeDateState(a.due_date)
+            return (
+              <li key={a.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span
+                  className={cx(
+                    "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                    COMERCIAL_ACTIVITY_TONE[a.kind],
+                  )}
+                >
+                  {ACTIVITY_LABEL[a.kind]}
+                </span>
+                <Link to="/app/comercial" className="min-w-0 flex-1">
+                  <p className={cx("truncate text-sm text-ink dark:text-paper", done && "text-paper-400 line-through")}>
+                    {a.content}
+                  </p>
+                  {a.deal_title && (
+                    <p className="mt-0.5 truncate text-[11px] text-paper-400">{a.deal_title}</p>
+                  )}
+                </Link>
+                {a.due_date && (
+                  <span
+                    className={cx(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                      state === "overdue"
+                        ? "bg-danger/10 text-danger"
+                        : state === "today"
+                          ? "bg-warning/10 text-warning"
+                          : "text-paper-400",
+                    )}
+                  >
+                    {state === "overdue" ? "Atrasada" : state === "today" ? "Hoje" : formatDate(a.due_date)}
+                  </span>
+                )}
+                {a.kind === "task" && (
+                  <button
+                    type="button"
+                    onClick={() => onToggle(a.id, !done)}
+                    aria-pressed={done}
+                    aria-label={done ? "Reabrir tarefa" : "Concluir tarefa"}
+                    className={cx(
+                      "grid size-8 shrink-0 place-items-center rounded-lg transition-colors",
+                      done
+                        ? "text-success"
+                        : "text-paper-400 hover:bg-paper-100 hover:text-success dark:hover:bg-ink-800",
+                    )}
+                  >
+                    <Check className="size-4" strokeWidth={3} />
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       )}
     </div>
   )

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { ProjectReports } from "@/features/workspace/workspace.api"
 import type { BoardCard } from "@/features/workspace/workspace.hooks"
 
-import { isDelivered, sliceMyDay, toBurndownSeries } from "./MyDayPage"
+import { filterBoardsCards, isDelivered, sliceMyDay, toBurndownSeries } from "./MyDayPage"
 
 const EU = "user-1"
 const HOJE = "2026-07-31"
@@ -86,6 +86,20 @@ describe("sliceMyDay", () => {
     // chegar sem `resolution` — sem esse fallback ele sumia dos entregues.
     expect(isDelivered(card({ status: "done", resolution: null }))).toBe(true)
     expect(isDelivered(card({ status: "doing", resolution: null }))).toBe(false)
+  })
+})
+
+describe("filterBoardsCards", () => {
+  it("exclui cards de projeto marketing, mantém o resto", () => {
+    const software = card({ project_template: "software" })
+    const marketing = card({ project_template: "marketing" })
+    const semTemplate = card({ project_template: undefined })
+
+    const filtered = filterBoardsCards([software, marketing, semTemplate])
+
+    expect(filtered).toContain(software)
+    expect(filtered).toContain(semTemplate)
+    expect(filtered).not.toContain(marketing)
   })
 })
 
