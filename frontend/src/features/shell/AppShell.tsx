@@ -31,7 +31,7 @@ import { AgendaPanel } from "@/features/integrations/AgendaPanel"
 import { MeetingCallOverlay } from "@/features/meetings/MeetingsPage"
 import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
-import { useMySpaceIds } from "./spaceAccess"
+import { useMyRole, useMySpaceIds } from "./spaceAccess"
 import {
   Avatar,
   Button,
@@ -123,6 +123,19 @@ export function AppShell() {
   const visibleSpaces = useMemo(
     () => SPACES.filter((s) => mySpaceIds.includes(s.id)),
     [mySpaceIds],
+  )
+
+  // "Copiloto" (relatório de uso/config de IA) só é útil pra quem pode
+  // efetivamente vê-lo — a API já recusa membro comum, então o item some do
+  // menu em vez de levar a uma tela de "acesso negado".
+  const myRole = useMyRole(activeWorkspaceId)
+  const isWorkspaceAdmin = myRole === "owner" || myRole === "admin"
+  const commonGroup = useMemo(
+    () =>
+      isWorkspaceAdmin
+        ? COMMON_GROUP
+        : { ...COMMON_GROUP, items: COMMON_GROUP.items.filter((i) => i.label !== "Copiloto") },
+    [isWorkspaceAdmin],
   )
 
   // Trava contra link direto/bookmark/URL velha para um space que o membro
@@ -313,7 +326,7 @@ export function AppShell() {
             {/* "Para você" primeiro: Meu Dia é a rota raiz (/app) e o índice
                 do MyDayPage — precisa ser o primeiro item pra bater com o que
                 a pessoa vê ao entrar. Os grupos do space vêm depois. */}
-            <NavGroupBlock group={COMMON_GROUP} collapsed={collapsed} />
+            <NavGroupBlock group={commonGroup} collapsed={collapsed} />
 
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
