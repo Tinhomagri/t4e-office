@@ -152,6 +152,39 @@ def test_feedback_e_metrics(scenario):
     assert data["satisfaction"] == 50
 
 
+def test_relatorio_e_config_de_ia_sao_restritos_a_admin_owner(scenario):
+    """Membro comum não pode ver o relatório do Copiloto nem a config de IA —
+    só admin/owner. Métricas de uso e a chave conectada não são um dado de
+    leitura livre pra qualquer membro."""
+    ws = scenario["ws"]
+    member = UserModel.objects.create_user(
+        email="member@t4e.com", password="x", full_name="Member", is_active=True
+    )
+    MembershipModel.objects.create(workspace=ws, user=member, role="member")
+    member_client = APIClient()
+    member_client.force_authenticate(user=member)
+
+    assert (
+        member_client.get(f"/api/copilot/metrics/?workspace_id={ws.id}").status_code
+        == 403
+    )
+    assert (
+        member_client.get(f"/api/copilot/ai-config/?workspace_id={ws.id}").status_code
+        == 403
+    )
+
+    # Owner continua acessando os dois normalmente.
+    owner_client = scenario["client"]
+    assert (
+        owner_client.get(f"/api/copilot/metrics/?workspace_id={ws.id}").status_code
+        == 200
+    )
+    assert (
+        owner_client.get(f"/api/copilot/ai-config/?workspace_id={ws.id}").status_code
+        == 200
+    )
+
+
 def test_execute_bloqueia_projeto_de_outro_workspace(scenario):
     other_owner = UserModel.objects.create_user(
         email="x@t4e.com", password="x", full_name="X", is_active=True

@@ -13,10 +13,22 @@ import { useMemo } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useMembers } from "@/features/workspace/workspace.hooks"
+import type { Role } from "@/features/workspace/workspace.types"
 
 import { SPACES, type SpaceId } from "./spaces"
 
 const ALL_SPACE_IDS: SpaceId[] = SPACES.map((s) => s.id)
+
+/** Papel do usuário atual no workspace ativo — null enquanto carrega/sem acesso. */
+export function useMyRole(workspaceId: string | null): Role | null {
+  const me = useAuthStore((s) => s.user)
+  const members = useMembers(workspaceId)
+
+  return useMemo(() => {
+    if (!workspaceId || !me?.id) return null
+    return members.data?.find((m) => m.user_id === me.id)?.role ?? null
+  }, [workspaceId, me?.id, members.data])
+}
 
 export function useMySpaceIds(workspaceId: string | null): SpaceId[] {
   const me = useAuthStore((s) => s.user)

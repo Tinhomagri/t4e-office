@@ -162,7 +162,7 @@ def _require_workspace_id(request: Request) -> str:
 
 
 class AiConfigView(APIView):
-    """Configuração de IA por workspace: GET (membros) / PUT (admin/owner).
+    """Configuração de IA por workspace: GET e PUT, ambos admin/owner.
 
     /api/copilot/ai-config/?workspace_id=...
     """
@@ -172,8 +172,10 @@ class AiConfigView(APIView):
     def get(self, request: Request) -> Response:
         workspace_id = _require_workspace_id(request)
         access = DjangoWorkspaceAccess()
-        if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
-            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError(
+                "Apenas administradores do workspace podem ver a configuração de IA."
+            )
         cfg = ai_config.get_config(workspace_id)
         data = ai_config.config_public_dict(cfg)
         data["can_edit"] = access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id))
@@ -260,15 +262,18 @@ class AgentExecuteView(APIView):
 
 
 class CopilotMetricsView(APIView):
-    """Painel de uso/avaliação do Copiloto: GET .../metrics/?workspace_id=..."""
+    """Painel de uso/avaliação do Copiloto (admin/owner):
+    GET .../metrics/?workspace_id=..."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         workspace_id = _require_workspace_id(request)
         access = DjangoWorkspaceAccess()
-        if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
-            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError(
+                "Apenas administradores do workspace podem ver o relatório do Copiloto."
+            )
         return Response(metrics.summary(workspace_id))
 
 

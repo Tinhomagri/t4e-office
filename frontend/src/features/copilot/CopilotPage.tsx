@@ -40,8 +40,9 @@ import {
   YAxis,
 } from "recharts"
 
-import { Button, PageHeader, cx } from "@/shared/ui/primitives"
+import { Button, EmptyState, PageHeader, cx } from "@/shared/ui/primitives"
 import { useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useMyRole } from "@/features/shell/spaceAccess"
 import {
   getAiConfig,
   getCopilotMetrics,
@@ -69,15 +70,18 @@ const KIND_LABEL: Record<string, string> = {
 }
 export function CopilotPage() {
   const { activeWorkspaceId } = useWorkspaces()
+  const myRole = useMyRole(activeWorkspaceId)
+  const isAdmin = myRole === "owner" || myRole === "admin"
+
   const { data: aiConfig } = useQuery({
     queryKey: ["ai-config", activeWorkspaceId],
     queryFn: () => getAiConfig(activeWorkspaceId!),
-    enabled: !!activeWorkspaceId,
+    enabled: !!activeWorkspaceId && isAdmin,
   })
   const { data: usage, isLoading } = useQuery({
     queryKey: ["copilot-metrics", activeWorkspaceId],
     queryFn: () => getCopilotMetrics(activeWorkspaceId!),
-    enabled: !!activeWorkspaceId,
+    enabled: !!activeWorkspaceId && isAdmin,
   })
 
   const aiReady = !!aiConfig?.configured && aiConfig.is_active
@@ -86,6 +90,19 @@ export function CopilotPage() {
     return (
       <div className="py-16 text-center text-sm text-paper-500">
         Crie um workspace na aba Boards primeiro.
+      </div>
+    )
+
+  // myRole ainda null enquanto os membros carregam — evita mostrar a tela
+  // restrita por um instante pra quem na verdade é admin.
+  if (myRole !== null && !isAdmin)
+    return (
+      <div className="mx-auto max-w-2xl py-16">
+        <EmptyState
+          icon={<Lock className="size-5" />}
+          title="Relatório restrito"
+          description="O relatório do Copiloto (uso, avaliação e configuração de IA) é visível só para administradores e donos do workspace."
+        />
       </div>
     )
 
