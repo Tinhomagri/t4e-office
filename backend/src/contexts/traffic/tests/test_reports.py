@@ -123,6 +123,113 @@ def test_list_ads_assigns_sales_to_the_best_matching_ad(monkeypatch):
     assert winner["valorPorCliente"] == 1000.0
 
 
+def test_list_ads_falls_back_to_variant_when_exact_match_is_inactive(monkeypatch):
+    def _fake_get(edge, params=None):
+        if edge.endswith("/insights"):
+            return {
+                "data": [
+                    # A ad_id do nome exato está zerada — pausada/desligada.
+                    {"ad_id": "1", "ad_name": "Campanha X", "spend": "0", "impressions": "0", "clicks": "0", "actions": []},
+                    {"ad_id": "2", "ad_name": "Campanha X — Cópia", "spend": "5", "impressions": "5", "clicks": "1", "actions": [{"action_type": "lead", "value": "2"}]},
+                ]
+            }
+        return {
+            "data": [
+                {"id": "1", "name": "Campanha X", "creative": {}},
+                {"id": "2", "name": "Campanha X — Cópia", "creative": {}},
+            ]
+        }
+
+    monkeypatch.setattr(reports, "meta_get", _fake_get)
+    monkeypatch.setattr(
+        reports,
+        "cross_sales",
+        lambda: {
+            "porAnuncio": {"campanhax": {"vendas": 3, "faturamento": 3000.0, "spend": 15.0, "dias": 5}},
+            "clientesViaAds": 3,
+            "faturamentoAds": 3000.0,
+            "gastoDaConta": 15.0,
+            "totalDeClientes": 3,
+        },
+    )
+
+    result = reports.list_ads(RANGE)
+    by_id = {ad["id"]: ad for ad in result}
+
+    assert by_id["2"]["clientes"] == 3
+    assert by_id["2"]["valorPorCliente"] == 1000.0
+    assert by_id["1"]["clientes"] == 0
+
+
+def test_list_ads_variant_tie_break_prefers_higher_leads(monkeypatch):
+    def _fake_get(edge, params=None):
+        if edge.endswith("/insights"):
+            return {
+                "data": [
+                    # Nome exato inativo — força a escolha entre as duas variantes.
+                    {"ad_id": "1", "ad_name": "Campanha X", "spend": "0", "impressions": "0", "clicks": "0", "actions": []},
+                    {"ad_id": "2", "ad_name": "Campanha X A", "spend": "10", "impressions": "10", "clicks": "1", "actions": [{"action_type": "lead", "value": "1"}]},
+                    {"ad_id": "3", "ad_name": "Campanha X B", "spend": "5", "impressions": "5", "clicks": "1", "actions": [{"action_type": "lead", "value": "2"}]},
+                ]
+            }
+        return {
+            "data": [
+                {"id": "1", "name": "Campanha X", "creative": {}},
+                {"id": "2", "name": "Campanha X A", "creative": {}},
+                {"id": "3", "name": "Campanha X B", "creative": {}},
+            ]
+        }
+
+    monkeypatch.setattr(reports, "meta_get", _fake_get)
+    monkeypatch.setattr(
+        reports,
+        "cross_sales",
+        lambda: {
+            "porAnuncio": {"campanhax": {"vendas": 1, "faturamento": 500.0, "spend": 15.0, "dias": 5}},
+            "clientesViaAds": 1,
+            "faturamentoAds": 500.0,
+            "gastoDaConta": 15.0,
+            "totalDeClientes": 1,
+        },
+    )
+
+    result = reports.list_ads(RANGE)
+    by_id = {ad["id"]: ad for ad in result}
+
+    # ad "3" tem mais leads (2 > 1) que ad "2" — deve ganhar mesmo com menos spend.
+    assert by_id["3"]["clientes"] == 1
+    assert by_id["2"]["clientes"] == 0
+    assert by_id["1"]["clientes"] == 0
+
+
+def test_thumbnail_url_extracts_best_image(monkeypatch):
+    monkeypatch.setattr(
+        reports,
+        "meta_get",
+        lambda edge, params=None: {"creative": {"image_url": "https://example.com/img.jpg"}},
+    )
+    assert reports.thumbnail_url("123") == "https://example.com/img.jpg"
+
+
+def test_thumbnail_url_returns_none_without_creative(monkeypatch):
+    monkeypatch.setattr(reports, "meta_get", lambda edge, params=None: {})
+    assert reports.thumbnail_url("123") is None
+
+
+def test_ad_preview_returns_body(monkeypatch):
+    monkeypatch.setattr(
+        reports,
+        "meta_get",
+        lambda edge, params=None: {"data": [{"body": "<iframe>preview</iframe>"}]},
+    )
+    assert reports.ad_preview("123", "DESKTOP_FEED_STANDARD") == "<iframe>preview</iframe>"
+
+
+def test_ad_preview_returns_empty_string_when_no_data(monkeypatch):
+    monkeypatch.setattr(reports, "meta_get", lambda edge, params=None: {"data": []})
+    assert reports.ad_preview("123", "DESKTOP_FEED_STANDARD") == ""
+
+
 def test_list_campaigns_sorted_by_spend_desc(monkeypatch):
     monkeypatch.setattr(
         reports,
