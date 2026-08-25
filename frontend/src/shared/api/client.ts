@@ -29,7 +29,7 @@ api.interceptors.request.use((config) => {
 // ---------------------------------------------------------------------------
 let refreshing: Promise<string | null> | null = null
 
-async function refreshAccessToken(): Promise<string | null> {
+async function doRefresh(): Promise<string | null> {
   const refresh = useAuthStore.getState().refreshToken
   if (!refresh) return null
   try {
@@ -45,6 +45,19 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Renova o access token, compartilhando um único pedido entre chamadas
+ * concorrentes. Exportado porque nem todo consumo da API passa por `api`:
+ * os streams SSE usam `fetch` cru (o EventSource não aceita cabeçalhos) e
+ * precisam renovar a sessão pelo mesmo caminho.
+ *
+ * Retorna o novo access token, ou null se a sessão acabou de vez.
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshing) refreshing = doRefresh().finally(() => (refreshing = null))
+  return refreshing
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -58,8 +71,7 @@ api.interceptors.response.use(
     if (status === 401 && original && !original._retry && !isRefreshCall) {
       original._retry = true
       // Compartilha um único refresh entre requisições concorrentes.
-      if (!refreshing) refreshing = refreshAccessToken().finally(() => (refreshing = null))
-      const newAccess = await refreshing
+      const newAccess = await refreshAccessToken()
 
       if (newAccess) {
         original.headers = original.headers ?? {}

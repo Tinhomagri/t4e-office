@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { useCallback, useEffect, useRef } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { refreshAccessToken } from "@/shared/api/client"
 import { toast } from "@/shared/ui/toast"
 
 import * as wsApi from "./workspace.api"
@@ -923,6 +924,9 @@ export function useNotificationStream(onNew: (n: import("./workspace.types").Not
     const controller = new AbortController()
     let stopped = false
     let retry = 3_000
+    // Uma única renovação de token por conexão bem-sucedida — evita martelar
+    // /auth/refresh/ em laço caso o backend siga recusando o token novo.
+    let refreshTried = false
 
     const run = async () => {
       while (!stopped) {
@@ -939,11 +943,20 @@ export function useNotificationStream(onNew: (n: import("./workspace.types").Not
             signal: controller.signal,
           })
 
-          // Falha de autenticação: parar de vez (sem este token não há stream).
+          // 401 costuma ser só o access expirado (TTL curto) enquanto o stream
+          // reconectava: este fetch não passa pelo interceptor do axios, então
+          // renovamos aqui e tentamos de novo. 403 é falta de permissão numa
+          // sessão válida — renovar não muda nada.
+          if (res.status === 401 && !refreshTried) {
+            refreshTried = true
+            if (!(await refreshAccessToken())) return
+            continue
+          }
           if (res.status === 401 || res.status === 403) return
           if (!res.ok || !res.body) throw new Error(`stream ${res.status}`)
 
           retry = 3_000 // conexão ok → reseta o backoff
+          refreshTried = false
           const reader = res.body.getReader()
           const decoder = new TextDecoder()
           let buffer = ""
