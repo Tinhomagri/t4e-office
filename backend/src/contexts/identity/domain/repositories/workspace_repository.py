@@ -63,9 +63,9 @@ class MembershipRepository(ABC):
 
     @abstractmethod
     def update_allowed_spaces(
-        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str] | None
+        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str]
     ) -> None:
-        """Altera os spaces que um membro pode ver (None = sem restrição)."""
+        """Altera os spaces que admin ou membro pode ver."""
 
     @abstractmethod
     def remove(self, *, workspace_id: str, user_id: str) -> None:

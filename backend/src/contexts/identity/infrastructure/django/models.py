@@ -169,8 +169,8 @@ class MembershipModel(models.Model):
     allowed_spaces = models.JSONField(
         null=True,
         blank=True,
-        default=None,
-        help_text="Spaces que este membro pode ver (null = todos, sem restrição).",
+        default=list,
+        help_text="Spaces que admin ou membro pode ver; só owner vê todos.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

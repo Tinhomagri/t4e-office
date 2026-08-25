@@ -62,6 +62,7 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
     [list, me?.id],
   )
   const canManage = myRole === "owner" || myRole === "admin"
+  const canManageSpaces = myRole === "owner"
   const ownersCount = list.filter((m) => m.role === "owner").length
   // Uma pessoa pode estar em mais de uma squad — é comum quem atua em duas
   // frentes participar das duas estimativas.
@@ -91,10 +92,10 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  // null = irrestrito (todos marcados). Desmarcar o primeiro box é o que faz
-  // a transição de "irrestrito" pra "lista explícita" — sem toggle separado.
+  // Para admin e membro, ausência de lista significa nenhum módulo até o dono
+  // declarar os acessos. Owner sempre tem todos e não recebe essa configuração.
   const handleSpaceToggle = async (m: Member, spaceId: SpaceId, checked: boolean) => {
-    const current = m.allowed_spaces ?? SPACES.map((s) => s.id)
+    const current = m.allowed_spaces ?? []
     const next = checked
       ? Array.from(new Set([...current, spaceId]))
       : current.filter((id) => id !== spaceId)
@@ -222,12 +223,11 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
                     </p>
                   </div>
 
-                  {/* Spaces que o membro enxerga — só faz sentido pra role
-                      "member": owner/admin sempre veem tudo. */}
-                  {canManage && m.role === "member" && (
+                  {/* Só o dono declara os módulos de admin e membro. */}
+                  {canManageSpaces && m.role !== "owner" && (
                     <div className="flex shrink-0 items-center gap-2.5">
                       {SPACES.map((s) => {
-                        const checked = m.allowed_spaces == null || m.allowed_spaces.includes(s.id)
+                        const checked = m.allowed_spaces?.includes(s.id) ?? false
                         return (
                           <label
                             key={s.id}

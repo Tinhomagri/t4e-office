@@ -129,7 +129,7 @@ class DjangoMembershipRepository(MembershipRepository):
         ).update(role=new_role.value)
 
     def update_allowed_spaces(
-        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str] | None
+        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str]
     ) -> None:
         MembershipModel.objects.filter(
             workspace_id=workspace_id, user_id=user_id

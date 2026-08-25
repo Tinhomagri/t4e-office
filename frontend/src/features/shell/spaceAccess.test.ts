@@ -44,22 +44,23 @@ describe("useMySpaceIds", () => {
     await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
   })
 
-  it("admin sempre vê todos os spaces", async () => {
+  it("admin vê somente os spaces liberados pelo dono", async () => {
     useAuthStore.setState({ user: { id: "u1" } as any })
     setMembers([
-      { user_id: "u1", name: "Ana", email: "a@a.com", role: "admin", allowed_spaces: [] },
+      { user_id: "u1", name: "Ana", email: "a@a.com", role: "admin", allowed_spaces: ["marketing"] },
     ])
     const { result } = renderHook(() => useMySpaceIds("ws1"), { wrapper })
-    await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
+    await waitFor(() => expect(result.current).toEqual(["marketing"]))
   })
 
-  it("member com allowed_spaces null é irrestrito", async () => {
+  it("admin ou membro legado sem lista não vê nenhum space", async () => {
     useAuthStore.setState({ user: { id: "u1" } as any })
     setMembers([
       { user_id: "u1", name: "Ana", email: "a@a.com", role: "member", allowed_spaces: null },
     ])
     const { result } = renderHook(() => useMySpaceIds("ws1"), { wrapper })
-    await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
+    await waitFor(() => expect(wsApi.listMembers).toHaveBeenCalled())
+    expect(result.current).toEqual([])
   })
 
   it("member com allowed_spaces [] não vê nada", async () => {

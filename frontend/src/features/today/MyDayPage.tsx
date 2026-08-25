@@ -270,15 +270,13 @@ export function MyDayPage() {
   const activeSpace = useSpaceStore((s) => s.activeSpace)
   const { activeWorkspaceId } = useWorkspaces()
   // Espelha o access-gate da sidebar (spaceAccess.ts): falha fechado enquanto
-  // os membros carregam, owner/admin vê tudo, membro restrito só o que foi
-  // liberado.
+  // os membros carregam; só owner vê tudo, os demais veem o que o dono liberou.
   const membersQuery = useMembers(activeWorkspaceId)
   const mySpaceIds = useMySpaceIds(activeWorkspaceId)
 
   // Default: o space que já está ativo no seletor da sidebar, se a pessoa
   // tiver acesso a ele — senão o primeiro space liberado. Sem nenhum space
-  // liberado (ainda carregando, ou acesso vazio de fato), cai em "Tudo", que
-  // nunca falta.
+  // liberado, cai em "Tudo" até a interface exibir o estado sem acesso.
   const defaultTab = useMemo<MyDayTab>(() => {
     if (mySpaceIds.includes(activeSpace)) return activeSpace
     return mySpaceIds[0] ?? "tudo"
@@ -294,8 +292,8 @@ export function MyDayPage() {
   // de mesclar. Com um só, Tudo seria idêntico a esse space, mas sem o filtro
   // dos outros contextos (Boards sem gate ainda — ver contexts/projects), e
   // acabava vazando dado/erro de permissão de espaço que a pessoa não tem.
-  // Com zero (acesso vazio de verdade), mantém Tudo como rede de segurança —
-  // melhor que uma tela sem aba nenhuma.
+  // Com zero, a tela exibe uma mensagem de acesso vazio em vez de carregar
+  // dados agregados de módulos não liberados.
   const showTudo = mySpaceIds.length !== 1
 
   useEffect(() => {
@@ -316,6 +314,17 @@ export function MyDayPage() {
       { value: "tudo" as MyDayTab, label: "Tudo", icon: <LayoutGrid className="size-3.5" /> },
     ]
   }, [mySpaceIds, showTudo])
+
+  if (!membersQuery.isLoading && mySpaceIds.length === 0) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] py-16 text-center">
+        <h1 className="text-lg font-semibold text-ink dark:text-paper">Nenhum módulo liberado</h1>
+        <p className="mt-2 text-sm text-paper-500">
+          Peça ao dono do workspace para liberar os módulos que você precisa acessar.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1600px] pb-10">

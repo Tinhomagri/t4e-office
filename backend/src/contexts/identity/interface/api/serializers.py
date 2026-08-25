@@ -101,15 +101,13 @@ class UpdateMemberRoleSerializer(serializers.Serializer):
     `role` e `allowed_spaces` são ambos opcionais, mas ao menos um deve vir
     presente no payload (validado em `validate`, pois não dá pra expressar
     "presença" com `required` em campos individualmente opcionais).
-    `allowed_spaces=null` explícito é uma entrada válida (remove restrição);
-    por isso o campo aceita `allow_null` e distinguimos "ausente" checando
-    `"allowed_spaces" in self.initial_data`.
+    A lista é obrigatoriamente explícita quando presente: apenas owner tem
+    acesso irrestrito; admin e member recebem os espaços que o owner declarar.
     """
 
     role = serializers.ChoiceField(choices=["admin", "member"], required=False)
     allowed_spaces = serializers.ListField(
         child=serializers.ChoiceField(choices=["boards", "marketing", "comercial"]),
-        allow_null=True,
         required=False,
     )
 

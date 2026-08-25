@@ -91,16 +91,6 @@ def test_lista_vazia_e_permitida_e_distinta_de_null():
     assert repo._spaces[(WS, "member-1")] == []
 
 
-def test_null_remove_restricao():
-    repo = _repo_with()
-    repo.set_member(WS, "member-1", Role.MEMBER, allowed_spaces=["boards"])
-    UpdateMemberSpaces(repo).execute(
-        workspace_id=WS, actor_id="owner-1", target_user_id="member-1",
-        allowed_spaces=None,
-    )
-    assert repo._spaces[(WS, "member-1")] is None
-
-
 def test_rejeita_space_desconhecido():
     repo = _repo_with()
     with pytest.raises(ValidationError):
@@ -120,14 +110,14 @@ def test_actor_nao_admin_e_negado():
         )
 
 
-def test_admin_pode_alterar_spaces():
+def test_admin_nao_pode_alterar_spaces():
     repo = _repo_with()
     repo.set_member(WS, "admin-1", Role.ADMIN)
-    UpdateMemberSpaces(repo).execute(
-        workspace_id=WS, actor_id="admin-1", target_user_id="member-1",
-        allowed_spaces=["marketing"],
-    )
-    assert repo._spaces[(WS, "member-1")] == ["marketing"]
+    with pytest.raises(PermissionDeniedError):
+        UpdateMemberSpaces(repo).execute(
+            workspace_id=WS, actor_id="admin-1", target_user_id="member-1",
+            allowed_spaces=["marketing"],
+        )
 
 
 def test_membro_alvo_inexistente_e_404():

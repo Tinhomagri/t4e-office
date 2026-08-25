@@ -22,8 +22,8 @@ def scenario(db):
     admin = UserModel.objects.create_user(
         email="admin@t4e.com", password="x", full_name="Admin", is_active=True
     )
-    unrestricted_member = UserModel.objects.create_user(
-        email="livre@t4e.com", password="x", full_name="Livre", is_active=True
+    legacy_member = UserModel.objects.create_user(
+        email="legado@t4e.com", password="x", full_name="Legado", is_active=True
     )
     restricted_member = UserModel.objects.create_user(
         email="restrito@t4e.com", password="x", full_name="Restrito", is_active=True
@@ -33,9 +33,11 @@ def scenario(db):
     )
     ws = WorkspaceModel.objects.create(name="WS", slug="ws-access", owner=owner)
     MembershipModel.objects.create(workspace=ws, user=owner, role="owner")
-    MembershipModel.objects.create(workspace=ws, user=admin, role="admin")
     MembershipModel.objects.create(
-        workspace=ws, user=unrestricted_member, role="member", allowed_spaces=None
+        workspace=ws, user=admin, role="admin", allowed_spaces=["marketing"]
+    )
+    MembershipModel.objects.create(
+        workspace=ws, user=legacy_member, role="member", allowed_spaces=None
     )
     MembershipModel.objects.create(
         workspace=ws, user=restricted_member, role="member", allowed_spaces=["boards"]
@@ -47,7 +49,7 @@ def scenario(db):
         "ws": ws,
         "owner": owner,
         "admin": admin,
-        "unrestricted_member": unrestricted_member,
+        "legacy_member": legacy_member,
         "restricted_member": restricted_member,
         "blocked_member": blocked_member,
     }
@@ -62,23 +64,28 @@ def test_owner_ve_space_restrito(scenario):
     ) is True
 
 
-def test_admin_ve_space_restrito(scenario):
+def test_admin_ve_apenas_space_liberado(scenario):
     access = DjangoWorkspaceAccess()
     assert access.can_view_space(
         workspace_id=str(scenario["ws"].id),
         user_id=str(scenario["admin"].id),
-        space="comercial",
+        space="marketing",
     ) is True
+    assert access.can_view_space(
+        workspace_id=str(scenario["ws"].id),
+        user_id=str(scenario["admin"].id),
+        space="comercial",
+    ) is False
 
 
-def test_membro_sem_restricao_ve_tudo(scenario):
+def test_membro_legado_sem_lista_nao_ve_nada(scenario):
     access = DjangoWorkspaceAccess()
     for space in ("boards", "marketing", "comercial"):
         assert access.can_view_space(
             workspace_id=str(scenario["ws"].id),
-            user_id=str(scenario["unrestricted_member"].id),
+            user_id=str(scenario["legacy_member"].id),
             space=space,
-        ) is True
+        ) is False
 
 
 def test_membro_restrito_a_boards_nao_ve_marketing(scenario):

@@ -29,7 +29,7 @@ import { CopilotChatWidget } from "@/features/copilot/CopilotChatWidget"
 import { NotificationBell } from "@/features/boards/NotificationBell"
 import { AgendaPanel } from "@/features/integrations/AgendaPanel"
 import { MeetingCallOverlay } from "@/features/meetings/MeetingsPage"
-import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useCreateWorkspace, useMembers, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { useMyRole, useMySpaceIds } from "./spaceAccess"
 import {
@@ -116,9 +116,10 @@ export function AppShell() {
     if (routeSpace && routeSpace !== storedSpace) setActiveSpace(routeSpace)
   }, [routeSpace, storedSpace, setActiveSpace])
 
-  // Spaces que este membro pode ver neste workspace (admin controla isso em
-  // Membros). Vazio enquanto a membership ainda não carregou — ver spaceAccess.ts.
+  // Spaces que este membro pode ver neste workspace (só o dono os declara
+  // para admin e membro). Vazio enquanto a membership ainda não carregou.
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const membersQuery = useMembers(activeWorkspaceId)
   const mySpaceIds = useMySpaceIds(activeWorkspaceId)
   const visibleSpaces = useMemo(
     () => SPACES.filter((s) => mySpaceIds.includes(s.id)),
@@ -139,18 +140,17 @@ export function AppShell() {
   )
 
   // Trava contra link direto/bookmark/URL velha para um space que o membro
-  // não vê mais. Só dispara quando a membership já carregou de verdade
-  // (mySpaceIds não vazio) — nunca durante o flash de loading, senão
-  // expulsaria gente com acesso normal antes do fetch terminar.
+  // não vê mais. Espera a membership carregar; depois, inclusive uma lista
+  // vazia é acesso vazio de verdade e volta para Meu Dia, que mostra o aviso.
   useEffect(() => {
     if (!routeSpace) return
-    if (mySpaceIds.length === 0) return
+    if (membersQuery.isLoading) return
     if (mySpaceIds.includes(routeSpace)) return
     const fallback = mySpaceIds.includes(DEFAULT_SPACE)
       ? getSpace(DEFAULT_SPACE)
       : visibleSpaces[0]
-    if (fallback) navigate(fallback.home, { replace: true })
-  }, [routeSpace, mySpaceIds, visibleSpaces, navigate])
+    navigate(fallback?.home ?? "/app", { replace: true })
+  }, [routeSpace, membersQuery.isLoading, mySpaceIds, visibleSpaces, navigate])
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
   // No mobile a sidebar vira drawer full-width → nunca "colapsada".
