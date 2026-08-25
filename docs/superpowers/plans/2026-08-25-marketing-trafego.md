@@ -2123,7 +2123,7 @@ Expected: PASS (all tests)
 Run: `cd backend && .venv/bin/pytest src/contexts/traffic/ -v`
 Expected: PASS (every test file from Tasks 1-6)
 
-Run: `cd backend && .venv/bin/python src/manage.py check`
+Run: `cd backend && .venv/bin/python manage.py check`
 Expected: `System check identified no issues (0 silenced).`
 
 - [ ] **Step 8: Commit**
@@ -3022,7 +3022,7 @@ Expected: no new errors.
 - [ ] **Step 5: Manual smoke test**
 
 Run: `cd frontend && npm run dev` (in one terminal) and
-`cd backend && .venv/bin/python src/manage.py runserver` (in another, if not
+`cd backend && .venv/bin/python manage.py runserver` (in another, if not
 already running). Log in, navigate to `/app/marketing/trafego`. Since no
 `META_TRAFFIC_ACCESS_TOKEN` is configured yet, expect the "Tráfego não
 configurado" `EmptyState` to render — not a crash, not a blank page. This
@@ -3045,7 +3045,7 @@ Run the full backend suite once more to catch cross-task regressions:
 
 ```bash
 cd backend && .venv/bin/pytest src/contexts/traffic/ -v
-cd backend && .venv/bin/python src/manage.py check
+cd backend && .venv/bin/python manage.py check
 ```
 
 Then hand off to the user to fill in the real
