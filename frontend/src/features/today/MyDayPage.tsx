@@ -2,18 +2,23 @@ import { motion, useInView, useMotionValue, useSpring } from "framer-motion"
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   Bell,
   CalendarClock,
   CalendarCheck,
   CalendarDays,
   Check,
+  CheckCircle2,
   CircleDot,
   ExternalLink,
   Eye,
   Flame,
+  Heart,
   LayoutGrid,
   Loader2,
   RefreshCw,
+  Send,
+  ShieldAlert,
   Sparkles,
   Target,
   TrendingDown,
@@ -38,7 +43,14 @@ import {
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useDayEvents, useGoogleStatus } from "@/features/integrations/integrations.hooks"
 import type { CalendarEvent } from "@/features/integrations/integrations.types"
-import { MarketingDeck } from "@/features/marketing/MarketingDeck"
+import {
+  useAccountsHealth,
+  useAnalyticsTimeseries,
+  useQueueStats,
+  type AccountHealth,
+  type ChannelStats,
+  type TopPost,
+} from "@/features/integrations/insights.api"
 import {
   useMembers,
   useMyWork,
@@ -344,7 +356,7 @@ export function MyDayPage() {
       </div>
 
       {tab === "marketing" ? (
-        <MarketingDeck />
+        <MarketingDayView workspaceId={activeWorkspaceId} />
       ) : tab === "comercial" ? (
         <ComercialDayView workspaceId={activeWorkspaceId} userId={user?.id} />
       ) : (
@@ -861,6 +873,384 @@ function ComercialActivityPanel({
               </li>
             )
           })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Rótulo legível do canal social. Chave desconhecida cai no próprio slug. */
+const CHANNEL_LABEL: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  blog: "Blog",
+  email: "E-mail",
+  site: "Site",
+}
+
+const channelLabel = (slug: string) => CHANNEL_LABEL[slug] ?? slug
+
+function compactNumber(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(".", ",")}M`
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(".", ",")}k`
+  return value.toFixed(0)
+}
+
+const MARKETING_WINDOWS = [
+  { value: "7", label: "7 dias" },
+  { value: "30", label: "30 dias" },
+  { value: "90", label: "90 dias" },
+] as const
+
+type MarketingWindow = (typeof MARKETING_WINDOWS)[number]["value"]
+
+/**
+ * "Meu dia de marketing" — mesma linguagem visual da aba Boards (`Stat`,
+ * `PanelHead`, `MiniPanel`, `EmptyNote`), em cima dos mesmos dados que o
+ * antigo Command Deck (`MarketingDeck`, removido) já buscava em
+ * `integrations/insights.api`. A diferença é só de casca: aqui não há tema
+ * escuro nem GSAP próprios — o Meu Dia é uma tela só, com um vocabulário só.
+ */
+function MarketingDayView({ workspaceId }: { workspaceId: string | null }) {
+  const [days, setDays] = usePersistedState<MarketingWindow>("myday:marketing:days", "30")
+
+  const analytics = useAnalyticsTimeseries(workspaceId, Number(days))
+  // A fila muda sozinha (o worker publica no horário): revalida a cada minuto
+  // enquanto a aba estiver aberta.
+  const queue = useQueueStats(workspaceId, 60_000)
+  const health = useAccountsHealth(workspaceId, Number(days))
+
+  const totals = analytics.data?.totals
+
+  /** Canais ordenados por impressões — o maior primeiro. */
+  const channels = useMemo(() => {
+    const byChannel = analytics.data?.by_channel ?? {}
+    return Object.entries(byChannel)
+      .map(([slug, stats]) => ({ slug, ...(stats as ChannelStats) }))
+      .sort((a, b) => b.impressions - a.impressions)
+  }, [analytics.data])
+
+  /** Contas que exigem ação: token vencido, expirando ou desconectado. */
+  const atRisk = useMemo(
+    () => (health.data?.accounts ?? []).filter((a) => a.status !== "healthy"),
+    [health.data],
+  )
+
+  const loading = analytics.isLoading || queue.isLoading || health.isLoading
+
+  return (
+    <>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
+            Meu dia de marketing
+          </h1>
+          <p className="mt-1.5 text-sm text-paper-500 dark:text-ink-400">
+            {totals ? (
+              <>
+                <span className="font-semibold text-ink dark:text-paper-300">
+                  {totals.posts} publicaç{totals.posts === 1 ? "ão" : "ões"}
+                </span>{" "}
+                nos últimos {days} dias
+                {atRisk.length > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-semibold text-danger">
+                      {atRisk.length} conta{atRisk.length > 1 ? "s" : ""} precisa
+                      {atRisk.length > 1 ? "m" : ""} de atenção
+                    </span>
+                  </>
+                )}
+                .
+              </>
+            ) : (
+              "Sem dados de publicação no período."
+            )}
+          </p>
+        </div>
+        <SegmentedControl
+          options={MARKETING_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+          value={days}
+          onChange={setDays}
+          layoutId="myday-marketing-window"
+          size="sm"
+          ariaLabel="Escolher período de marketing"
+        />
+      </header>
+
+      {!workspaceId ? (
+        <EmptyNote>Selecione um workspace para ver o painel de marketing.</EmptyNote>
+      ) : loading ? (
+        <div className="grid place-items-center py-24">
+          <Loader2 className="size-6 animate-spin text-paper-400" />
+        </div>
+      ) : (
+        <motion.div variants={listVariants} initial="hidden" animate="show" className="space-y-4">
+          <motion.section
+            variants={itemVariants}
+            className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+          >
+            <Stat
+              icon={Eye}
+              label="Alcance"
+              value={totals?.impressions ?? 0}
+              tint="bg-sky-500/10 text-sky-500"
+            />
+            <Stat
+              icon={Heart}
+              label="Engajamento"
+              value={Math.round(totals?.engagement_rate ?? 0)}
+              tint="bg-brand-500/10 text-brand-500"
+            />
+            <Stat
+              icon={Send}
+              label="Na fila"
+              value={queue.data?.by_status.scheduled ?? 0}
+              accent={queue.data?.overdue ? "text-warning" : undefined}
+              tint="bg-amber-500/10 text-amber-500"
+            />
+            <Stat
+              icon={CheckCircle2}
+              label="Entrega 7d"
+              value={Math.round(queue.data?.last_7d.success_rate ?? 100)}
+              accent={(queue.data?.last_7d.failed ?? 0) > 0 ? "text-danger" : "text-green-500"}
+              tint="bg-green-500/10 text-green-500"
+            />
+          </motion.section>
+
+          <div className="grid items-start gap-4 lg:grid-cols-12">
+            <div className="space-y-4 lg:col-span-7">
+              <motion.div variants={itemVariants}>
+                <ChannelPerformancePanel channels={channels} />
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <TopPostsPanel posts={analytics.data?.top_posts ?? []} />
+              </motion.div>
+            </div>
+
+            <aside className="space-y-4 lg:col-span-5">
+              <motion.div variants={itemVariants}>
+                <UpcomingPostsPanel
+                  upcoming={queue.data?.upcoming ?? {}}
+                  next={queue.data?.next_post ?? null}
+                />
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <AccountsHealthPanel accounts={health.data?.accounts ?? []} />
+              </motion.div>
+            </aside>
+          </div>
+        </motion.div>
+      )}
+    </>
+  )
+}
+
+/** Barra de alcance por canal — mesma leitura do antigo deck, sem tema escuro. */
+function ChannelPerformancePanel({
+  channels,
+}: {
+  channels: (ChannelStats & { slug: string })[]
+}) {
+  const max = Math.max(1, ...channels.map((c) => c.impressions))
+  return (
+    <div className="surface lift p-5">
+      <PanelHead icon={BarChart3} title="Desempenho por canal" count={channels.length} />
+      {channels.length === 0 ? (
+        <EmptyNote>Nenhuma publicação com métricas no período.</EmptyNote>
+      ) : (
+        <ul className="space-y-2.5">
+          {channels.map((channel) => {
+            // Piso de 6%: um canal com pouco alcance ainda precisa ser legível.
+            const share = Math.max(0.06, channel.impressions / max)
+            return (
+              <li key={channel.slug} className="flex items-center gap-3">
+                <span className="w-20 shrink-0 truncate text-[12px] text-ink dark:text-paper">
+                  {channelLabel(channel.slug)}
+                </span>
+                <span className="relative h-7 flex-1 overflow-hidden rounded-md bg-paper-100 dark:bg-ink-800">
+                  <motion.span
+                    className="absolute inset-y-0 left-0 rounded-md bg-gradient-to-r from-brand-500 to-brand-400/70"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${share * 100}%` }}
+                    transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                  <span className="absolute inset-y-0 left-2.5 flex items-center gap-2 text-[11px] font-medium tabular text-white">
+                    {compactNumber(channel.impressions)}
+                    <span className="opacity-80">
+                      {channel.posts} post{channel.posts === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </span>
+                <span className="w-12 shrink-0 text-right text-[11px] tabular text-paper-400 dark:text-ink-500">
+                  {channel.engagement_rate.toFixed(1)}%
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Cadência dos próximos 14 dias + a próxima publicação em destaque. */
+function UpcomingPostsPanel({
+  upcoming,
+  next,
+}: {
+  upcoming: Record<string, number>
+  next: { id: string; channel: string; content: string; scheduled_at: string } | null
+}) {
+  const days = Object.entries(upcoming)
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+  const total = days.reduce((s, [, c]) => s + c, 0)
+
+  return (
+    <div className="surface lift p-5">
+      <PanelHead icon={CalendarCheck} title="Próximas publicações" count={total} />
+      {days.length === 0 && !next ? (
+        <EmptyNote>Nada agendado para os próximos 14 dias.</EmptyNote>
+      ) : (
+        <div className="space-y-3">
+          {next && (
+            <div className="rounded-xl bg-paper-50 p-3 dark:bg-ink-800/60">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-paper-400 dark:text-ink-500">
+                Próxima · {channelLabel(next.channel)}
+              </p>
+              <p className="mt-1 line-clamp-2 text-[13px] text-ink dark:text-paper">
+                {next.content}
+              </p>
+              <p className="mt-1 text-[11px] font-medium tabular text-brand-500">
+                {new Date(next.scheduled_at).toLocaleString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          )}
+          {days.length > 0 && (
+            <ul className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
+              {days.map(([date, count]) => (
+                <li key={date} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
+                  <span className="text-sm text-ink dark:text-paper">
+                    {relativeDayLabel(date)}
+                  </span>
+                  <span className="rounded-md bg-paper-100 px-1.5 py-0.5 text-[11px] font-medium tabular text-paper-500 dark:bg-ink-700 dark:text-paper-400">
+                    {count} publicaç{count === 1 ? "ão" : "ões"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Top posts por engajamento — mesma grade de linha usada em `UpcomingWeek`. */
+function TopPostsPanel({ posts }: { posts: TopPost[] }) {
+  return (
+    <div className="surface lift p-5">
+      <PanelHead icon={Flame} title="Conteúdo que mais performou" count={posts.length} />
+      {posts.length === 0 ? (
+        <EmptyNote>Sem publicações com métricas ainda.</EmptyNote>
+      ) : (
+        <ul className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
+          {posts.slice(0, 6).map((post, i) => (
+            <li key={post.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+              <span className="grid size-6 shrink-0 place-items-center rounded-md bg-brand-500/10 text-[11px] font-semibold tabular text-brand-500">
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-ink dark:text-paper">{post.content}</p>
+                <p className="mt-0.5 truncate text-[11px] text-paper-400 dark:text-ink-500">
+                  {channelLabel(post.channel)} · {post.account_name} ·{" "}
+                  {new Date(post.published_at).toLocaleDateString("pt-BR")}
+                </p>
+              </div>
+              <span className="hidden shrink-0 text-right text-[11px] tabular text-paper-400 sm:block">
+                {compactNumber(post.metrics.impressions)}
+              </span>
+              <span className="w-12 shrink-0 text-right text-[12px] font-semibold tabular text-green-500">
+                {post.engagement_rate.toFixed(1)}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+const HEALTH_TONE: Record<AccountHealth["status"], string> = {
+  healthy: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  expiring: "bg-warning/10 text-warning",
+  expired: "bg-danger/10 text-danger",
+  disconnected: "bg-danger/10 text-danger",
+}
+
+const HEALTH_LABEL: Record<AccountHealth["status"], string> = {
+  healthy: "OK",
+  expiring: "expira em breve",
+  expired: "token expirado",
+  disconnected: "desconectada",
+}
+
+/** Saúde das contas conectadas — quem precisa de ação primeiro. */
+function AccountsHealthPanel({ accounts }: { accounts: AccountHealth[] }) {
+  const ordered = useMemo(
+    () =>
+      [...accounts].sort((a, b) => (a.status === b.status ? 0 : a.status === "healthy" ? 1 : -1)),
+    [accounts],
+  )
+
+  return (
+    <div className="surface lift p-5">
+      <PanelHead
+        icon={ShieldAlert}
+        title="Saúde das contas"
+        count={ordered.length}
+        action={{ to: "/app/marketing/redes", label: "Gerenciar" }}
+      />
+      {ordered.length === 0 ? (
+        <EmptyNote>Nenhuma conta de rede social conectada.</EmptyNote>
+      ) : (
+        <ul className="flex flex-col divide-y divide-paper-100 dark:divide-ink-800">
+          {ordered.map((account) => (
+            <li key={account.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+              {account.status === "healthy" ? (
+                <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+              ) : (
+                <ShieldAlert className="size-3.5 shrink-0 text-danger" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-ink dark:text-paper">{account.account_name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-paper-400 dark:text-ink-500">
+                  {channelLabel(account.channel)} · {account.posts.published} publicadas
+                  {account.posts.failed > 0 ? ` · ${account.posts.failed} falhas` : ""}
+                </p>
+              </div>
+              <span
+                className={cx(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  HEALTH_TONE[account.status],
+                )}
+              >
+                {HEALTH_LABEL[account.status]}
+              </span>
+            </li>
+          ))}
         </ul>
       )}
     </div>

@@ -122,16 +122,19 @@ export const SPACES: Space[] = [
     label: "Marketing",
     tagline: "Campanhas, calendário editorial e redes sociais",
     icon: Megaphone,
-    home: "/app/marketing",
+    // Marketing não tem mais dashboard próprio: a aba Marketing do Meu Dia
+    // (/app) é a landing page do space — mesmo princípio do SpaceSwitcher, que
+    // já chama `setActiveSpace(id)` antes de navegar (ver AppShell.tsx).
+    home: "/app",
+    // Continua com o prefixo "/app/marketing": ele cobre as rotas internas do
+    // space (calendário, fila, analytics, tráfego, redes) via `startsWith`,
+    // mesmo sem mais existir uma rota "/app/marketing" nua.
     match: ["/app/marketing"],
     groups: [
       {
         heading: "Campanhas",
         projects: "marketing",
         items: [
-          // Todo space abre num dashboard: Boards tem o Meu Dia, Comercial e
-          // Marketing têm o seu deck.
-          { label: "Dashboard", to: "/app/marketing", icon: Gauge, end: true },
           { label: "Calendário editorial", to: "/app/marketing/calendario", icon: CalendarDays },
           { label: "Fila de publicação", to: "/app/marketing/fila", icon: ListChecks },
         ],

@@ -39,7 +39,9 @@ const ROUTE: Record<string, string> = {
   comercial: "/app/comercial/dashboard",
   reports: "/app/reports",
   portfolio: "/app/portfolio",
-  marketing: "/app/marketing",
+  // Sem dashboard próprio: o app "marketing" abre o Meu Dia, que já cai na
+  // aba Marketing pelo mesmo mecanismo do SpaceSwitcher (ver spaces.ts).
+  marketing: "/app",
   "mkt-calendario": "/app/marketing/calendario",
   "mkt-fila": "/app/marketing/fila",
   "mkt-analytics": "/app/marketing/analytics",

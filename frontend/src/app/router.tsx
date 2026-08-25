@@ -15,7 +15,6 @@ import { MeetingsPage } from "@/features/meetings/MeetingsPage"
 import { ChatPage } from "@/features/chat/ChatPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
-import { MarketingDeck } from "@/features/marketing/MarketingDeck"
 import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
 import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
 import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
@@ -145,8 +144,6 @@ export const appRoutes: RouteObject[] = [
   // Meu Card nasceu no PC do escritório, mas é uma tela do produto como outra
   // qualquer — ter rota é o que deixa o PC abri-la pelo mesmo caminho.
   { path: "my-card", element: <MyCardPage /> },
-  // Marketing também abre no deck; o calendário passa a ser uma rota interna.
-  { path: "marketing", element: <MarketingDeck /> },
   { path: "marketing/calendario", element: <EditorialCalendarPage /> },
   { path: "marketing/fila", element: <PublishQueuePage /> },
   { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
