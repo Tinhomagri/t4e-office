@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "contexts.github",
     "contexts.presence",
     "contexts.integrations",
+    "contexts.traffic",
     "contexts.sales",
     "contexts.chatwoot",
     "contexts.meetings",
@@ -144,12 +145,29 @@ REST_FRAMEWORK = {
     # porque o throttle de escopo do DRF exige a taxa no settings, não na view.
     "DEFAULT_THROTTLE_RATES": {
         "public_card_create": "20/hour",
+        "traffic_report": "90/min",
+        "traffic_thumbnail": "400/min",
+        "traffic_preview": "60/min",
     },
 }
 
 # Em dev, ativa a conta no cadastro (email vai só pro console). Em prod, False:
 # a conta só ativa após verificar o email.
 AUTH_AUTO_ACTIVATE = env.bool("AUTH_AUTO_ACTIVATE", default=False)
+
+# Tráfego pago (Meta Ads) — config global por variável de ambiente, sem
+# credencial por workspace nesta fase. Sem token/conta, os endpoints
+# devolvem ValidationError (400) em vez de tentar falar com a Meta.
+META_TRAFFIC_ACCESS_TOKEN = env("META_TRAFFIC_ACCESS_TOKEN", default="")
+META_AD_ACCOUNT_ID = env("META_AD_ACCOUNT_ID", default="")
+META_GRAPH_VERSION = env("META_GRAPH_VERSION", default="v21.0")
+# Planilha de leads (funil): etapa, cidade/UF, utm_content.
+TRAFFIC_SHEET_LEADS_URL = env("TRAFFIC_SHEET_LEADS_URL", default="")
+# Planilha histórica de leads (telefone, nome, origem, anúncio) — só para a
+# conciliação de vendas casar por telefone/nome.
+TRAFFIC_SHEET_HIST_URL = env("TRAFFIC_SHEET_HIST_URL", default="")
+# Planilha de vendas fechadas (nome, telefone, valor, datas).
+TRAFFIC_SHEET_FECHADOS_URL = env("TRAFFIC_SHEET_FECHADOS_URL", default="")
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env("JWT_ACCESS_TTL_MIN")),
