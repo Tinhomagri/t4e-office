@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/github/", include("contexts.github.interface.api.urls")),
     path("api/presence/", include("contexts.presence.interface.api.urls")),
     path("api/integrations/", include("contexts.integrations.interface.api.urls")),
+    path("api/traffic/", include("contexts.traffic.interface.api.urls")),
     path("api/sales/", include("contexts.sales.interface.api.urls")),
     path("api/chatwoot/", include("contexts.chatwoot.interface.api.urls")),
     path("api/meetings/", include("contexts.meetings.interface.api.urls")),
