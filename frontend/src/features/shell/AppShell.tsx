@@ -30,6 +30,8 @@ import { NotificationBell } from "@/features/boards/NotificationBell"
 import { AgendaPanel } from "@/features/integrations/AgendaPanel"
 import { MeetingCallOverlay } from "@/features/meetings/MeetingsPage"
 import { useCreateWorkspace, useProjects, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import { useWorkspaceStore } from "@/features/workspace/workspace.store"
+import { useMySpaceIds } from "./spaceAccess"
 import {
   Avatar,
   Button,
@@ -52,6 +54,7 @@ import {
 } from "./sidebar.prefs.store"
 import {
   COMMON_GROUP,
+  DEFAULT_SPACE,
   type NavGroup,
   type NavItem,
   SPACES,
@@ -112,6 +115,29 @@ export function AppShell() {
   useEffect(() => {
     if (routeSpace && routeSpace !== storedSpace) setActiveSpace(routeSpace)
   }, [routeSpace, storedSpace, setActiveSpace])
+
+  // Spaces que este membro pode ver neste workspace (admin controla isso em
+  // Membros). Vazio enquanto a membership ainda não carregou — ver spaceAccess.ts.
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const mySpaceIds = useMySpaceIds(activeWorkspaceId)
+  const visibleSpaces = useMemo(
+    () => SPACES.filter((s) => mySpaceIds.includes(s.id)),
+    [mySpaceIds],
+  )
+
+  // Trava contra link direto/bookmark/URL velha para um space que o membro
+  // não vê mais. Só dispara quando a membership já carregou de verdade
+  // (mySpaceIds não vazio) — nunca durante o flash de loading, senão
+  // expulsaria gente com acesso normal antes do fetch terminar.
+  useEffect(() => {
+    if (!routeSpace) return
+    if (mySpaceIds.length === 0) return
+    if (mySpaceIds.includes(routeSpace)) return
+    const fallback = mySpaceIds.includes(DEFAULT_SPACE)
+      ? getSpace(DEFAULT_SPACE)
+      : visibleSpaces[0]
+    if (fallback) navigate(fallback.home, { replace: true })
+  }, [routeSpace, mySpaceIds, visibleSpaces, navigate])
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
   // No mobile a sidebar vira drawer full-width → nunca "colapsada".
@@ -277,7 +303,7 @@ export function AppShell() {
           )}
         >
           <WorkspaceSwitcher collapsed={collapsed} />
-          <SpaceSwitcher collapsed={collapsed} spaceId={spaceId} />
+          <SpaceSwitcher collapsed={collapsed} spaceId={spaceId} spaces={visibleSpaces} />
 
           <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 scrollbar-slim">
             {/* Favoritos primeiro: o que o usuário fixou vale mais que a ordem
@@ -848,7 +874,15 @@ function ResizeHandle() {
 // Seletor de space — logo abaixo do workspace. Escolher aqui troca a sidebar
 // inteira e navega para a home do space. Colapsado, vira uma coluna de ícones
 // com a pílula ativa deslizando via layoutId.
-function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: SpaceId }) {
+function SpaceSwitcher({
+  collapsed,
+  spaceId,
+  spaces,
+}: {
+  collapsed: boolean
+  spaceId: SpaceId
+  spaces: typeof SPACES
+}) {
   const navigate = useNavigate()
   const reduce = useReducedMotion()
   const setActiveSpace = useSpaceStore((s) => s.setActiveSpace)
@@ -864,7 +898,7 @@ function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: Sp
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-1 border-b border-paper-100 px-2 py-2 dark:border-ink-800">
-        {SPACES.map((s) => {
+        {spaces.map((s) => {
           const isActive = s.id === spaceId
           return (
             <button
@@ -934,7 +968,7 @@ function SpaceSwitcher({ collapsed, spaceId }: { collapsed: boolean; spaceId: Sp
               transition={{ duration: 0.18, ease: EASE }}
               className="absolute left-3 right-3 top-[60px] z-20 origin-top rounded-xl border border-paper-200 bg-paper p-1.5 shadow-pop dark:border-ink-700 dark:bg-ink-800"
             >
-              {SPACES.map((s) => {
+              {spaces.map((s) => {
                 const isActive = s.id === spaceId
                 return (
                   <button
