@@ -356,7 +356,7 @@ export function MyDayPage() {
       </div>
 
       {tab === "marketing" ? (
-        <MarketingDayView workspaceId={activeWorkspaceId} />
+        <MarketingDayView workspaceId={activeWorkspaceId} fullName={user?.full_name} />
       ) : tab === "comercial" ? (
         <ComercialDayView workspaceId={activeWorkspaceId} userId={user?.id} />
       ) : (
@@ -915,7 +915,13 @@ type MarketingWindow = (typeof MARKETING_WINDOWS)[number]["value"]
  * `integrations/insights.api`. A diferença é só de casca: aqui não há tema
  * escuro nem GSAP próprios — o Meu Dia é uma tela só, com um vocabulário só.
  */
-function MarketingDayView({ workspaceId }: { workspaceId: string | null }) {
+function MarketingDayView({
+  workspaceId,
+  fullName,
+}: {
+  workspaceId: string | null
+  fullName: string | undefined
+}) {
   const [days, setDays] = usePersistedState<MarketingWindow>("myday:marketing:days", "30")
 
   const analytics = useAnalyticsTimeseries(workspaceId, Number(days))
@@ -941,13 +947,17 @@ function MarketingDayView({ workspaceId }: { workspaceId: string | null }) {
   )
 
   const loading = analytics.isLoading || queue.isLoading || health.isLoading
+  const firstName = fullName?.split(/\s+/)[0] ?? "você"
 
   return (
     <>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[28px] font-bold leading-tight tracking-tight text-ink dark:text-paper">
-            Meu dia de marketing
+            {greetingFor(new Date().getHours())},{" "}
+            <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
+              {firstName}
+            </span>
           </h1>
           <p className="mt-1.5 text-sm text-paper-500 dark:text-ink-400">
             {totals ? (

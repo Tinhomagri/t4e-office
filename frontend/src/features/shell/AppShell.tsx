@@ -144,13 +144,13 @@ export function AppShell() {
   // vazia é acesso vazio de verdade e volta para Meu Dia, que mostra o aviso.
   useEffect(() => {
     if (!routeSpace) return
-    if (membersQuery.isLoading) return
+    if (!membersQuery.isSuccess) return
     if (mySpaceIds.includes(routeSpace)) return
     const fallback = mySpaceIds.includes(DEFAULT_SPACE)
       ? getSpace(DEFAULT_SPACE)
       : visibleSpaces[0]
     navigate(fallback?.home ?? "/app", { replace: true })
-  }, [routeSpace, membersQuery.isLoading, mySpaceIds, visibleSpaces, navigate])
+  }, [routeSpace, membersQuery.isSuccess, mySpaceIds, visibleSpaces, navigate])
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
   // No mobile a sidebar vira drawer full-width → nunca "colapsada".
