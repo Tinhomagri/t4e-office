@@ -72,24 +72,19 @@ export function DriveLibraryPage() {
 
   if (!workspaceId) return <EmptyState title="Selecione um workspace" description="A biblioteca é separada por workspace." />
   if (configured === null) return <div className="py-20 text-center text-paper-500">Verificando a configuração do Google Drive…</div>
-  // A API antiga não trazia `can_configure`. Mantemos o botão de abertura
-  // visível nesta tela de estado vazio para não esconder a configuração do
-  // dono durante um deploy gradual; o backend continua sendo a autoridade e
-  // recusa salvar/testar para admin ou membro.
-  if (configured === false) return <><EmptyState title="Google Drive ainda não configurado" description="O dono do workspace precisa informar as credenciais e as duas pastas raiz." action={<Button onClick={() => setConfigOpen(true)}>Configurar Google Drive</Button>} /><DriveConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} workspaceId={workspaceId} /></>
-
   return <div className="mx-auto flex max-w-7xl flex-col gap-4 p-4 sm:p-6">
     <PageHeader eyebrow="Marketing" title="Biblioteca de mídia" subtitle="Takes brutos e projetos prontos guardados no Google Drive.">
       {canConfigure && <Button variant="outline" onClick={() => setConfigOpen(true)}>Configurar Drive</Button>}
-      <Button icon={uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />} onClick={() => input.current?.click()}>{uploading ? `${uploading}% enviado` : "Enviar arquivos"}</Button>
+      <Button disabled={configured !== true} icon={uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />} onClick={() => input.current?.click()}>{uploading ? `${uploading}% enviado` : "Enviar arquivos"}</Button>
       <input ref={input} className="hidden" type="file" multiple accept="image/*,video/*" onChange={(e) => void selectFiles(e.target.files)} />
     </PageHeader>
     <DriveConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} workspaceId={workspaceId} />
+    {configured === false && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink dark:text-paper"><span>Google Drive ainda não configurado. A estrutura da biblioteca já está disponível; os arquivos aparecerão após a conexão.</span><Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>Configurar Google Drive</Button></div>}
     <div className="flex w-fit rounded-lg border border-paper-200 p-1 dark:border-ink-700">
       {(["takes", "projects"] as const).map((value) => <button key={value} type="button" onClick={() => { setLibrary(value); setFolder(null) }} className={library === value ? "rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white" : "rounded-md px-3 py-1.5 text-sm text-paper-500"}>{value === "takes" ? "Takes" : "Projetos prontos"}</button>)}
     </div>
-    <div className="flex gap-2"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar arquivos…" /><Button variant="outline" icon={<Search className="size-3.5" />} onClick={() => void load()}>Buscar</Button>{folder && <Button variant="ghost" onClick={() => setFolder(null)}>← Raiz</Button>}</div>
-    {loading ? <div className="py-20 text-center text-paper-500">Carregando arquivos…</div> : visible.length === 0 ? <EmptyState title="Nenhum arquivo aqui" description="Envie mídia ou abra uma pasta de gravação." /> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="flex gap-2"><Input disabled={configured !== true} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar arquivos…" /><Button disabled={configured !== true} variant="outline" icon={<Search className="size-3.5" />} onClick={() => void load()}>Buscar</Button>{folder && <Button variant="ghost" onClick={() => setFolder(null)}>← Raiz</Button>}</div>
+    {loading ? <div className="py-20 text-center text-paper-500">Carregando arquivos…</div> : visible.length === 0 ? <EmptyState title={configured === false ? "Biblioteca pronta para conectar" : "Nenhum arquivo aqui"} description={configured === false ? "Configure o Google Drive para listar Takes e Projetos prontos nesta tela." : "Envie mídia ou abra uma pasta de gravação."} /> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {visible.map((file) => {
         const isFolder = file.mimeType === "application/vnd.google-apps.folder"
         return <article key={file.id} className="overflow-hidden rounded-lg border border-paper-200 bg-paper dark:border-ink-700 dark:bg-ink-900">
