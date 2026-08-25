@@ -27,7 +27,7 @@ from contexts.sales.interface.api.goal_serializers import (
 )
 from contexts.sales.interface.api.permissions import assert_workspace_member
 from contexts.sales.interface.api.views import _require_workspace, _uid
-from shared.interface.permissions import SpaceAccessPermission
+from shared.interface.permissions import SpaceAccessPermission, require_space
 
 
 def _uid_or_actor(request: Request) -> str:
@@ -90,6 +90,7 @@ class GoalDetailView(APIView):
         goal = GetGoal(DjangoGoalRepository(), DjangoWorkspaceAccess()).execute(
             goal_id=goal_id, actor_id=_uid_or_actor(request)
         )
+        require_space(workspace_id=str(goal.workspace_id), user_id=_uid_or_actor(request), space="comercial")
         return Response(_ser_goal(goal))
 
     @extend_schema(request=UpdateGoalSerializer, responses=None)
@@ -99,9 +100,15 @@ class GoalDetailView(APIView):
         goal = UpdateGoal(DjangoGoalRepository(), DjangoWorkspaceAccess()).execute(
             goal_id=goal_id, actor_id=_uid_or_actor(request), **serializer.validated_data
         )
+        require_space(workspace_id=str(goal.workspace_id), user_id=_uid_or_actor(request), space="comercial")
         return Response(_ser_goal(goal))
 
     def delete(self, request: Request, goal_id: str) -> Response:
+        # Fetch goal before delete to check space access
+        goal = GetGoal(DjangoGoalRepository(), DjangoWorkspaceAccess()).execute(
+            goal_id=goal_id, actor_id=_uid_or_actor(request)
+        )
+        require_space(workspace_id=str(goal.workspace_id), user_id=_uid_or_actor(request), space="comercial")
         DeleteGoal(DjangoGoalRepository(), DjangoWorkspaceAccess()).execute(
             goal_id=goal_id, actor_id=_uid_or_actor(request)
         )

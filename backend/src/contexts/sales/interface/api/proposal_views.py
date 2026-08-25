@@ -33,7 +33,7 @@ from contexts.sales.interface.api.proposal_serializers import (
     UpdateProposalSerializer,
 )
 from shared.domain.errors import NotFoundError, ValidationError
-from shared.interface.permissions import SpaceAccessPermission
+from shared.interface.permissions import SpaceAccessPermission, require_space
 
 
 def _repo() -> DjangoProposalRepository:
@@ -102,13 +102,15 @@ class ProposalDetailView(APIView):
 
     @extend_schema(responses=ProposalSerializer)
     def get(self, request: Request, proposal_id: str) -> Response:
-        _assert_proposal_access(str(proposal_id), str(request.user.id))
+        row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         proposal = GetProposal(proposals=_repo()).execute(proposal_id=str(proposal_id))
         return Response(ProposalSerializer(proposal).data)
 
     @extend_schema(request=UpdateProposalSerializer, responses=ProposalSerializer)
     def patch(self, request: Request, proposal_id: str) -> Response:
-        _assert_proposal_access(str(proposal_id), str(request.user.id))
+        row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         payload = UpdateProposalSerializer(data=request.data, partial=True)
         payload.is_valid(raise_exception=True)
         proposal = UpdateProposal(proposals=_repo()).execute(
@@ -117,7 +119,8 @@ class ProposalDetailView(APIView):
         return Response(ProposalSerializer(proposal).data)
 
     def delete(self, request: Request, proposal_id: str) -> Response:
-        _assert_proposal_access(str(proposal_id), str(request.user.id))
+        row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         DeleteProposal(proposals=_repo()).execute(proposal_id=str(proposal_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -130,6 +133,7 @@ class ProposalPdfView(APIView):
 
     def get(self, request: Request, proposal_id: str) -> HttpResponse:
         row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         pdf, filename = RenderProposalPdf(
             proposals=_repo(), renderer=ReportLabProposalRenderer()
         ).execute(proposal_id=str(proposal_id), workspace_name=_workspace_name(row))
@@ -148,6 +152,7 @@ class ProposalSendView(APIView):
     @extend_schema(request=SendProposalSerializer, responses=ProposalSerializer)
     def post(self, request: Request, proposal_id: str) -> Response:
         row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         payload = SendProposalSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
 
@@ -171,7 +176,8 @@ class ProposalAcceptView(APIView):
     required_space = "comercial"
 
     def post(self, request: Request, proposal_id: str) -> Response:
-        _assert_proposal_access(str(proposal_id), str(request.user.id))
+        row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         result = AcceptProposal(proposals=_repo(), deals=DealModel.objects).execute(
             proposal_id=str(proposal_id)
         )
@@ -192,7 +198,8 @@ class ProposalRejectView(APIView):
 
     @extend_schema(request=RejectProposalSerializer, responses=ProposalSerializer)
     def post(self, request: Request, proposal_id: str) -> Response:
-        _assert_proposal_access(str(proposal_id), str(request.user.id))
+        row = _assert_proposal_access(str(proposal_id), str(request.user.id))
+        require_space(workspace_id=str(row.workspace_id), user_id=str(request.user.id), space="comercial")
         payload = RejectProposalSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         proposal = RejectProposal(proposals=_repo()).execute(

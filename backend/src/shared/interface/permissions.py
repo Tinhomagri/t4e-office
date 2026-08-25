@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from contexts.copilot.infrastructure.django.repositories_impl import (
     DjangoWorkspaceAccess,
 )
+from shared.domain.errors import PermissionDeniedError
 
 
 class SpaceAccessPermission(BasePermission):
@@ -50,3 +51,17 @@ class SpaceAccessPermission(BasePermission):
             user_id=str(user.id),
             space=required_space,
         )
+
+
+def require_space(*, workspace_id: str, user_id: str, space: str) -> None:
+    """Levanta PermissionDeniedError se o usuário não tem o space liberado
+    nesse workspace. Para views que só descobrem o workspace_id depois de
+    buscar a entidade pelo ID (SpaceAccessPermission não serve aí, roda
+    antes do corpo da view).
+
+    Use em métodos de detalhe/mutação após a use case retornar a entidade.
+    """
+    if not DjangoWorkspaceAccess().can_view_space(
+        workspace_id=str(workspace_id), user_id=str(user_id), space=space
+    ):
+        raise PermissionDeniedError("Você não tem acesso a este módulo.")

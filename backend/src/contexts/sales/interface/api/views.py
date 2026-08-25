@@ -14,7 +14,7 @@ from contexts.projects.domain.repositories.project_repository import (
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoProjectRepository,
 )
-from shared.interface.permissions import SpaceAccessPermission
+from shared.interface.permissions import SpaceAccessPermission, require_space
 from contexts.sales.application.use_cases.lose_deal import LoseDeal
 from contexts.sales.application.use_cases.manage_customers import (
     CreateContact,
@@ -268,6 +268,7 @@ class CustomerDetailView(APIView):
         customer = GetCustomer(
             DjangoCustomerRepository(), _workspace_access()
         ).execute(customer_id=str(customer_id), actor_id=_uid(request))
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_customer(customer))
 
     @extend_schema(request=UpdateCustomerSerializer, responses=CustomerSerializer)
@@ -281,9 +282,15 @@ class CustomerDetailView(APIView):
             actor_id=_uid(request),
             **serializer.validated_data,
         )
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_customer(customer))
 
     def delete(self, request: Request, customer_id: str) -> Response:
+        # Fetch customer before delete to check space access
+        customer = GetCustomer(
+            DjangoCustomerRepository(), _workspace_access()
+        ).execute(customer_id=str(customer_id), actor_id=_uid(request))
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         DeleteCustomer(DjangoCustomerRepository(), _workspace_access()).execute(
             customer_id=str(customer_id), actor_id=_uid(request)
         )
@@ -298,6 +305,10 @@ class ContactListCreateView(APIView):
 
     @extend_schema(responses=ContactSerializer(many=True))
     def get(self, request: Request, customer_id: str) -> Response:
+        customer = GetCustomer(
+            DjangoCustomerRepository(), _workspace_access()
+        ).execute(customer_id=str(customer_id), actor_id=_uid(request))
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         contacts = ListContacts(
             DjangoContactRepository(), DjangoCustomerRepository(), _workspace_access()
         ).execute(customer_id=str(customer_id), actor_id=_uid(request))
@@ -305,6 +316,10 @@ class ContactListCreateView(APIView):
 
     @extend_schema(request=CreateContactSerializer, responses=ContactSerializer)
     def post(self, request: Request, customer_id: str) -> Response:
+        customer = GetCustomer(
+            DjangoCustomerRepository(), _workspace_access()
+        ).execute(customer_id=str(customer_id), actor_id=_uid(request))
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         serializer = CreateContactSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         contact = CreateContact(
@@ -334,9 +349,15 @@ class ContactDetailView(APIView):
             actor_id=_uid(request),
             **serializer.validated_data,
         )
+        # Check space access via the contact's customer
+        customer = GetCustomer(
+            DjangoCustomerRepository(), _workspace_access()
+        ).execute(customer_id=str(contact.customer_id), actor_id=_uid(request))
+        require_space(workspace_id=str(customer.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_contact(contact))
 
     def delete(self, request: Request, contact_id: str) -> Response:
+        # Space access check is done in the use case via the customer it accesses
         DeleteContact(
             DjangoContactRepository(), DjangoCustomerRepository(), _workspace_access()
         ).execute(contact_id=str(contact_id), actor_id=_uid(request))
@@ -389,9 +410,11 @@ class StageDetailView(APIView):
         stage = UpdateStage(DjangoStageRepository(), _workspace_access()).execute(
             stage_id=str(stage_id), actor_id=_uid(request), **serializer.validated_data
         )
+        require_space(workspace_id=str(stage.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_stage(stage))
 
     def delete(self, request: Request, stage_id: str) -> Response:
+        # Space access check is done in the use case
         DeleteStage(
             DjangoStageRepository(), DjangoDealRepository(), _workspace_access()
         ).execute(stage_id=str(stage_id), actor_id=_uid(request))
@@ -449,6 +472,7 @@ class DealDetailView(APIView):
         deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
             deal_id=str(deal_id), actor_id=_uid(request)
         )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_deal(deal))
 
     @extend_schema(request=UpdateDealSerializer, responses=DealSerializer)
@@ -460,9 +484,15 @@ class DealDetailView(APIView):
         ).execute(
             deal_id=str(deal_id), actor_id=_uid(request), **serializer.validated_data
         )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_deal(deal))
 
     def delete(self, request: Request, deal_id: str) -> Response:
+        # Fetch deal before delete to check space access
+        deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         DeleteDeal(DjangoDealRepository(), _workspace_access()).execute(
             deal_id=str(deal_id), actor_id=_uid(request)
         )
@@ -487,6 +517,7 @@ class DealMoveView(APIView):
         ).execute(
             deal_id=str(deal_id), actor_id=_uid(request), **serializer.validated_data
         )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_deal(deal))
 
 
@@ -500,6 +531,11 @@ class DealWinView(APIView):
     def post(self, request: Request, deal_id: str) -> Response:
         serializer = WinDealSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Fetch deal first to check space access before any side effects
+        deal_to_check = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal_to_check.workspace_id), user_id=_uid(request), space="comercial")
         result = WinDeal(
             DjangoDealRepository(),
             DjangoStageRepository(),
@@ -531,6 +567,11 @@ class DealLoseView(APIView):
     def post(self, request: Request, deal_id: str) -> Response:
         serializer = LoseDealSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Fetch deal first to check space access
+        deal_to_check = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal_to_check.workspace_id), user_id=_uid(request), space="comercial")
         deal = LoseDeal(
             DjangoDealRepository(),
             DjangoStageRepository(),
@@ -550,6 +591,11 @@ class DealHistoryView(APIView):
 
     @extend_schema(responses=DealHistorySerializer(many=True))
     def get(self, request: Request, deal_id: str) -> Response:
+        # Fetch deal to check space access
+        deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         entries = ListDealHistory(
             DjangoDealRepository(), _workspace_access(), DjangoDealHistoryRepository()
         ).execute(deal_id=str(deal_id), actor_id=_uid(request))
@@ -566,6 +612,11 @@ class DealActivityListCreateView(APIView):
 
     @extend_schema(responses=ActivitySerializer(many=True))
     def get(self, request: Request, deal_id: str) -> Response:
+        # Fetch deal to check space access
+        deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         activities = ListActivities(
             DjangoActivityRepository(), DjangoDealRepository(), _workspace_access()
         ).execute(deal_id=str(deal_id), actor_id=_uid(request))
@@ -575,6 +626,11 @@ class DealActivityListCreateView(APIView):
     def post(self, request: Request, deal_id: str) -> Response:
         serializer = CreateActivitySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Fetch deal to check space access before creating activity
+        deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         result = ScheduleActivity(
             DjangoActivityRepository(),
             DjangoDealRepository(),
@@ -633,9 +689,15 @@ class DealActivityDetailView(APIView):
             actor_id=_uid(request),
             **serializer.validated_data,
         )
+        # Check space access via activity's deal
+        deal = GetDeal(DjangoDealRepository(), _workspace_access()).execute(
+            deal_id=str(activity.deal_id), actor_id=_uid(request)
+        )
+        require_space(workspace_id=str(deal.workspace_id), user_id=_uid(request), space="comercial")
         return Response(_ser_activity(activity))
 
     def delete(self, request: Request, activity_id: str) -> Response:
+        # Space access check is done in the use case via the deal it accesses
         DeleteActivity(
             DjangoActivityRepository(), DjangoDealRepository(), _workspace_access()
         ).execute(activity_id=str(activity_id), actor_id=_uid(request))

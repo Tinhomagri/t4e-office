@@ -38,7 +38,7 @@ from contexts.sales.interface.api.lead_serializers import (
     UpdateLeadSerializer,
 )
 from shared.domain.errors import ValidationError
-from shared.interface.permissions import SpaceAccessPermission
+from shared.interface.permissions import SpaceAccessPermission, require_space
 
 
 def _repo() -> DjangoLeadRepository:
@@ -119,6 +119,7 @@ class LeadDetailView(APIView):
     @extend_schema(responses=LeadSerializer)
     def get(self, request: Request, lead_id: str) -> Response:
         lead = GetLead(_repo(), _access()).execute(lead_id=str(lead_id), actor_id=_uid(request))
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(LeadSerializer(lead).data)
 
     @extend_schema(request=UpdateLeadSerializer, responses=LeadSerializer)
@@ -128,9 +129,13 @@ class LeadDetailView(APIView):
         lead = UpdateLead(_repo(), _access()).execute(
             lead_id=str(lead_id), actor_id=_uid(request), **payload.validated_data
         )
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(LeadSerializer(lead).data)
 
     def delete(self, request: Request, lead_id: str) -> Response:
+        # Fetch lead before delete to check space access
+        lead = GetLead(_repo(), _access()).execute(lead_id=str(lead_id), actor_id=_uid(request))
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         DeleteLead(_repo(), _access()).execute(lead_id=str(lead_id), actor_id=_uid(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -146,6 +151,7 @@ class LeadContactedView(APIView):
         lead = MarkLeadContacted(_repo(), _access()).execute(
             lead_id=str(lead_id), actor_id=_uid(request)
         )
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(LeadSerializer(lead).data)
 
 
@@ -162,6 +168,7 @@ class LeadQualifyView(APIView):
         lead = QualifyLead(_repo(), _access()).execute(
             lead_id=str(lead_id), actor_id=_uid(request), score=payload.validated_data["score"]
         )
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(LeadSerializer(lead).data)
 
 
@@ -178,6 +185,7 @@ class LeadDisqualifyView(APIView):
         lead = DisqualifyLead(_repo(), _access()).execute(
             lead_id=str(lead_id), actor_id=_uid(request), reason=payload.validated_data["reason"]
         )
+        require_space(workspace_id=str(lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(LeadSerializer(lead).data)
 
 
@@ -200,6 +208,7 @@ class LeadConvertView(APIView):
             deal_title=payload.validated_data.get("deal_title", ""),
             amount=payload.validated_data.get("amount") or "0",
         )
+        require_space(workspace_id=str(result.lead.workspace_id), user_id=_uid(request), space="comercial")
         return Response(
             {
                 "lead": LeadSerializer(result.lead).data,

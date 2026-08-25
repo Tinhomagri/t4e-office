@@ -143,3 +143,82 @@ def test_pipeline_metrics_restricted_member_denied(scenario):
         "/api/sales/pipeline/metrics/", {"workspace_id": str(scenario["workspace"].id)}
     )
     assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.data}"
+
+
+# Tests for detail views with path parameters - the real security gap fix
+def test_lead_detail_comercial_member_can_access(scenario):
+    """Member com "comercial" space pode acessar lead detail por ID."""
+    from datetime import timedelta
+    from django.utils import timezone
+
+    # Create a lead with required fields
+    first_contact_due = timezone.now() + timedelta(hours=24)
+    lead = LeadModel.objects.create(
+        workspace=scenario["workspace"],
+        name="Test Lead",
+        email="test@example.com",
+        first_contact_due_at=first_contact_due,
+    )
+    resp = scenario["comercial_client"].get(f"/api/sales/leads/{lead.id}/")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.data}"
+
+
+def test_lead_detail_restricted_member_denied_gap_fixed(scenario):
+    """Member sem "comercial" space recebe 403 ao tentar lead detail - GAP FIXED."""
+    from datetime import timedelta
+    from django.utils import timezone
+
+    # This was the security gap: a member with allowed_spaces=["boards"] could
+    # access a specific lead by ID even though they shouldn't have comercial access.
+    # With require_space in the view, this is now blocked.
+    first_contact_due = timezone.now() + timedelta(hours=24)
+    lead = LeadModel.objects.create(
+        workspace=scenario["workspace"],
+        name="Test Lead",
+        email="test@example.com",
+        first_contact_due_at=first_contact_due,
+    )
+    resp = scenario["restricted_client"].get(f"/api/sales/leads/{lead.id}/")
+    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.data}"
+
+
+def test_deal_win_comercial_member_can_access(scenario):
+    """Member com "comercial" space pode marcar deal como ganho."""
+    from contexts.sales.infrastructure.django.models import DealModel, PipelineStageModel, CustomerModel
+
+    customer = CustomerModel.objects.create(workspace=scenario["workspace"], name="Test Customer")
+    stage = PipelineStageModel.objects.filter(workspace=scenario["workspace"]).first()
+    deal = DealModel.objects.create(
+        workspace=scenario["workspace"],
+        customer=customer,
+        stage=stage,
+        title="Test Deal",
+        amount=1000,
+    )
+
+    payload = {"create_delivery_project": False}
+    resp = scenario["comercial_client"].post(
+        f"/api/sales/deals/{deal.id}/win/", payload, format="json"
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.data}"
+
+
+def test_deal_win_restricted_member_denied_gap_fixed(scenario):
+    """Member sem "comercial" space recebe 403 ao marcar deal como ganho - GAP FIXED."""
+    from contexts.sales.infrastructure.django.models import DealModel, PipelineStageModel, CustomerModel
+
+    customer = CustomerModel.objects.create(workspace=scenario["workspace"], name="Test Customer")
+    stage = PipelineStageModel.objects.filter(workspace=scenario["workspace"]).first()
+    deal = DealModel.objects.create(
+        workspace=scenario["workspace"],
+        customer=customer,
+        stage=stage,
+        title="Test Deal",
+        amount=1000,
+    )
+
+    payload = {"create_delivery_project": False}
+    resp = scenario["restricted_client"].post(
+        f"/api/sales/deals/{deal.id}/win/", payload, format="json"
+    )
+    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.data}"
