@@ -71,3 +71,19 @@ class DjangoWorkspaceAccess(WorkspaceAccess):
 
     def is_admin(self, *, workspace_id: str, user_id: str) -> bool:
         return self.role(workspace_id=workspace_id, user_id=user_id) in ("owner", "admin")
+
+    def can_view_space(self, *, workspace_id: str, user_id: str, space: str) -> bool:
+        """Owner/Admin sempre veem tudo. Member só vê o que allowed_spaces libera
+        (null = sem restrição, também vê tudo).
+        """
+        row = MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id=user_id
+        ).values_list("role", "allowed_spaces").first()
+        if row is None:
+            return False
+        role, allowed_spaces = row
+        if role in ("owner", "admin"):
+            return True
+        if allowed_spaces is None:
+            return True
+        return space in allowed_spaces

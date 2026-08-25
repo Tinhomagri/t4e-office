@@ -12,6 +12,9 @@ from contexts.identity.application.use_cases.remove_member import RemoveMember
 from contexts.identity.application.use_cases.revoke_invitation import RevokeInvitation
 from contexts.identity.application.use_cases.send_invitation import SendInvitation
 from contexts.identity.application.use_cases.update_member_role import UpdateMemberRole
+from contexts.identity.application.use_cases.update_member_spaces import (
+    UpdateMemberSpaces,
+)
 from contexts.identity.infrastructure.django.email_sender_impl import DjangoEmailSender
 from contexts.identity.infrastructure.django.models import (
     InvitationModel,
@@ -53,7 +56,14 @@ class MembersView(APIView):
         )
         data = MemberSerializer(
             [
-                {"user_id": m.user_id, "name": m.name, "email": m.email, "role": m.role, "avatar_url": m.avatar_url}
+                {
+                    "user_id": m.user_id,
+                    "name": m.name,
+                    "email": m.email,
+                    "role": m.role,
+                    "avatar_url": m.avatar_url,
+                    "allowed_spaces": m.allowed_spaces,
+                }
                 for m in members
             ],
             many=True,
@@ -69,32 +79,49 @@ class MemberDetailView(APIView):
     def patch(self, request: Request, workspace_id: str, user_id: str) -> Response:
         serializer = UpdateMemberRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        new_role = serializer.validated_data["role"]
 
         repo = DjangoMembershipRepository()
+        response_body = {"user_id": str(user_id)}
 
-        # Captura papel atual para o audit log
-        old_role_obj = repo.role_of(workspace_id=str(workspace_id), user_id=str(user_id))
-        old_role_str = old_role_obj.value if old_role_obj else ""
+        if "role" in request.data:
+            new_role = serializer.validated_data["role"]
 
-        UpdateMemberRole(repo).execute(
-            workspace_id=str(workspace_id),
-            actor_id=str(request.user.id),
-            target_user_id=str(user_id),
-            new_role=new_role,
-        )
+            # Captura papel atual para o audit log
+            old_role_obj = repo.role_of(
+                workspace_id=str(workspace_id), user_id=str(user_id)
+            )
+            old_role_str = old_role_obj.value if old_role_obj else ""
 
-        # Audit trail
-        RoleAuditLog.objects.create(
-            workspace_id=str(workspace_id),
-            actor_id=str(request.user.id),
-            target_user_id=str(user_id),
-            action="role_changed",
-            old_role=old_role_str,
-            new_role=new_role,
-        )
+            UpdateMemberRole(repo).execute(
+                workspace_id=str(workspace_id),
+                actor_id=str(request.user.id),
+                target_user_id=str(user_id),
+                new_role=new_role,
+            )
 
-        return Response({"user_id": str(user_id), "role": new_role})
+            # Audit trail
+            RoleAuditLog.objects.create(
+                workspace_id=str(workspace_id),
+                actor_id=str(request.user.id),
+                target_user_id=str(user_id),
+                action="role_changed",
+                old_role=old_role_str,
+                new_role=new_role,
+            )
+            response_body["role"] = new_role
+
+        if "allowed_spaces" in request.data:
+            allowed_spaces = serializer.validated_data.get("allowed_spaces")
+
+            UpdateMemberSpaces(repo).execute(
+                workspace_id=str(workspace_id),
+                actor_id=str(request.user.id),
+                target_user_id=str(user_id),
+                allowed_spaces=allowed_spaces,
+            )
+            response_body["allowed_spaces"] = allowed_spaces
+
+        return Response(response_body)
 
     def delete(self, request: Request, workspace_id: str, user_id: str) -> Response:
         repo = DjangoMembershipRepository()

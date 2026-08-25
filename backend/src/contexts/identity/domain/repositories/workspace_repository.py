@@ -35,6 +35,7 @@ class MemberView:
     email: str
     role: str
     avatar_url: str | None = None
+    allowed_spaces: list[str] | None = None
 
 
 class MembershipRepository(ABC):
@@ -59,6 +60,12 @@ class MembershipRepository(ABC):
     @abstractmethod
     def update_role(self, *, workspace_id: str, user_id: str, new_role: Role) -> None:
         """Altera o papel de um membro no workspace."""
+
+    @abstractmethod
+    def update_allowed_spaces(
+        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str] | None
+    ) -> None:
+        """Altera os spaces que um membro pode ver (None = sem restrição)."""
 
     @abstractmethod
     def remove(self, *, workspace_id: str, user_id: str) -> None:

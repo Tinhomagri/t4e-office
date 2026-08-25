@@ -118,6 +118,7 @@ class DjangoMembershipRepository(MembershipRepository):
                 email=r.user.email,
                 role=r.role,
                 avatar_url=r.user.avatar_image or None,
+                allowed_spaces=r.allowed_spaces,
             )
             for r in rows
         ]
@@ -126,6 +127,13 @@ class DjangoMembershipRepository(MembershipRepository):
         MembershipModel.objects.filter(
             workspace_id=workspace_id, user_id=user_id
         ).update(role=new_role.value)
+
+    def update_allowed_spaces(
+        self, *, workspace_id: str, user_id: str, allowed_spaces: list[str] | None
+    ) -> None:
+        MembershipModel.objects.filter(
+            workspace_id=workspace_id, user_id=user_id
+        ).update(allowed_spaces=allowed_spaces)
 
     def remove(self, *, workspace_id: str, user_id: str) -> None:
         MembershipModel.objects.filter(

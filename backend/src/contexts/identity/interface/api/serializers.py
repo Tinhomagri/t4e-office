@@ -64,6 +64,9 @@ class MemberSerializer(serializers.Serializer):
     email = serializers.EmailField()
     role = serializers.CharField()
     avatar_url = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    allowed_spaces = serializers.ListField(
+        child=serializers.CharField(), allow_null=True, required=False
+    )
 
 
 _ROLES = ["admin", "member"]
@@ -92,12 +95,30 @@ class AcceptInvitationSerializer(serializers.Serializer):
 
 
 class UpdateMemberRoleSerializer(serializers.Serializer):
-    """Payload de alteração de papel de membro.
+    """Payload de alteração de papel e/ou spaces de um membro.
 
     Owner não pode ser atribuído via PATCH — é papel de criação de workspace.
+    `role` e `allowed_spaces` são ambos opcionais, mas ao menos um deve vir
+    presente no payload (validado em `validate`, pois não dá pra expressar
+    "presença" com `required` em campos individualmente opcionais).
+    `allowed_spaces=null` explícito é uma entrada válida (remove restrição);
+    por isso o campo aceita `allow_null` e distinguimos "ausente" checando
+    `"allowed_spaces" in self.initial_data`.
     """
 
-    role = serializers.ChoiceField(choices=["admin", "member"])
+    role = serializers.ChoiceField(choices=["admin", "member"], required=False)
+    allowed_spaces = serializers.ListField(
+        child=serializers.ChoiceField(choices=["boards", "marketing", "comercial"]),
+        allow_null=True,
+        required=False,
+    )
+
+    def validate(self, attrs):
+        if "role" not in self.initial_data and "allowed_spaces" not in self.initial_data:
+            raise serializers.ValidationError(
+                "Informe ao menos um campo: role ou allowed_spaces."
+            )
+        return attrs
 
 
 class AuditLogSerializer(serializers.Serializer):

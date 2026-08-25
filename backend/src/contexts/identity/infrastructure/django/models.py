@@ -166,6 +166,12 @@ class MembershipModel(models.Model):
         UserModel, on_delete=models.CASCADE, related_name="memberships"
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="member")
+    allowed_spaces = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Spaces que este membro pode ver (null = todos, sem restrição).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
