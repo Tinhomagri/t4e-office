@@ -1093,15 +1093,15 @@ function ComposerModal({
         </>
       }
     >
-      {accounts.length === 0 ? (
-        <p className="text-[13px] text-paper-500">
-          Nenhuma conta conectada. Conecte um canal em Redes sociais antes de agendar.
-        </p>
-      ) : (
-        <div className="space-y-3">
+      <div className="space-y-3">
+          {accounts.length === 0 && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink dark:text-paper">
+              Nenhuma conta conectada ainda. Você pode visualizar e preparar o post; conecte um canal em Redes sociais para liberar o agendamento.
+            </div>
+          )}
           <Field label="Conta">
-            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => (
+            <Select value={accountId} disabled={accounts.length === 0} onChange={(e) => setAccountId(e.target.value)}>
+              {accounts.length === 0 ? <option value="">Conecte uma rede social para escolher o canal</option> : accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {`${CHANNEL_LABEL[a.channel] ?? a.channel} · ${a.account_name}`}
                 </option>
@@ -1137,8 +1137,7 @@ function ComposerModal({
               onChange={(e) => setMediaUrl(e.target.value)}
             />
           </Field>
-        </div>
-      )}
+      </div>
     </Modal>
   )
 }
