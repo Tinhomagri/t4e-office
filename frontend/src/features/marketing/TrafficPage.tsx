@@ -307,7 +307,11 @@ function AdPreviewModal({ adId, onClose }: { adId: string; onClose: () => void }
         <iframe
           title="Prévia do anúncio"
           srcDoc={html}
-          sandbox="allow-scripts allow-same-origin"
+          // Sem allow-same-origin de propósito: o HTML da prévia vem da Meta
+          // (terceiro), e allow-same-origin + allow-scripts + srcDoc deixaria
+          // esse script rodar com acesso à origem do app (localStorage com o
+          // token JWT incluso) — a prévia teria que quebrar, nunca ganhar acesso.
+          sandbox="allow-scripts"
           className="h-96 w-full rounded-lg border border-paper-200 dark:border-ink-700"
         />
       )}
