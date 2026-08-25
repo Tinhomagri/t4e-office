@@ -70,7 +70,6 @@ import {
   Kbd,
   Modal,
   PageHeader,
-  Select,
   Textarea,
   cx,
 } from "@/shared/ui/primitives"
@@ -1025,7 +1024,7 @@ function ComposerModal({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [accountId, setAccountId] = useState("")
+  const [accountIds, setAccountIds] = useState<string[]>([])
   const [content, setContent] = useState("")
   const [time, setTime] = useState("09:00")
   const [mediaUrl, setMediaUrl] = useState("")
@@ -1033,28 +1032,27 @@ function ComposerModal({
 
   useEffect(() => {
     if (!open) return
-    setAccountId(accounts[0]?.id ?? "")
+    setAccountIds([])
     setContent("")
     setMediaUrl("")
     setTime("09:00")
   }, [open, accounts])
 
-  const account = accounts.find((a) => a.id === accountId)
-  const limit = account ? (CHANNEL_LIMIT[account.channel] ?? 2200) : 2200
+  const limit = accountIds.reduce(
+    (current, id) => Math.min(current, CHANNEL_LIMIT[accounts.find((a) => a.id === id)?.channel ?? ""] ?? 2200),
+    2200,
+  )
   const over = content.length > limit
 
   const submit = async () => {
-    if (!workspaceId || !accountId || !day) return
+    if (!workspaceId || accountIds.length === 0 || !day) return
     setSaving(true)
     try {
-      await schedulePost({
-        workspaceId,
-        accountId,
-        content,
-        scheduledAt: new Date(`${day}T${time}`).toISOString(),
-        mediaUrl,
-      })
-      toast.success("Post agendado.")
+      await Promise.all(accountIds.map((accountId) => schedulePost({
+        workspaceId, accountId, content,
+        scheduledAt: new Date(`${day}T${time}`).toISOString(), mediaUrl,
+      })))
+      toast.success(accountIds.length === 1 ? "Post agendado." : `Post agendado em ${accountIds.length} canais.`)
       onSaved()
     } catch {
       toast.error("Falha ao agendar o post.")
@@ -1085,7 +1083,7 @@ function ComposerModal({
           <Button
             size="sm"
             loading={saving}
-            disabled={!accountId || !content.trim() || over}
+            disabled={accountIds.length === 0 || !content.trim() || over}
             onClick={() => void submit()}
           >
             Agendar
@@ -1099,14 +1097,18 @@ function ComposerModal({
               Nenhuma conta conectada ainda. Você pode visualizar e preparar o post; conecte um canal em Redes sociais para liberar o agendamento.
             </div>
           )}
-          <Field label="Conta">
-            <Select value={accountId} disabled={accounts.length === 0} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.length === 0 ? <option value="">Conecte uma rede social para escolher o canal</option> : accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {`${CHANNEL_LABEL[a.channel] ?? a.channel} · ${a.account_name}`}
-                </option>
-              ))}
-            </Select>
+          <Field label="Onde publicar" hint="Marque uma ou mais contas.">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {accounts.map((item) => {
+                const selected = accountIds.includes(item.id)
+                return <button key={item.id} type="button" aria-pressed={selected} onClick={() => setAccountIds((current) => selected ? current.filter((id) => id !== item.id) : [...current, item.id])} className={cx("flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors", selected ? "border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-950/40 dark:text-brand-200" : "border-paper-200 text-ink hover:bg-paper-50 dark:border-ink-700 dark:text-paper dark:hover:bg-ink-800")}>
+                  <span className={cx("size-2 rounded-full", CHANNEL_COLOR[item.channel] ?? "bg-paper-400")} />
+                  <span className="min-w-0 flex-1 truncate">{item.account_name}</span>
+                  <span className="text-[10px] uppercase tracking-wide opacity-65">{CHANNEL_LABEL[item.channel] ?? item.channel}</span>
+                </button>
+              })}
+              {accounts.length === 0 && ["Instagram", "Facebook", "LinkedIn", "TikTok"].map((channel) => <button key={channel} type="button" disabled className="flex cursor-not-allowed items-center gap-2 rounded-lg border border-dashed border-paper-200 px-3 py-2.5 text-left text-sm text-paper-500 dark:border-ink-700"><span className="size-2 rounded-full bg-paper-400" />{channel}<span className="ml-auto text-[10px]">não conectado</span></button>)}
+            </div>
           </Field>
 
           <Field label="Horário">
