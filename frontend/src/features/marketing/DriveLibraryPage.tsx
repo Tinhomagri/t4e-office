@@ -72,7 +72,11 @@ export function DriveLibraryPage() {
 
   if (!workspaceId) return <EmptyState title="Selecione um workspace" description="A biblioteca é separada por workspace." />
   if (configured === null) return <div className="py-20 text-center text-paper-500">Verificando a configuração do Google Drive…</div>
-  if (configured === false) return <><EmptyState title="Google Drive ainda não configurado" description="O dono do workspace precisa informar as credenciais e as duas pastas raiz." action={canConfigure ? <Button onClick={() => setConfigOpen(true)}>Configurar Google Drive</Button> : undefined} /><DriveConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} workspaceId={workspaceId} /></>
+  // A API antiga não trazia `can_configure`. Mantemos o botão de abertura
+  // visível nesta tela de estado vazio para não esconder a configuração do
+  // dono durante um deploy gradual; o backend continua sendo a autoridade e
+  // recusa salvar/testar para admin ou membro.
+  if (configured === false) return <><EmptyState title="Google Drive ainda não configurado" description="O dono do workspace precisa informar as credenciais e as duas pastas raiz." action={<Button onClick={() => setConfigOpen(true)}>Configurar Google Drive</Button>} /><DriveConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} workspaceId={workspaceId} /></>
 
   return <div className="mx-auto flex max-w-7xl flex-col gap-4 p-4 sm:p-6">
     <PageHeader eyebrow="Marketing" title="Biblioteca de mídia" subtitle="Takes brutos e projetos prontos guardados no Google Drive.">
