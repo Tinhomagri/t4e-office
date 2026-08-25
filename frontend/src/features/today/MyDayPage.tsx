@@ -290,23 +290,32 @@ export function MyDayPage() {
   // um space desde a última visita) — só corrige depois que os membros
   // terminam de carregar, senão a aba pisca pro fallback a cada F5 antes de
   // sabermos o acesso real.
+  // "Tudo" só faz sentido pra quem tem mais de um space liberado — é a opção
+  // de mesclar. Com um só, Tudo seria idêntico a esse space, mas sem o filtro
+  // dos outros contextos (Boards sem gate ainda — ver contexts/projects), e
+  // acabava vazando dado/erro de permissão de espaço que a pessoa não tem.
+  // Com zero (acesso vazio de verdade), mantém Tudo como rede de segurança —
+  // melhor que uma tela sem aba nenhuma.
+  const showTudo = mySpaceIds.length !== 1
+
   useEffect(() => {
     if (membersQuery.isLoading) return
-    const allowed: MyDayTab[] = [...mySpaceIds, "tudo"]
+    const allowed: MyDayTab[] = showTudo ? [...mySpaceIds, "tudo"] : [...mySpaceIds]
     if (!allowed.includes(tab)) setTab(defaultTab)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [membersQuery.isLoading, mySpaceIds, defaultTab])
+  }, [membersQuery.isLoading, mySpaceIds, defaultTab, showTudo])
 
   const tabOptions = useMemo(() => {
     const spaceOpts = SPACES.filter((s) => mySpaceIds.includes(s.id)).map((s) => {
       const Icon = TAB_ICON[s.id]
       return { value: s.id as MyDayTab, label: s.label, icon: <Icon className="size-3.5" /> }
     })
+    if (!showTudo) return spaceOpts
     return [
       ...spaceOpts,
       { value: "tudo" as MyDayTab, label: "Tudo", icon: <LayoutGrid className="size-3.5" /> },
     ]
-  }, [mySpaceIds])
+  }, [mySpaceIds, showTudo])
 
   return (
     <div className="mx-auto w-full max-w-[1600px] pb-10">
