@@ -100,18 +100,12 @@ PROVIDERS: dict[str, ProviderConfig] = {
 }
 
 
-def _env_credentials(provider: str) -> tuple[str, str]:
-    prefix = f"SOCIAL_{provider.upper()}"
-    cid = getattr(settings, f"{prefix}_CLIENT_ID", "")
-    csecret = getattr(settings, f"{prefix}_CLIENT_SECRET", "")
-    return cid, csecret
-
-
 def credentials(provider: str, workspace_id: str | None = None) -> tuple[str, str]:
     """(client_id, client_secret) do provider.
 
-    Prioriza as credenciais salvas no banco para o workspace (configuradas no
-    frontend pelo admin); se não houver, cai no `.env` global.
+    As credenciais pertencem ao workspace e são cifradas no banco. Não há
+    fallback global: uma chave em `.env` tornaria acidentalmente possível que
+    um workspace usasse o app OAuth de outro cliente.
     """
     if workspace_id:
         # Import local evita ciclo de import na carga do app.
@@ -129,7 +123,7 @@ def credentials(provider: str, workspace_id: str | None = None) -> tuple[str, st
         )
         if cred and cred.client_id and cred.client_secret_encrypted:
             return cred.client_id, decrypt(cred.client_secret_encrypted)
-    return _env_credentials(provider)
+    return "", ""
 
 
 def is_configured(provider: str, workspace_id: str | None = None) -> bool:

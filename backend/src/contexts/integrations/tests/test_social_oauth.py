@@ -2,6 +2,7 @@
 import base64
 import hashlib
 from urllib.parse import parse_qs, urlparse
+from unittest.mock import patch
 
 from contexts.integrations.infrastructure import social_oauth
 
@@ -23,10 +24,9 @@ def test_pkce_pair_is_valid_s256():
 
 
 def test_build_authorize_url_x_includes_pkce(settings):
-    settings.SOCIAL_X_CLIENT_ID = "cid"
-    settings.SOCIAL_X_CLIENT_SECRET = "sec"
     settings.SOCIAL_OAUTH_REDIRECT_BASE = "http://localhost:8000"
-    url = social_oauth.build_authorize_url("x", "st123", "chal")
+    with patch.object(social_oauth, "credentials", return_value=("cid", "sec")):
+        url = social_oauth.build_authorize_url("x", "st123", "chal", "workspace")
     parsed = urlparse(url)
     q = parse_qs(parsed.query)
     assert parsed.netloc == "x.com"
@@ -38,19 +38,17 @@ def test_build_authorize_url_x_includes_pkce(settings):
     ]
 
 
-def test_build_authorize_url_tiktok_uses_client_key(settings):
-    settings.SOCIAL_TIKTOK_CLIENT_ID = "ck"
-    settings.SOCIAL_TIKTOK_CLIENT_SECRET = "cs"
-    url = social_oauth.build_authorize_url("tiktok", "st", "")
+def test_build_authorize_url_tiktok_uses_client_key():
+    with patch.object(social_oauth, "credentials", return_value=("ck", "cs")):
+        url = social_oauth.build_authorize_url("tiktok", "st", "", "workspace")
     q = parse_qs(urlparse(url).query)
     assert q["client_key"] == ["ck"]
     assert "client_id" not in q
     assert q["scope"] == ["user.info.basic,video.publish"]
 
 
-def test_is_configured(settings):
-    settings.SOCIAL_LINKEDIN_CLIENT_ID = "a"
-    settings.SOCIAL_LINKEDIN_CLIENT_SECRET = "b"
-    assert social_oauth.is_configured("linkedin")
-    settings.SOCIAL_INSTAGRAM_CLIENT_ID = ""
-    assert not social_oauth.is_configured("instagram")
+def test_is_configured_is_workspace_scoped():
+    with patch.object(social_oauth, "credentials", return_value=("a", "b")):
+        assert social_oauth.is_configured("linkedin", "workspace")
+    with patch.object(social_oauth, "credentials", return_value=("", "")):
+        assert not social_oauth.is_configured("instagram", "workspace")

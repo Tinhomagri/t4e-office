@@ -1,4 +1,4 @@
-// Configuração dos apps OAuth por workspace: o admin cola Client ID/Secret de
+// Configuração dos apps OAuth por workspace: o dono cola Client ID/Secret de
 // cada plataforma (Meta, LinkedIn, X, TikTok, Google) e o backend passa a usar
 // essas credenciais no fluxo OAuth. O secret é cifrado no banco; nunca volta
 // para o frontend (só o flag has_secret). A Redirect URI mostrada deve ser
@@ -59,7 +59,7 @@ export function SocialAppConfigDialog({
           ),
         )
       })
-      .catch(() => toast.error("Falha ao carregar credenciais (apenas admin)."))
+      .catch(() => toast.error("Falha ao carregar credenciais (apenas o dono)."))
   }
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export function SocialAppConfigDialog({
       load()
       onSaved?.()
     } catch {
-      toast.error("Falha ao salvar (apenas admin).")
+      toast.error("Falha ao salvar (apenas o dono).")
     } finally {
       setBusy(null)
     }
@@ -139,15 +139,11 @@ export function SocialAppConfigDialog({
                   className={
                     c?.source === "workspace"
                       ? "text-[10px] text-success"
-                      : c?.source === "env"
-                        ? "text-[10px] text-paper-400"
-                        : "text-[10px] text-warning"
+                      : "text-[10px] text-warning"
                   }
                 >
                   {c?.source === "workspace"
                     ? "configurado"
-                    : c?.source === "env"
-                      ? "via .env"
                       : "não configurado"}
                 </span>
               </div>

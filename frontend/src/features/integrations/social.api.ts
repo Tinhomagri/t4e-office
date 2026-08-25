@@ -105,12 +105,12 @@ export async function getOauthProviders(
   return data.providers
 }
 
-// ── Credenciais dos apps OAuth (admin configura pelo frontend) ──────────────
+// ── Credenciais dos apps OAuth (dono configura pelo frontend) ───────────────
 export interface OauthCredential {
   client_id: string
   has_secret: boolean
   configured: boolean
-  source: "workspace" | "env" | "none"
+  source: "workspace" | "none"
   redirect_uri: string
 }
 

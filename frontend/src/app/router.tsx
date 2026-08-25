@@ -17,6 +17,7 @@ import { LoginPage } from "@/features/auth/LoginPage"
 import { EditorialCalendarPage } from "@/features/marketing/EditorialCalendarPage"
 import { PublishQueuePage } from "@/features/marketing/PublishQueuePage"
 import { SocialAccountsPage } from "@/features/marketing/SocialAccountsPage"
+import { DriveLibraryPage } from "@/features/marketing/DriveLibraryPage"
 import { SocialAnalyticsPage } from "@/features/marketing/SocialAnalyticsPage"
 import { TrafficPage } from "@/features/marketing/TrafficPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
@@ -149,6 +150,7 @@ export const appRoutes: RouteObject[] = [
   { path: "marketing/analytics", element: <SocialAnalyticsPage /> },
   { path: "marketing/trafego", element: <TrafficPage /> },
   { path: "marketing/redes", element: <SocialAccountsPage /> },
+  { path: "marketing/biblioteca", element: <DriveLibraryPage /> },
   { path: "avatar", element: <AvatarLabPage /> },
   { path: "copilot", element: <CopilotPage /> },
 ]

@@ -275,7 +275,7 @@ class SocialAccountsView(APIView):
         if not access.is_member(workspace_id=workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
         accounts = SocialAccountModel.objects.filter(workspace_id=workspace_id)
-        can_edit = access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id))
+        can_edit = access.role(workspace_id=workspace_id, user_id=str(request.user.id)) == "owner"
         return Response(
             {"accounts": [self._serialize(a) for a in accounts], "can_edit": can_edit}
         )
@@ -285,8 +285,8 @@ class SocialAccountsView(APIView):
 
         workspace_id = self._workspace_id(request)
         access = DjangoWorkspaceAccess()
-        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
-            raise PermissionDeniedError("Apenas administradores podem conectar contas.")
+        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
+            raise PermissionDeniedError("Apenas o dono pode conectar contas.")
         serializer = SocialConnectSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         v = serializer.validated_data
@@ -305,8 +305,8 @@ class SocialAccountsView(APIView):
 
         workspace_id = self._workspace_id(request)
         access = DjangoWorkspaceAccess()
-        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
-            raise PermissionDeniedError("Apenas administradores podem desconectar contas.")
+        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
+            raise PermissionDeniedError("Apenas o dono pode desconectar contas.")
         channel = (request.query_params.get("channel") or "").lower().strip()
         SocialAccountModel.objects.filter(
             workspace_id=workspace_id, channel=channel

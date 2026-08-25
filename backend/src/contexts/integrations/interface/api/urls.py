@@ -6,6 +6,17 @@ from contexts.integrations.interface.api.insight_views import (
     AnalyticsTimeseriesView,
     QueueStatsView,
 )
+from contexts.integrations.interface.api.drive_config_views import (
+    DriveConfigTestView,
+    DriveConfigView,
+)
+from contexts.integrations.interface.api.drive_library_views import (
+    DriveDaysView,
+    DriveFileContentView,
+    DriveProjectsView,
+    DriveTakesView,
+    DriveUploadSessionView,
+)
 from contexts.integrations.interface.api.oauth_views import (
     OAuthCallbackView,
     OAuthCredentialsView,
@@ -20,6 +31,14 @@ from contexts.integrations.interface.api.views import (
 )
 
 urlpatterns = [
+    path("drive/config/", DriveConfigView.as_view(), name="integrations-drive-config"),
+    path("drive/config/test/", DriveConfigTestView.as_view(), name="integrations-drive-config-test"),
+    path("drive/takes/", DriveTakesView.as_view(), name="integrations-drive-takes"),
+    path("drive/takes/<str:file_id>/", DriveTakesView.as_view(), name="integrations-drive-take-trash"),
+    path("drive/days/", DriveDaysView.as_view(), name="integrations-drive-days"),
+    path("drive/projects/", DriveProjectsView.as_view(), name="integrations-drive-projects"),
+    path("drive/uploads/<str:library>/", DriveUploadSessionView.as_view(), name="integrations-drive-upload-session"),
+    path("drive/files/<str:file_id>/<str:mode>/", DriveFileContentView.as_view(), name="integrations-drive-file-content"),
     path("oauth/providers/", OAuthProvidersView.as_view(), name="integrations-oauth-providers"),
     path(
         "oauth/credentials/",

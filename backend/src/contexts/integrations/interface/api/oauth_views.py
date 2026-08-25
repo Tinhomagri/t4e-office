@@ -36,7 +36,7 @@ def _front(path: str, query: str) -> str:
 
 
 class OAuthProvidersView(APIView):
-    """Quais providers têm app OAuth configurado (por workspace, fallback env)."""
+    """Quais providers têm app OAuth configurado no workspace."""
 
     permission_classes = [IsAuthenticated, SpaceAccessPermission]
     required_space = "marketing"
@@ -71,8 +71,8 @@ class OAuthUrlView(APIView):
                 f"Client ID/Secret em Configurar apps."
             )
         access = DjangoWorkspaceAccess()
-        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
-            raise PermissionDeniedError("Apenas administradores podem conectar contas.")
+        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
+            raise PermissionDeniedError("Apenas o dono pode conectar contas sociais.")
 
         verifier, challenge = ("", "")
         if social_oauth.PROVIDERS[provider].uses_pkce:
@@ -153,24 +153,24 @@ class OAuthCredentialsView(APIView):
       configured, source, redirect_uri a registrar no app do provedor).
     * PUT    <provider>/     → salva {workspace_id, client_id, client_secret}.
       client_secret vazio no PUT mantém o segredo já salvo (não sobrescreve).
-    * DELETE <provider>/     → remove as credenciais do workspace (volta ao env).
+    * DELETE <provider>/     → remove as credenciais do workspace.
     """
 
     permission_classes = [IsAuthenticated, SpaceAccessPermission]
     required_space = "marketing"
 
-    def _require_admin(self, request: Request, workspace_id: str) -> None:
+    def _require_owner(self, request: Request, workspace_id: str) -> None:
         if not workspace_id:
             raise ValidationError("Informe o workspace_id.")
         access = DjangoWorkspaceAccess()
-        if not access.is_admin(workspace_id=workspace_id, user_id=str(request.user.id)):
+        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
             raise PermissionDeniedError(
-                "Apenas administradores podem configurar apps sociais."
+                "Apenas o dono pode configurar apps sociais."
             )
 
     def get(self, request: Request) -> Response:
         workspace_id = request.query_params.get("workspace_id")
-        self._require_admin(request, workspace_id)
+        self._require_owner(request, workspace_id)
         saved = {
             c.provider: c
             for c in SocialAppCredentialModel.objects.filter(workspace_id=workspace_id)
@@ -178,13 +178,12 @@ class OAuthCredentialsView(APIView):
         out = {}
         for name in social_oauth.PROVIDERS:
             cred = saved.get(name)
-            env_cid, env_secret = social_oauth._env_credentials(name)
             has_ws = bool(cred and cred.client_id and cred.client_secret_encrypted)
             out[name] = {
                 "client_id": (cred.client_id if cred else "") or "",
                 "has_secret": bool(cred and cred.client_secret_encrypted),
                 "configured": social_oauth.is_configured(name, workspace_id),
-                "source": "workspace" if has_ws else ("env" if (env_cid and env_secret) else "none"),
+                "source": "workspace" if has_ws else "none",
                 "redirect_uri": social_oauth.redirect_uri(name),
             }
         return Response({"providers": out})
@@ -193,7 +192,7 @@ class OAuthCredentialsView(APIView):
         if provider not in social_oauth.PROVIDERS:
             raise ValidationError(f"Provider desconhecido: {provider}")
         workspace_id = str(request.data.get("workspace_id") or "")
-        self._require_admin(request, workspace_id)
+        self._require_owner(request, workspace_id)
         client_id = str(request.data.get("client_id") or "").strip()
         client_secret = str(request.data.get("client_secret") or "").strip()
         if not client_id:
@@ -224,7 +223,7 @@ class OAuthCredentialsView(APIView):
         workspace_id = request.query_params.get("workspace_id") or str(
             request.data.get("workspace_id") or ""
         )
-        self._require_admin(request, workspace_id)
+        self._require_owner(request, workspace_id)
         SocialAppCredentialModel.objects.filter(
             workspace_id=workspace_id, provider=provider
         ).delete()

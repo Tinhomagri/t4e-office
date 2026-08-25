@@ -48,6 +48,38 @@ class SocialAppCredentialModel(models.Model):
         return f"{self.provider} @ {self.workspace_id}"
 
 
+class WorkspaceDriveConfigModel(models.Model):
+    """Credenciais da biblioteca Google Drive, isoladas por workspace.
+
+    Todos os valores, inclusive IDs de pastas, são cifrados. A API só expõe
+    indicadores de configuração e dicas mascaradas; nunca o valor original.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.OneToOneField(
+        "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="drive_config"
+    )
+    client_id_encrypted = models.TextField(blank=True, default="")
+    client_secret_encrypted = models.TextField(blank=True, default="")
+    refresh_token_encrypted = models.TextField(blank=True, default="")
+    takes_folder_id_encrypted = models.TextField(blank=True, default="")
+    projects_folder_id_encrypted = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    updated_by = models.ForeignKey(
+        "identity.UserModel", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "integrations_workspace_drive_config"
+        verbose_name = "Configuração Google Drive"
+        verbose_name_plural = "Configurações Google Drive"
+
+    def __str__(self) -> str:
+        return f"Drive @ {self.workspace_id}"
+
+
 class SocialOAuthStateModel(models.Model):
     """State OAuth temporário (CSRF + PKCE) do fluxo de conexão social."""
 

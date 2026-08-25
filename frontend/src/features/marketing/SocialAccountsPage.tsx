@@ -52,6 +52,7 @@ import { Badge, Button, EmptyState, Kbd, PageHeader, Skeleton, cx } from "@/shar
 import { toast } from "@/shared/ui/toast"
 
 import { SocialAppConfigDialog } from "./SocialAppConfigDialog"
+import { DriveConfigDialog } from "./DriveConfigDialog"
 
 // Providers com fluxo OAuth implementado no backend
 const PROVIDERS = ["instagram", "facebook", "linkedin", "x", "tiktok", "youtube"]
@@ -100,6 +101,7 @@ export function SocialAccountsPage() {
   const [configured, setConfigured] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
+  const [driveConfigOpen, setDriveConfigOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [onlyIssues, setOnlyIssues] = useState(false)
 
@@ -256,6 +258,12 @@ export function SocialAccountsPage() {
         icon: <Settings className="size-4" />,
         run: () => setConfigOpen(true),
       })
+      list.push({
+        id: "drive-config",
+        label: "Configurar biblioteca Google Drive",
+        icon: <Settings className="size-4" />,
+        run: () => setDriveConfigOpen(true),
+      })
       for (const ch of PROVIDERS) {
         if (accountByChannel[ch]) continue
         list.push({
@@ -300,23 +308,31 @@ export function SocialAccountsPage() {
           Atualizar
         </Button>
         {canEdit && (
-          <Button
-            size="sm"
-            icon={<Settings className="size-3.5" />}
-            onClick={() => setConfigOpen(true)}
-          >
-            Configurar apps
-          </Button>
+          <>
+            <Button
+              size="sm"
+              icon={<Settings className="size-3.5" />}
+              onClick={() => setConfigOpen(true)}
+            >
+              Configurar apps
+            </Button>
+            <Button variant="outline" size="sm" icon={<Settings className="size-3.5" />} onClick={() => setDriveConfigOpen(true)}>
+              Google Drive
+            </Button>
+          </>
         )}
       </PageHeader>
 
       {workspaceId && (
-        <SocialAppConfigDialog
-          open={configOpen}
-          onClose={() => setConfigOpen(false)}
-          workspaceId={workspaceId}
-          onSaved={load}
-        />
+        <>
+          <SocialAppConfigDialog
+            open={configOpen}
+            onClose={() => setConfigOpen(false)}
+            workspaceId={workspaceId}
+            onSaved={load}
+          />
+          <DriveConfigDialog open={driveConfigOpen} onClose={() => setDriveConfigOpen(false)} workspaceId={workspaceId} />
+        </>
       )}
 
       {!workspaceId ? (
