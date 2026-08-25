@@ -19,6 +19,7 @@ from contexts.copilot.infrastructure.django.repositories_impl import (
     DjangoWorkspaceAccess,
 )
 from shared.domain.errors import PermissionDeniedError, ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 _TONE_HINT = marketing_skills.TONE_HINT
 
@@ -40,7 +41,8 @@ class GenerateCopySerializer(serializers.Serializer):
 class GenerateCopyView(APIView):
     """Gera 3 variações de copy/legenda para um card de marketing."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def post(self, request: Request) -> Response:
         serializer = GenerateCopySerializer(data=request.data)
@@ -111,7 +113,8 @@ class RepurposeView(APIView):
     vinculado à peça de origem.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def post(self, request: Request) -> Response:
         serializer = RepurposeSerializer(data=request.data)
@@ -146,7 +149,8 @@ class GenerateCampaignView(APIView):
     card via o endpoint de criação existente, agrupando por label de campanha.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def post(self, request: Request) -> Response:
         serializer = GenerateCampaignSerializer(data=request.data)
@@ -190,7 +194,8 @@ class BrandKitView(APIView):
     /api/copilot/brand-kit/?workspace_id=...
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def _workspace_id(self, request: Request) -> str:
         wid = request.query_params.get("workspace_id") or request.data.get("workspace_id")
@@ -245,7 +250,8 @@ class SocialAccountsView(APIView):
     /api/copilot/social-accounts/?workspace_id=...
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def _workspace_id(self, request: Request) -> str:
         wid = request.query_params.get("workspace_id") or request.data.get("workspace_id")

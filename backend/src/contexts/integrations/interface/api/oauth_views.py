@@ -27,6 +27,7 @@ from contexts.integrations.infrastructure.django.models import (
     SocialOAuthStateModel,
 )
 from shared.domain.errors import PermissionDeniedError, ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 
 def _front(path: str, query: str) -> str:
@@ -37,7 +38,8 @@ def _front(path: str, query: str) -> str:
 class OAuthProvidersView(APIView):
     """Quais providers têm app OAuth configurado (por workspace, fallback env)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = request.query_params.get("workspace_id")
@@ -54,7 +56,8 @@ class OAuthProvidersView(APIView):
 class OAuthUrlView(APIView):
     """Gera a URL de autorização do provider (com state + PKCE quando exigido)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request, provider: str) -> Response:
         if provider not in social_oauth.PROVIDERS:
@@ -153,7 +156,8 @@ class OAuthCredentialsView(APIView):
     * DELETE <provider>/     → remove as credenciais do workspace (volta ao env).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def _require_admin(self, request: Request, workspace_id: str) -> None:
         if not workspace_id:

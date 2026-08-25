@@ -22,6 +22,7 @@ from contexts.integrations.infrastructure.django.models import (
     ScheduledPostModel,
 )
 from shared.domain.errors import PermissionDeniedError, ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 
 def _require_member(request: Request, workspace_id: str) -> DjangoWorkspaceAccess:
@@ -88,7 +89,8 @@ class SchedulePostSerializer(serializers.Serializer):
 class PostsView(APIView):
     """GET lista posts do workspace | POST agenda um post."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = _workspace_id(request)
@@ -140,7 +142,8 @@ class PostsView(APIView):
 class PostDetailView(APIView):
     """PATCH edita/reagenda | DELETE remove um post não publicado."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def _get(self, request: Request, post_id: str) -> ScheduledPostModel:
         try:
@@ -184,7 +187,8 @@ class PostDetailView(APIView):
 class PostPublishView(APIView):
     """POST publica o post agora (simulado) e gera métricas iniciais."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def post(self, request: Request, post_id: str) -> Response:
         try:
@@ -207,7 +211,8 @@ class PostPublishView(APIView):
 class AnalyticsView(APIView):
     """GET métricas agregadas por canal do workspace (atualiza coleta)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = _workspace_id(request)

@@ -37,6 +37,7 @@ import {
   useTrafficSeries,
   type TrafficFilter,
 } from "@/features/marketing/traffic.api"
+import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import type {
   AdWithSales,
   AudienceProfile,
@@ -81,12 +82,12 @@ function currency(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
 }
 
-function rangeFor(days: string): TrafficFilter {
+function rangeFor(days: string, workspaceId: string | null): TrafficFilter {
   const until = new Date()
   const since = new Date(until)
   since.setDate(until.getDate() - (Number(days) - 1))
   const iso = (d: Date) => d.toISOString().slice(0, 10)
-  return { since: iso(since), until: iso(until) }
+  return { since: iso(since), until: iso(until), workspaceId }
 }
 
 function shortDate(iso: string): string {
@@ -101,9 +102,10 @@ function configErrorMessage(error: unknown): string | null {
 }
 
 export function TrafficPage() {
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const [tab, setTab] = usePersistedState<Tab>("traffic:tab", "geral")
   const [days, setDays] = usePersistedState<"7" | "30" | "90">("traffic:days", "30")
-  const filter = useMemo(() => rangeFor(days), [days])
+  const filter = useMemo(() => rangeFor(days, workspaceId), [days, workspaceId])
 
   const overview = useTrafficOverview(filter)
   const series = useTrafficSeries(filter)
@@ -111,7 +113,7 @@ export function TrafficPage() {
   const campaigns = useTrafficCampaigns(filter)
   const audience = useTrafficAudience(filter)
   const funnel = useTrafficFunnel(filter)
-  const sales = useTrafficSales()
+  const sales = useTrafficSales(workspaceId)
 
   const queries = [overview, series, ads, campaigns, audience, funnel, sales]
   const loading = queries.some((q) => q.isLoading)
@@ -179,29 +181,40 @@ export function TrafficPage() {
         </Button>
       </PageHeader>
 
-      <SegmentedControl
-        layoutId="traffic-tab"
-        ariaLabel="Seção"
-        value={tab}
-        onChange={setTab}
-        options={TABS.map((t) => ({ value: t.value, label: t.label }))}
-      />
-
-      {tab === "geral" && (
-        <GeralTab
-          loading={overview.isLoading || series.isLoading}
-          overview={overview.data}
-          chartData={chartData}
-          error={overview.error ?? series.error}
+      {!workspaceId ? (
+        <EmptyState
+          title="Selecione um workspace"
+          description="O painel de Tráfego exige um workspace ativo para checar seu acesso ao espaço de marketing."
         />
+      ) : (
+        <>
+          <SegmentedControl
+            layoutId="traffic-tab"
+            ariaLabel="Seção"
+            value={tab}
+            onChange={setTab}
+            options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+          />
+
+          {tab === "geral" && (
+            <GeralTab
+              loading={overview.isLoading || series.isLoading}
+              overview={overview.data}
+              chartData={chartData}
+              error={overview.error ?? series.error}
+            />
+          )}
+          {tab === "anuncios" && (
+            <AnunciosTab loading={ads.isLoading} ads={ads.data?.data ?? []} error={ads.error} workspaceId={workspaceId} />
+          )}
+          {tab === "campanhas" && (
+            <CampanhasTab loading={campaigns.isLoading} campanhas={campaigns.data?.data ?? []} error={campaigns.error} />
+          )}
+          {tab === "publico" && <PublicoTab loading={audience.isLoading} perfil={audience.data} error={audience.error} />}
+          {tab === "funil" && <FunilTab loading={funnel.isLoading} funil={funnel.data} error={funnel.error} />}
+          {tab === "vendas" && <VendasTab loading={sales.isLoading} vendas={sales.data} error={sales.error} />}
+        </>
       )}
-      {tab === "anuncios" && <AnunciosTab loading={ads.isLoading} ads={ads.data?.data ?? []} error={ads.error} />}
-      {tab === "campanhas" && (
-        <CampanhasTab loading={campaigns.isLoading} campanhas={campaigns.data?.data ?? []} error={campaigns.error} />
-      )}
-      {tab === "publico" && <PublicoTab loading={audience.isLoading} perfil={audience.data} error={audience.error} />}
-      {tab === "funil" && <FunilTab loading={funnel.isLoading} funil={funnel.data} error={funnel.error} />}
-      {tab === "vendas" && <VendasTab loading={sales.isLoading} vendas={sales.data} error={sales.error} />}
     </div>
   )
 }
@@ -270,10 +283,10 @@ function GeralTab({
 
 // ── Anúncios ──────────────────────────────────────────────────────────────
 
-function AdThumbnail({ adId }: { adId: string }) {
+function AdThumbnail({ adId, workspaceId }: { adId: string; workspaceId: string }) {
   const { data: blob } = useQuery({
-    queryKey: ["traffic-thumbnail", adId],
-    queryFn: () => getThumbnailBlob(adId),
+    queryKey: ["traffic-thumbnail", adId, workspaceId],
+    queryFn: () => getThumbnailBlob(adId, workspaceId),
     staleTime: 60 * 60_000,
     retry: false,
   })
@@ -293,10 +306,18 @@ function AdThumbnail({ adId }: { adId: string }) {
   return <img src={objectUrl} alt="" className="size-14 shrink-0 rounded-md object-cover" />
 }
 
-function AdPreviewModal({ adId, onClose }: { adId: string; onClose: () => void }) {
+function AdPreviewModal({
+  adId,
+  workspaceId,
+  onClose,
+}: {
+  adId: string
+  workspaceId: string
+  onClose: () => void
+}) {
   const { data: html, isLoading } = useQuery({
-    queryKey: ["traffic-preview", adId],
-    queryFn: () => getAdPreviewHtml(adId),
+    queryKey: ["traffic-preview", adId, workspaceId],
+    queryFn: () => getAdPreviewHtml(adId, undefined, workspaceId),
   })
 
   return (
@@ -319,7 +340,17 @@ function AdPreviewModal({ adId, onClose }: { adId: string; onClose: () => void }
   )
 }
 
-function AnunciosTab({ loading, ads, error }: { loading: boolean; ads: TrafficAd[]; error?: unknown }) {
+function AnunciosTab({
+  loading,
+  ads,
+  error,
+  workspaceId,
+}: {
+  loading: boolean
+  ads: TrafficAd[]
+  error?: unknown
+  workspaceId: string
+}) {
   const [previewAdId, setPreviewAdId] = useState<string | null>(null)
 
   const configError = configErrorMessage(error)
@@ -334,7 +365,7 @@ function AnunciosTab({ loading, ads, error }: { loading: boolean; ads: TrafficAd
           {ads.map((ad) => (
             <div key={ad.id} className="flex items-start gap-3 px-3 py-2.5">
               {ad.temMiniatura ? (
-                <AdThumbnail adId={ad.id} />
+                <AdThumbnail adId={ad.id} workspaceId={workspaceId} />
               ) : (
                 <div className="size-14 shrink-0 rounded-md bg-paper-100 dark:bg-ink-800" />
               )}
@@ -366,7 +397,9 @@ function AnunciosTab({ loading, ads, error }: { loading: boolean; ads: TrafficAd
           ))}
         </div>
       </Panel>
-      {previewAdId && <AdPreviewModal adId={previewAdId} onClose={() => setPreviewAdId(null)} />}
+      {previewAdId && (
+        <AdPreviewModal adId={previewAdId} workspaceId={workspaceId} onClose={() => setPreviewAdId(null)} />
+      )}
     </>
   )
 }

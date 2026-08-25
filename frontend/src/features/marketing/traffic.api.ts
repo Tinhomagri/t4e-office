@@ -17,10 +17,14 @@ import type {
 export interface TrafficFilter {
   since?: string
   until?: string
+  // Tráfego é um módulo global (sem workspace no seu domínio) — o
+  // workspace_id aqui só existe para o backend checar o space "marketing"
+  // do membro (SpaceAccessPermission), não para filtrar dados.
+  workspaceId?: string | null
 }
 
 function params(filter: TrafficFilter) {
-  return { since: filter.since, until: filter.until }
+  return { since: filter.since, until: filter.until, workspace_id: filter.workspaceId ?? undefined }
 }
 
 export async function getOverview(filter: TrafficFilter): Promise<TrafficOverview> {
@@ -59,8 +63,10 @@ export async function getFunnel(filter: TrafficFilter): Promise<Funnel> {
   return data
 }
 
-export async function getSales(): Promise<SalesReconciliation> {
-  const { data } = await api.get<SalesReconciliation>("/traffic/report/vendas/")
+export async function getSales(workspaceId?: string | null): Promise<SalesReconciliation> {
+  const { data } = await api.get<SalesReconciliation>("/traffic/report/vendas/", {
+    params: { workspace_id: workspaceId ?? undefined },
+  })
   return data
 }
 
@@ -68,17 +74,21 @@ export async function getSales(): Promise<SalesReconciliation> {
 // cookie de sessão. Um <img src> ou <a href> direto para essas rotas nunca
 // leva o token e cai em 401 no backend (IsAuthenticated). Por isso ambas
 // passam pelo client autenticado em vez de uma URL crua.
-export async function getThumbnailBlob(adId: string): Promise<Blob> {
+export async function getThumbnailBlob(adId: string, workspaceId?: string | null): Promise<Blob> {
   const { data } = await api.get("/traffic/thumbnail/", {
-    params: { ad_id: adId },
+    params: { ad_id: adId, workspace_id: workspaceId ?? undefined },
     responseType: "blob",
   })
   return data
 }
 
-export async function getAdPreviewHtml(adId: string, formato?: string): Promise<string> {
+export async function getAdPreviewHtml(
+  adId: string,
+  formato?: string,
+  workspaceId?: string | null,
+): Promise<string> {
   const { data } = await api.get<{ html: string }>("/traffic/preview/", {
-    params: { ad_id: adId, formato },
+    params: { ad_id: adId, formato, workspace_id: workspaceId ?? undefined },
   })
   return data.html
 }
@@ -86,19 +96,20 @@ export async function getAdPreviewHtml(adId: string, formato?: string): Promise<
 // ── Hooks ───────────────────────────────────────────────────────────────────
 
 export const trafficKeys = {
-  overview: (filter: TrafficFilter) => ["traffic-overview", filter.since, filter.until] as const,
-  series: (filter: TrafficFilter) => ["traffic-series", filter.since, filter.until] as const,
-  ads: (filter: TrafficFilter) => ["traffic-ads", filter.since, filter.until] as const,
-  campaigns: (filter: TrafficFilter) => ["traffic-campaigns", filter.since, filter.until] as const,
-  audience: (filter: TrafficFilter) => ["traffic-audience", filter.since, filter.until] as const,
-  funnel: (filter: TrafficFilter) => ["traffic-funnel", filter.since, filter.until] as const,
-  sales: () => ["traffic-sales"] as const,
+  overview: (filter: TrafficFilter) => ["traffic-overview", filter.since, filter.until, filter.workspaceId] as const,
+  series: (filter: TrafficFilter) => ["traffic-series", filter.since, filter.until, filter.workspaceId] as const,
+  ads: (filter: TrafficFilter) => ["traffic-ads", filter.since, filter.until, filter.workspaceId] as const,
+  campaigns: (filter: TrafficFilter) => ["traffic-campaigns", filter.since, filter.until, filter.workspaceId] as const,
+  audience: (filter: TrafficFilter) => ["traffic-audience", filter.since, filter.until, filter.workspaceId] as const,
+  funnel: (filter: TrafficFilter) => ["traffic-funnel", filter.since, filter.until, filter.workspaceId] as const,
+  sales: (workspaceId?: string | null) => ["traffic-sales", workspaceId] as const,
 }
 
 export function useTrafficOverview(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.overview(filter),
     queryFn: () => getOverview(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
@@ -107,6 +118,7 @@ export function useTrafficSeries(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.series(filter),
     queryFn: () => getSeries(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
@@ -115,6 +127,7 @@ export function useTrafficAds(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.ads(filter),
     queryFn: () => getAds(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
@@ -123,6 +136,7 @@ export function useTrafficCampaigns(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.campaigns(filter),
     queryFn: () => getCampaigns(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
@@ -131,6 +145,7 @@ export function useTrafficAudience(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.audience(filter),
     queryFn: () => getAudience(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
@@ -139,10 +154,16 @@ export function useTrafficFunnel(filter: TrafficFilter) {
   return useQuery({
     queryKey: trafficKeys.funnel(filter),
     queryFn: () => getFunnel(filter),
+    enabled: !!filter.workspaceId,
     staleTime: 60_000,
   })
 }
 
-export function useTrafficSales() {
-  return useQuery({ queryKey: trafficKeys.sales(), queryFn: getSales, staleTime: 60_000 })
+export function useTrafficSales(workspaceId?: string | null) {
+  return useQuery({
+    queryKey: trafficKeys.sales(workspaceId),
+    queryFn: () => getSales(workspaceId),
+    enabled: !!workspaceId,
+    staleTime: 60_000,
+  })
 }

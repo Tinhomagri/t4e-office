@@ -20,6 +20,7 @@ from contexts.traffic.infrastructure import reports
 from contexts.traffic.infrastructure.meta_client import DateRange, MetaError, date_range
 from contexts.traffic.infrastructure.sales_reconciliation import calculate_sales
 from shared.domain.errors import NotFoundError, UpstreamError, ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 REPORTS = ("geral", "serie", "anuncios", "campanhas", "publico", "funil", "vendas")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -69,7 +70,8 @@ class TrafficReportView(APIView):
     porte da rota única `[relatorio]` do T4E OS.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
     throttle_classes = [TrafficReportThrottle]
 
     def get(self, request: Request, relatorio: str) -> Response:
@@ -112,7 +114,8 @@ class TrafficThumbnailView(APIView):
     da Meta carrega parâmetros de sessão que não podem chegar ao navegador.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
     throttle_classes = [TrafficThumbnailThrottle]
 
     def get(self, request: Request) -> HttpResponse:
@@ -148,7 +151,8 @@ class TrafficPreviewView(APIView):
 
     A Meta só devolve a prévia como HTML com <iframe> pro facebook.com."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
     throttle_classes = [TrafficPreviewThrottle]
 
     def get(self, request: Request) -> Response:

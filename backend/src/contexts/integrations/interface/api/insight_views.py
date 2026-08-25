@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 from contexts.copilot.infrastructure.django.models import SocialAccountModel
 from contexts.integrations.infrastructure.django.models import ScheduledPostModel
 from contexts.integrations.interface.api.views import _require_member, _workspace_id
+from shared.interface.permissions import SpaceAccessPermission
 
 METRIC_KEYS = ("impressions", "likes", "comments", "shares", "clicks")
 
@@ -67,7 +68,8 @@ class AnalyticsTimeseriesView(APIView):
     Query: workspace_id (obrigatório), days (default 30), channel, project_id.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = _workspace_id(request)
@@ -173,7 +175,8 @@ class AnalyticsTimeseriesView(APIView):
 class QueueStatsView(APIView):
     """GET saúde da fila: contagens por status/canal, falhas e próximo disparo."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = _workspace_id(request)
@@ -247,7 +250,8 @@ class QueueStatsView(APIView):
 class AccountsHealthView(APIView):
     """GET estado operacional de cada conta social conectada do workspace."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
 
     def get(self, request: Request) -> Response:
         workspace_id = _workspace_id(request)
