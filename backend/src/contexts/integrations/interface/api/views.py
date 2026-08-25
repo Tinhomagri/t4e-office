@@ -22,7 +22,7 @@ from contexts.integrations.infrastructure.django.models import (
     ScheduledPostModel,
 )
 from shared.domain.errors import PermissionDeniedError, ValidationError
-from shared.interface.permissions import SpaceAccessPermission
+from shared.interface.permissions import SpaceAccessPermission, require_space
 
 
 def _require_member(request: Request, workspace_id: str) -> DjangoWorkspaceAccess:
@@ -151,6 +151,14 @@ class PostDetailView(APIView):
         except ScheduledPostModel.DoesNotExist:
             raise ValidationError("Post não encontrado.") from None
         _require_member(request, str(post.workspace_id))
+        # SpaceAccessPermission roda antes do corpo da view e só olha
+        # query_params/request.data — aqui o workspace_id só é conhecido
+        # depois de buscar o post, então o gate precisa ser refeito aqui.
+        require_space(
+            workspace_id=str(post.workspace_id),
+            user_id=str(request.user.id),
+            space="marketing",
+        )
         return post
 
     def patch(self, request: Request, post_id: str) -> Response:
@@ -196,6 +204,14 @@ class PostPublishView(APIView):
         except ScheduledPostModel.DoesNotExist:
             raise ValidationError("Post não encontrado.") from None
         _require_member(request, str(post.workspace_id))
+        # Mesmo motivo do PostDetailView._get: workspace_id só existe depois
+        # do post ser buscado — e aqui precisa vir antes de publish_now, que
+        # tem efeito colateral real (publica o post).
+        require_space(
+            workspace_id=str(post.workspace_id),
+            user_id=str(request.user.id),
+            space="marketing",
+        )
         if post.status == "published":
             raise ValidationError("Post já publicado.")
         try:
