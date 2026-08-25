@@ -14,6 +14,7 @@ from contexts.projects.domain.repositories.project_repository import (
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoProjectRepository,
 )
+from shared.interface.permissions import SpaceAccessPermission
 from contexts.sales.application.use_cases.lose_deal import LoseDeal
 from contexts.sales.application.use_cases.manage_customers import (
     CreateContact,
@@ -224,7 +225,8 @@ def _require_workspace(request: Request) -> str | None:
 class CustomerListCreateView(APIView):
     """Lista e cria clientes dentro de um workspace."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=CustomerSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -258,7 +260,8 @@ class CustomerListCreateView(APIView):
 class CustomerDetailView(APIView):
     """Detalha, atualiza e remove um cliente."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=CustomerSerializer)
     def get(self, request: Request, customer_id: str) -> Response:
@@ -290,7 +293,8 @@ class CustomerDetailView(APIView):
 class ContactListCreateView(APIView):
     """Lista e cria contatos de um cliente."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=ContactSerializer(many=True))
     def get(self, request: Request, customer_id: str) -> Response:
@@ -316,7 +320,8 @@ class ContactListCreateView(APIView):
 class ContactDetailView(APIView):
     """Atualiza e remove um contato."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=UpdateContactSerializer, responses=ContactSerializer)
     def patch(self, request: Request, contact_id: str) -> Response:
@@ -343,7 +348,8 @@ class ContactDetailView(APIView):
 class StageListCreateView(APIView):
     """Lista (semeando o padrão) e cria estágios do funil."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=StageSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -373,7 +379,8 @@ class StageListCreateView(APIView):
 class StageDetailView(APIView):
     """Atualiza e remove um estágio do funil."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=UpdateStageSerializer, responses=StageSerializer)
     def patch(self, request: Request, stage_id: str) -> Response:
@@ -396,7 +403,8 @@ class StageDetailView(APIView):
 class DealListCreateView(APIView):
     """Lista e cria negócios do funil."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=DealSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -433,7 +441,8 @@ class DealListCreateView(APIView):
 class DealDetailView(APIView):
     """Detalha, atualiza e remove um negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=DealSerializer)
     def get(self, request: Request, deal_id: str) -> Response:
@@ -463,7 +472,8 @@ class DealDetailView(APIView):
 class DealMoveView(APIView):
     """Move o negócio de estágio no funil."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=MoveDealStageSerializer, responses=DealSerializer)
     def post(self, request: Request, deal_id: str) -> Response:
@@ -483,7 +493,8 @@ class DealMoveView(APIView):
 class DealWinView(APIView):
     """Marca o negócio como ganho, opcionalmente criando o projeto de entrega."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=WinDealSerializer, responses=DealSerializer)
     def post(self, request: Request, deal_id: str) -> Response:
@@ -513,7 +524,8 @@ class DealWinView(APIView):
 class DealLoseView(APIView):
     """Marca o negócio como perdido (motivo obrigatório)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=LoseDealSerializer, responses=DealSerializer)
     def post(self, request: Request, deal_id: str) -> Response:
@@ -533,7 +545,8 @@ class DealLoseView(APIView):
 class DealHistoryView(APIView):
     """Linha do tempo de alterações do negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=DealHistorySerializer(many=True))
     def get(self, request: Request, deal_id: str) -> Response:
@@ -548,7 +561,8 @@ class DealHistoryView(APIView):
 class DealActivityListCreateView(APIView):
     """Lista e cria atividades de um negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=ActivitySerializer(many=True))
     def get(self, request: Request, deal_id: str) -> Response:
@@ -579,7 +593,8 @@ class DealActivityListCreateView(APIView):
 class WorkspaceActivityListView(APIView):
     """Atividades de todos os negócios do workspace — alimenta a aba Atividades."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=ActivitySerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -604,7 +619,8 @@ class WorkspaceActivityListView(APIView):
 class DealActivityDetailView(APIView):
     """Atualiza (concluir/reabrir) e remove uma atividade."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=UpdateActivitySerializer, responses=ActivitySerializer)
     def patch(self, request: Request, activity_id: str) -> Response:
@@ -631,7 +647,8 @@ class DealActivityDetailView(APIView):
 class PipelineSummaryView(APIView):
     """Totais por coluna do funil: contagem, soma do valor e soma ponderada."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     def get(self, request: Request) -> Response:
         workspace_id = _require_workspace(request)

@@ -24,6 +24,7 @@ from contexts.sales.infrastructure.django.models import (
 )
 from contexts.sales.interface.api.permissions import assert_workspace_member
 from contexts.sales.interface.api.views import _require_workspace, _uid
+from shared.interface.permissions import SpaceAccessPermission
 
 # Acima disso um negócio parado vira alerta na coluna.
 STALE_DAYS = 14
@@ -43,7 +44,8 @@ class PipelineMetricsView(APIView):
     Query: workspace_id (obrigatório), days (janela de ganhos/perdas, default 90).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     def get(self, request: Request) -> Response:
         workspace_id = _require_workspace(request)

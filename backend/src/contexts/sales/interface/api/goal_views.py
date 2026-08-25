@@ -27,6 +27,7 @@ from contexts.sales.interface.api.goal_serializers import (
 )
 from contexts.sales.interface.api.permissions import assert_workspace_member
 from contexts.sales.interface.api.views import _require_workspace, _uid
+from shared.interface.permissions import SpaceAccessPermission
 
 
 def _uid_or_actor(request: Request) -> str:
@@ -47,7 +48,8 @@ def _ser_goal(g) -> dict:
 class GoalListCreateView(APIView):
     """Lista e cria metas comerciais dentro de um workspace."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=None)
     def get(self, request: Request) -> Response:
@@ -80,7 +82,8 @@ class GoalListCreateView(APIView):
 class GoalDetailView(APIView):
     """Detalha, atualiza e remove uma meta."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=None)
     def get(self, request: Request, goal_id: str) -> Response:
@@ -114,7 +117,8 @@ class GoalForecastView(APIView):
     apenas os negócios daquele vendedor).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     def get(self, request: Request) -> Response:
         workspace_id = _require_workspace(request)

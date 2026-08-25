@@ -33,6 +33,7 @@ from contexts.sales.interface.api.proposal_serializers import (
     UpdateProposalSerializer,
 )
 from shared.domain.errors import NotFoundError, ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 
 def _repo() -> DjangoProposalRepository:
@@ -55,7 +56,8 @@ def _workspace_name(row: ProposalModel) -> str:
 class ProposalListCreateView(APIView):
     """Lista as propostas do workspace e cria nova a partir de um negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=ProposalSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -95,7 +97,8 @@ class ProposalListCreateView(APIView):
 class ProposalDetailView(APIView):
     """Detalhe, edição e exclusão de uma proposta."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=ProposalSerializer)
     def get(self, request: Request, proposal_id: str) -> Response:
@@ -122,7 +125,8 @@ class ProposalDetailView(APIView):
 class ProposalPdfView(APIView):
     """Baixa o PDF da proposta."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     def get(self, request: Request, proposal_id: str) -> HttpResponse:
         row = _assert_proposal_access(str(proposal_id), str(request.user.id))
@@ -138,7 +142,8 @@ class ProposalPdfView(APIView):
 class ProposalSendView(APIView):
     """Envia a proposta ao cliente com o PDF anexo."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=SendProposalSerializer, responses=ProposalSerializer)
     def post(self, request: Request, proposal_id: str) -> Response:
@@ -162,7 +167,8 @@ class ProposalSendView(APIView):
 class ProposalAcceptView(APIView):
     """Registra o aceite e devolve a sugestão de ganhar o negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     def post(self, request: Request, proposal_id: str) -> Response:
         _assert_proposal_access(str(proposal_id), str(request.user.id))
@@ -181,7 +187,8 @@ class ProposalAcceptView(APIView):
 class ProposalRejectView(APIView):
     """Registra a recusa do cliente."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=RejectProposalSerializer, responses=ProposalSerializer)
     def post(self, request: Request, proposal_id: str) -> Response:

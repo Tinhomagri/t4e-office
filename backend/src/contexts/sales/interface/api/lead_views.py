@@ -38,6 +38,7 @@ from contexts.sales.interface.api.lead_serializers import (
     UpdateLeadSerializer,
 )
 from shared.domain.errors import ValidationError
+from shared.interface.permissions import SpaceAccessPermission
 
 
 def _repo() -> DjangoLeadRepository:
@@ -55,7 +56,8 @@ def _uid(request: Request) -> str:
 class LeadListCreateView(APIView):
     """Lista a fila de leads do workspace e capta um lead manualmente."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=LeadSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -87,7 +89,8 @@ class LeadListCreateView(APIView):
 class LeadImportView(APIView):
     """Importa leads em lote a partir de um CSV colado (name,company,email,phone,source)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=ImportLeadsSerializer, responses=ImportLeadsResultSerializer)
     def post(self, request: Request) -> Response:
@@ -110,7 +113,8 @@ class LeadImportView(APIView):
 class LeadDetailView(APIView):
     """Detalha, edita e remove um lead."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=LeadSerializer)
     def get(self, request: Request, lead_id: str) -> Response:
@@ -134,7 +138,8 @@ class LeadDetailView(APIView):
 class LeadContactedView(APIView):
     """Marca o primeiro contato — encerra o relógio do SLA."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(responses=LeadSerializer)
     def post(self, request: Request, lead_id: str) -> Response:
@@ -147,7 +152,8 @@ class LeadContactedView(APIView):
 class LeadQualifyView(APIView):
     """Atribui score e move o lead para qualificado."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=QualifyLeadSerializer, responses=LeadSerializer)
     def post(self, request: Request, lead_id: str) -> Response:
@@ -162,7 +168,8 @@ class LeadQualifyView(APIView):
 class LeadDisqualifyView(APIView):
     """Descarta o lead com motivo — sai da esteira sem virar negócio."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=DisqualifyLeadSerializer, responses=LeadSerializer)
     def post(self, request: Request, lead_id: str) -> Response:
@@ -177,7 +184,8 @@ class LeadDisqualifyView(APIView):
 class LeadConvertView(APIView):
     """Converte o lead em cliente + negócio, sem redigitar dado nenhum."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "comercial"
 
     @extend_schema(request=ConvertLeadSerializer, responses=LeadSerializer)
     def post(self, request: Request, lead_id: str) -> Response:
