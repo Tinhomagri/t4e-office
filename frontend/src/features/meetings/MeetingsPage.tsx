@@ -42,7 +42,7 @@ import {
   VideoOff,
   X,
 } from "lucide-react"
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
@@ -726,6 +726,8 @@ function DeviceMenu({
   label: string
 }) {
   const [open, setOpen] = useState(false)
+  const anchorRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
   const connectionState = useConnectionState()
   const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({
     kind,
@@ -736,9 +738,38 @@ function DeviceMenu({
     requestPermissions: connectionState === ConnectionState.Connected,
   })
 
+  // A barra de controles rola na horizontal (`overflow-x-auto`) e o CSS promove
+  // o overflow-y a `auto` junto: um painel `absolute` que sobe acima da barra
+  // era recortado por ela e nunca dava para escolher o dispositivo. Por isso o
+  // painel vai para o body por portal, ancorado nas coordenadas do botão.
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const anchor = anchorRef.current?.parentElement ?? anchorRef.current
+      const rect = anchor?.getBoundingClientRect()
+      if (!rect) return
+      // Mantém o painel (w-64 = 256px) dentro da janela em telas estreitas.
+      const half = 128
+      const center = Math.min(
+        Math.max(rect.left + rect.width / 2, half + 8),
+        Math.max(window.innerWidth - half - 8, half + 8),
+      )
+      setPos({ left: center, bottom: window.innerHeight - rect.top + 12 })
+    }
+    place()
+    window.addEventListener("resize", place)
+    // Captura: a própria barra de controles rola, e ela não é o window.
+    window.addEventListener("scroll", place, true)
+    return () => {
+      window.removeEventListener("resize", place)
+      window.removeEventListener("scroll", place, true)
+    }
+  }, [open])
+
   return (
     <>
       <button
+        ref={anchorRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={`Escolher ${label}`}
@@ -747,12 +778,15 @@ function DeviceMenu({
       >
         <ChevronUp className="size-3" />
       </button>
-      {open && (
+      {open && pos && createPortal(
         <>
           {/* Fecha ao clicar fora — não precisa fechar sozinho ao escolher
               porque cada opção já fecha explicitamente no onClick. */}
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="scrollbar-slim-dark absolute bottom-full left-1/2 z-30 mb-3 max-h-60 w-64 -translate-x-1/2 overflow-y-auto rounded-lg bg-ink-800 p-1 shadow-lg">
+          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+          <div
+            style={{ left: pos.left, bottom: pos.bottom }}
+            className="scrollbar-slim-dark fixed z-[61] max-h-60 w-64 -translate-x-1/2 overflow-y-auto rounded-lg bg-ink-800 p-1 shadow-lg"
+          >
             {devices.length === 0 && (
               <p className="px-3 py-2 text-xs text-white/50">Nenhum dispositivo encontrado</p>
             )}
@@ -778,7 +812,8 @@ function DeviceMenu({
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   )
