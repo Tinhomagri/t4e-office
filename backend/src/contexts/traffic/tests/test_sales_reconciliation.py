@@ -5,6 +5,7 @@ Sem tocar rede: `download_text` e `meta_get` são substituídos por fixtures.
 import pytest
 
 from contexts.traffic.infrastructure import sales_reconciliation as sr
+from shared.domain.errors import ValidationError
 
 FECHADOS_CSV = (
     "Nome,Telefone,Valor,Data de Criacao,Data de Fechamento\n"
@@ -25,6 +26,12 @@ def _reset_cache():
     sr.reset_cache_for_tests()
     yield
     sr.reset_cache_for_tests()
+
+
+def test_calculate_sales_raises_validation_error_without_sheet_configured(settings):
+    settings.TRAFFIC_SHEET_FECHADOS_URL = ""
+    with pytest.raises(ValidationError):
+        sr.calculate_sales()
 
 
 def test_calculate_sales_matches_by_phone_first(settings, monkeypatch):

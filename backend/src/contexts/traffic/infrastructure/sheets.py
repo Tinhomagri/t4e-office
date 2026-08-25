@@ -90,7 +90,12 @@ def iso_date(raw: str | None) -> str | None:
         return None
     if not re.fullmatch(r"\d{4}", year):
         return None
-    return f"{year}-{month}-{day}"
+    candidate = f"{year}-{month}-{day}"
+    try:
+        date.fromisoformat(candidate)
+    except ValueError:
+        return None
+    return candidate
 
 
 def strip_accents(text: str | None) -> str:

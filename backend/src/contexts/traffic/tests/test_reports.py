@@ -8,6 +8,13 @@ from shared.domain.errors import ValidationError
 RANGE = DateRange(since="2026-01-01", until="2026-01-31")
 
 
+@pytest.fixture(autouse=True)
+def _reset_thumbnail_cache():
+    reports.reset_thumbnail_cache_for_tests()
+    yield
+    reports.reset_thumbnail_cache_for_tests()
+
+
 def test_overview_computes_cpl(monkeypatch):
     monkeypatch.setattr(
         reports,
@@ -214,6 +221,38 @@ def test_thumbnail_url_extracts_best_image(monkeypatch):
 def test_thumbnail_url_returns_none_without_creative(monkeypatch):
     monkeypatch.setattr(reports, "meta_get", lambda edge, params=None: {})
     assert reports.thumbnail_url("123") is None
+
+
+def test_thumbnail_url_reuses_cache_populated_by_list_ads(monkeypatch):
+    calls = {"n": 0}
+
+    def _fake_get(edge, params=None):
+        if edge.endswith("/insights"):
+            return {"data": [{"ad_id": "1", "ad_name": "Anuncio A", "spend": "10", "impressions": "10", "clicks": "1", "actions": []}]}
+        if edge.endswith("/ads"):
+            return {"data": [{"id": "1", "name": "Anuncio A", "creative": {"image_url": "https://example.com/a.jpg"}}]}
+        calls["n"] += 1
+        return {"creative": {"image_url": "https://example.com/a.jpg"}}
+
+    monkeypatch.setattr(reports, "meta_get", _fake_get)
+    monkeypatch.setattr(reports, "cross_sales", lambda: (_ for _ in ()).throw(RuntimeError("sem planilha")))
+
+    reports.list_ads(RANGE)
+    # A URL já foi calculada por list_ads — thumbnail_url não deve chamar a
+    # Meta de novo (era N+1: uma chamada extra por anúncio na lista).
+    result = reports.thumbnail_url("1")
+
+    assert result == "https://example.com/a.jpg"
+    assert calls["n"] == 0
+
+
+def test_thumbnail_url_falls_back_to_meta_get_when_not_cached(monkeypatch):
+    monkeypatch.setattr(
+        reports,
+        "meta_get",
+        lambda edge, params=None: {"creative": {"image_url": "https://example.com/b.jpg"}},
+    )
+    assert reports.thumbnail_url("999") == "https://example.com/b.jpg"
 
 
 def test_ad_preview_returns_body(monkeypatch):

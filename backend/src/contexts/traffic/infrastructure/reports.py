@@ -6,6 +6,7 @@ Meta; vendas (a sétima) mora em `sales_reconciliation.py`.
 from __future__ import annotations
 
 import re
+import time
 from urllib.parse import unquote
 
 from django.conf import settings
@@ -96,6 +97,35 @@ def _best_image(creative: dict | None) -> str | None:
     )
 
 
+# `list_ads()` já calcula a melhor imagem de cada anúncio via `_best_image`
+# para preencher `temMiniatura`, e jogava a URL fora — o proxy de miniatura
+# então fazia uma chamada nova à Meta por anúncio (N+1). Este cache guarda a
+# URL computada para o proxy reaproveitar; uma hora acompanha o
+# `Cache-Control: max-age=3600` que a rota de miniatura já promete ao browser.
+_THUMBNAIL_CACHE_TTL_SECONDS = 3600
+_thumbnail_cache: dict[str, tuple[float, str | None]] = {}
+
+
+def _cache_thumbnail(ad_id: str, url: str | None) -> None:
+    _thumbnail_cache[ad_id] = (time.monotonic(), url)
+
+
+def _cached_thumbnail(ad_id: str) -> tuple[bool, str | None]:
+    """`(achou, url)` — achou é False se não está no cache ou expirou."""
+    entry = _thumbnail_cache.get(ad_id)
+    if entry is None:
+        return False, None
+    cached_at, url = entry
+    if time.monotonic() - cached_at >= _THUMBNAIL_CACHE_TTL_SECONDS:
+        return False, None
+    return True, url
+
+
+def reset_thumbnail_cache_for_tests() -> None:
+    """Só para os testes: zera o cache de módulo entre casos."""
+    _thumbnail_cache.clear()
+
+
 def _blank_ad(ad_id: str, name: str) -> dict:
     return {
         "id": ad_id,
@@ -151,9 +181,12 @@ def list_ads(date_range: DateRange) -> list[dict]:
         entry = by_id.get(ad_id) or _blank_ad(ad_id, ad.get("name") or "")
         entry["status"] = ad.get("effective_status") or ad.get("status")
         # A URL do criativo não desce ao navegador (CSP bloqueia o CDN da
-        # Meta) — a imagem vem por /api/traffic/thumbnail/.
-        entry["temMiniatura"] = _best_image(ad.get("creative")) is not None
+        # Meta) — a imagem vem por /api/traffic/thumbnail/. Guarda a URL já
+        # calculada no cache para o proxy não repetir a chamada à Meta.
+        image_url = _best_image(ad.get("creative"))
+        entry["temMiniatura"] = image_url is not None
         entry["objectType"] = (ad.get("creative") or {}).get("object_type")
+        _cache_thumbnail(ad_id, image_url)
         by_id[ad_id] = entry
 
     _assign_sales(by_id)
@@ -216,9 +249,19 @@ def _assign_sales(by_id: dict[str, dict]) -> None:
 
 
 def thumbnail_url(ad_id: str) -> str | None:
-    """URL da imagem do criativo, para a rota de proxy buscar."""
+    """URL da imagem do criativo, para a rota de proxy buscar.
+
+    `list_ads()` já calcula esta mesma URL para preencher `temMiniatura`;
+    reaproveita o cache em vez de repetir a chamada à Meta por anúncio.
+    """
+    found, cached = _cached_thumbnail(ad_id)
+    if found:
+        return cached
+
     response = meta_get(ad_id, {"fields": _CREATIVE_FIELDS})
-    return _best_image(response.get("creative"))
+    url = _best_image(response.get("creative"))
+    _cache_thumbnail(ad_id, url)
+    return url
 
 
 def ad_preview(ad_id: str, ad_format: str) -> str:

@@ -64,13 +64,23 @@ export async function getSales(): Promise<SalesReconciliation> {
   return data
 }
 
-export function thumbnailUrl(adId: string): string {
-  return `/api/traffic/thumbnail/?ad_id=${encodeURIComponent(adId)}`
+// A auth do app é via header Authorization (interceptor do axios) — não há
+// cookie de sessão. Um <img src> ou <a href> direto para essas rotas nunca
+// leva o token e cai em 401 no backend (IsAuthenticated). Por isso ambas
+// passam pelo client autenticado em vez de uma URL crua.
+export async function getThumbnailBlob(adId: string): Promise<Blob> {
+  const { data } = await api.get("/traffic/thumbnail/", {
+    params: { ad_id: adId },
+    responseType: "blob",
+  })
+  return data
 }
 
-export function previewUrl(adId: string, formato?: string): string {
-  const query = new URLSearchParams({ ad_id: adId, ...(formato ? { formato } : {}) })
-  return `/api/traffic/preview/?${query.toString()}`
+export async function getAdPreviewHtml(adId: string, formato?: string): Promise<string> {
+  const { data } = await api.get<{ html: string }>("/traffic/preview/", {
+    params: { ad_id: adId, formato },
+  })
+  return data.html
 }
 
 // ── Hooks ───────────────────────────────────────────────────────────────────

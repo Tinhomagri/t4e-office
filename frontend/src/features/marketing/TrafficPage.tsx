@@ -2,7 +2,8 @@
 // conciliação com as vendas fechadas. Porte do módulo Tráfego do T4E OS:
 // mesmos sete relatórios, mesma regra de período (vendas ignora o filtro,
 // de propósito — ver traffic.api.ts).
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Area,
   AreaChart,
@@ -25,8 +26,8 @@ import {
 } from "lucide-react"
 
 import {
-  previewUrl,
-  thumbnailUrl,
+  getAdPreviewHtml,
+  getThumbnailBlob,
   useTrafficAds,
   useTrafficAudience,
   useTrafficCampaigns,
@@ -57,7 +58,7 @@ import {
   usePersistedState,
   type CommandAction,
 } from "@/shared/ui/command-center"
-import { Badge, Button, EmptyState, Kbd, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
+import { Badge, Button, EmptyState, Kbd, Modal, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
 
 type Tab = "geral" | "anuncios" | "campanhas" | "publico" | "funil" | "vendas"
 
@@ -114,7 +115,6 @@ export function TrafficPage() {
 
   const queries = [overview, series, ads, campaigns, audience, funnel, sales]
   const loading = queries.some((q) => q.isLoading)
-  const configError = queries.map((q) => configErrorMessage(q.error)).find(Boolean) ?? null
 
   const refreshAll = () => {
     for (const q of queries) void q.refetch()
@@ -179,39 +179,36 @@ export function TrafficPage() {
         </Button>
       </PageHeader>
 
-      {configError ? (
-        <EmptyState
-          icon={<AlertTriangle className="size-5" />}
-          title="Tráfego não configurado"
-          description={configError}
-        />
-      ) : (
-        <>
-          <SegmentedControl
-            layoutId="traffic-tab"
-            ariaLabel="Seção"
-            value={tab}
-            onChange={setTab}
-            options={TABS.map((t) => ({ value: t.value, label: t.label }))}
-          />
+      <SegmentedControl
+        layoutId="traffic-tab"
+        ariaLabel="Seção"
+        value={tab}
+        onChange={setTab}
+        options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+      />
 
-          {tab === "geral" && (
-            <GeralTab
-              loading={overview.isLoading || series.isLoading}
-              overview={overview.data}
-              chartData={chartData}
-            />
-          )}
-          {tab === "anuncios" && <AnunciosTab loading={ads.isLoading} ads={ads.data?.data ?? []} />}
-          {tab === "campanhas" && (
-            <CampanhasTab loading={campaigns.isLoading} campanhas={campaigns.data?.data ?? []} />
-          )}
-          {tab === "publico" && <PublicoTab loading={audience.isLoading} perfil={audience.data} />}
-          {tab === "funil" && <FunilTab loading={funnel.isLoading} funil={funnel.data} />}
-          {tab === "vendas" && <VendasTab loading={sales.isLoading} vendas={sales.data} />}
-        </>
+      {tab === "geral" && (
+        <GeralTab
+          loading={overview.isLoading || series.isLoading}
+          overview={overview.data}
+          chartData={chartData}
+          error={overview.error ?? series.error}
+        />
       )}
+      {tab === "anuncios" && <AnunciosTab loading={ads.isLoading} ads={ads.data?.data ?? []} error={ads.error} />}
+      {tab === "campanhas" && (
+        <CampanhasTab loading={campaigns.isLoading} campanhas={campaigns.data?.data ?? []} error={campaigns.error} />
+      )}
+      {tab === "publico" && <PublicoTab loading={audience.isLoading} perfil={audience.data} error={audience.error} />}
+      {tab === "funil" && <FunilTab loading={funnel.isLoading} funil={funnel.data} error={funnel.error} />}
+      {tab === "vendas" && <VendasTab loading={sales.isLoading} vendas={sales.data} error={sales.error} />}
     </div>
+  )
+}
+
+function ConfigErrorState({ message }: { message: string }) {
+  return (
+    <EmptyState icon={<AlertTriangle className="size-5" />} title="Tráfego não configurado" description={message} />
   )
 }
 
@@ -221,11 +218,15 @@ function GeralTab({
   loading,
   overview,
   chartData,
+  error,
 }: {
   loading: boolean
   overview: TrafficOverview | undefined
   chartData: { label: string; spend: number; leads: number }[]
+  error?: unknown
 }) {
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && !overview) return <Skeleton className="h-64 rounded-lg" />
   if (!overview) return <EmptyState title="Sem dados" description="Nenhum investimento no período." />
 
@@ -269,60 +270,116 @@ function GeralTab({
 
 // ── Anúncios ──────────────────────────────────────────────────────────────
 
-function AnunciosTab({ loading, ads }: { loading: boolean; ads: TrafficAd[] }) {
+function AdThumbnail({ adId }: { adId: string }) {
+  const { data: blob } = useQuery({
+    queryKey: ["traffic-thumbnail", adId],
+    queryFn: () => getThumbnailBlob(adId),
+    staleTime: 60 * 60_000,
+    retry: false,
+  })
+  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!blob) {
+      setObjectUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(blob)
+    setObjectUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [blob])
+
+  if (!objectUrl) return <div className="size-14 shrink-0 rounded-md bg-paper-100 dark:bg-ink-800" />
+  return <img src={objectUrl} alt="" className="size-14 shrink-0 rounded-md object-cover" />
+}
+
+function AdPreviewModal({ adId, onClose }: { adId: string; onClose: () => void }) {
+  const { data: html, isLoading } = useQuery({
+    queryKey: ["traffic-preview", adId],
+    queryFn: () => getAdPreviewHtml(adId),
+  })
+
+  return (
+    <Modal open onClose={onClose} title="Prévia do anúncio" size="lg">
+      {isLoading || !html ? (
+        <Skeleton className="h-96 rounded-lg" />
+      ) : (
+        <iframe
+          title="Prévia do anúncio"
+          srcDoc={html}
+          sandbox="allow-scripts allow-same-origin"
+          className="h-96 w-full rounded-lg border border-paper-200 dark:border-ink-700"
+        />
+      )}
+    </Modal>
+  )
+}
+
+function AnunciosTab({ loading, ads, error }: { loading: boolean; ads: TrafficAd[]; error?: unknown }) {
+  const [previewAdId, setPreviewAdId] = useState<string | null>(null)
+
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && ads.length === 0) return <Skeleton className="h-64 rounded-lg" />
   if (ads.length === 0) return <EmptyState title="Nenhum anúncio no período" />
 
   return (
-    <Panel title="Anúncios" subtitle={`${ads.length} anúncio${ads.length === 1 ? "" : "s"}`}>
-      <div className="divide-y divide-paper-200 dark:divide-ink-700">
-        {ads.map((ad) => (
-          <div key={ad.id} className="flex items-start gap-3 px-3 py-2.5">
-            {ad.temMiniatura ? (
-              <img
-                src={thumbnailUrl(ad.id)}
-                alt=""
-                className="size-14 shrink-0 rounded-md object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="size-14 shrink-0 rounded-md bg-paper-100 dark:bg-ink-800" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="truncate text-[13px] font-medium text-ink dark:text-paper">{ad.name || "—"}</p>
-                {ad.status && <Badge tone={ad.status === "ACTIVE" ? "success" : "neutral"}>{ad.status}</Badge>}
-              </div>
-              <p className="mt-0.5 text-[11px] tabular text-paper-400">
-                {currency(ad.spend)} · {compactNumber(ad.impressions)} impressões · {compactNumber(ad.clicks)} cliques ·{" "}
-                {ad.leads} leads · CPL {currency(ad.cpl)}
-              </p>
-              {ad.clientes > 0 && (
-                <p className="mt-0.5 text-[11px] tabular text-success">
-                  {ad.clientes} cliente{ad.clientes > 1 ? "s" : ""} · CAC {currency(ad.cac)}
-                  {ad.valorPorCliente !== null && ` · ticket ${currency(ad.valorPorCliente)}`}
-                  {ad.fechamentoDias !== null && ` · fecha em ${ad.fechamentoDias}d`}
-                </p>
+    <>
+      <Panel title="Anúncios" subtitle={`${ads.length} anúncio${ads.length === 1 ? "" : "s"}`}>
+        <div className="divide-y divide-paper-200 dark:divide-ink-700">
+          {ads.map((ad) => (
+            <div key={ad.id} className="flex items-start gap-3 px-3 py-2.5">
+              {ad.temMiniatura ? (
+                <AdThumbnail adId={ad.id} />
+              ) : (
+                <div className="size-14 shrink-0 rounded-md bg-paper-100 dark:bg-ink-800" />
               )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-[13px] font-medium text-ink dark:text-paper">{ad.name || "—"}</p>
+                  {ad.status && <Badge tone={ad.status === "ACTIVE" ? "success" : "neutral"}>{ad.status}</Badge>}
+                </div>
+                <p className="mt-0.5 text-[11px] tabular text-paper-400">
+                  {currency(ad.spend)} · {compactNumber(ad.impressions)} impressões · {compactNumber(ad.clicks)} cliques ·{" "}
+                  {ad.leads} leads · CPL {currency(ad.cpl)}
+                </p>
+                {ad.clientes > 0 && (
+                  <p className="mt-0.5 text-[11px] tabular text-success">
+                    {ad.clientes} cliente{ad.clientes > 1 ? "s" : ""} · CAC {currency(ad.cac)}
+                    {ad.valorPorCliente !== null && ` · ticket ${currency(ad.valorPorCliente)}`}
+                    {ad.fechamentoDias !== null && ` · fecha em ${ad.fechamentoDias}d`}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewAdId(ad.id)}
+                className="shrink-0 text-[11px] text-brand-600 underline-offset-2 hover:underline dark:text-brand-300"
+              >
+                Prévia
+              </button>
             </div>
-            <a
-              href={previewUrl(ad.id)}
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 text-[11px] text-brand-600 underline-offset-2 hover:underline dark:text-brand-300"
-            >
-              Prévia
-            </a>
-          </div>
-        ))}
-      </div>
-    </Panel>
+          ))}
+        </div>
+      </Panel>
+      {previewAdId && <AdPreviewModal adId={previewAdId} onClose={() => setPreviewAdId(null)} />}
+    </>
   )
 }
 
 // ── Campanhas ─────────────────────────────────────────────────────────────
 
-function CampanhasTab({ loading, campanhas }: { loading: boolean; campanhas: TrafficCampaign[] }) {
+function CampanhasTab({
+  loading,
+  campanhas,
+  error,
+}: {
+  loading: boolean
+  campanhas: TrafficCampaign[]
+  error?: unknown
+}) {
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && campanhas.length === 0) return <Skeleton className="h-64 rounded-lg" />
   if (campanhas.length === 0) return <EmptyState title="Nenhuma campanha no período" />
 
@@ -362,7 +419,17 @@ function SegmentList({ title, items }: { title: string; items: { key: string; sp
   )
 }
 
-function PublicoTab({ loading, perfil }: { loading: boolean; perfil: AudienceProfile | undefined }) {
+function PublicoTab({
+  loading,
+  perfil,
+  error,
+}: {
+  loading: boolean
+  perfil: AudienceProfile | undefined
+  error?: unknown
+}) {
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && !perfil) return <Skeleton className="h-64 rounded-lg" />
   if (!perfil) return <EmptyState title="Sem dados de público" />
 
@@ -377,7 +444,9 @@ function PublicoTab({ loading, perfil }: { loading: boolean; perfil: AudiencePro
 
 // ── Funil ─────────────────────────────────────────────────────────────────
 
-function FunilTab({ loading, funil }: { loading: boolean; funil: Funnel | undefined }) {
+function FunilTab({ loading, funil, error }: { loading: boolean; funil: Funnel | undefined; error?: unknown }) {
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && !funil) return <Skeleton className="h-64 rounded-lg" />
   if (!funil) return <EmptyState title="Sem dados de funil" />
 
@@ -461,7 +530,17 @@ function AdSalesRow({ ad }: { ad: AdWithSales }) {
   )
 }
 
-function VendasTab({ loading, vendas }: { loading: boolean; vendas: SalesReconciliation | undefined }) {
+function VendasTab({
+  loading,
+  vendas,
+  error,
+}: {
+  loading: boolean
+  vendas: SalesReconciliation | undefined
+  error?: unknown
+}) {
+  const configError = configErrorMessage(error)
+  if (configError) return <ConfigErrorState message={configError} />
   if (loading && !vendas) return <Skeleton className="h-64 rounded-lg" />
   if (!vendas) return <EmptyState title="Sem dados de vendas" />
 

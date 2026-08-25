@@ -17,7 +17,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from contexts.traffic.infrastructure import reports
-from contexts.traffic.infrastructure.meta_client import DateRange, date_range
+from contexts.traffic.infrastructure.meta_client import DateRange, MetaError, date_range
 from contexts.traffic.infrastructure.sales_reconciliation import calculate_sales
 from shared.domain.errors import NotFoundError, UpstreamError, ValidationError
 
@@ -46,6 +46,13 @@ class TrafficPreviewThrottle(UserRateThrottle):
     scope = "traffic_preview"
 
 
+def _meta_error_response(exc: MetaError) -> Response:
+    """`MetaError.user_message` é o texto pensado pra tela (ex.: token
+    expirado); o handler compartilhado só devolve `str(exc)` — a mensagem
+    técnica — então cada view intercepta aqui em vez de deixar propagar."""
+    return Response({"error": exc.user_message}, status=502)
+
+
 def _date_params(request: Request) -> tuple[str | None, str | None]:
     since = request.query_params.get("since")
     until = request.query_params.get("until")
@@ -71,7 +78,10 @@ class TrafficReportView(APIView):
 
         since, until = _date_params(request)
         faixa = date_range(since, until)
-        payload = self._build(relatorio, faixa)
+        try:
+            payload = self._build(relatorio, faixa)
+        except MetaError as exc:
+            return _meta_error_response(exc)
         response = Response(payload)
         response["Cache-Control"] = "private, no-store"
         return response
@@ -110,7 +120,10 @@ class TrafficThumbnailView(APIView):
         if not AD_ID_RE.match(ad_id):
             raise ValidationError("Identificador de anúncio inválido.")
 
-        url = reports.thumbnail_url(ad_id)
+        try:
+            url = reports.thumbnail_url(ad_id)
+        except MetaError as exc:
+            return _meta_error_response(exc)
         if not url:
             raise NotFoundError("Este anúncio não tem miniatura.")
 
@@ -147,7 +160,10 @@ class TrafficPreviewView(APIView):
         if ad_format not in AD_PREVIEW_FORMATS:
             raise ValidationError("Formato de prévia desconhecido.")
 
-        html = reports.ad_preview(ad_id, ad_format)
+        try:
+            html = reports.ad_preview(ad_id, ad_format)
+        except MetaError as exc:
+            return _meta_error_response(exc)
         if not html:
             raise NotFoundError("A Meta não devolveu prévia para este anúncio.")
         return Response({"html": html})

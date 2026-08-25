@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 
 from contexts.identity.infrastructure.django.models import UserModel
 from contexts.traffic.infrastructure import reports
-from contexts.traffic.infrastructure.meta_client import DateRange
+from contexts.traffic.infrastructure.meta_client import DateRange, MetaError
 
 
 @pytest.fixture
@@ -74,6 +74,16 @@ def test_preview_returns_html(client, monkeypatch):
     resp = client.get("/api/traffic/preview/?ad_id=12345")
     assert resp.status_code == 200
     assert resp.json()["html"] == "<iframe></iframe>"
+
+
+def test_report_meta_error_returns_user_message_not_raw_exception(client, monkeypatch):
+    def _raise(faixa):
+        raise MetaError("technical: code 190", "O token da Meta expirou ou foi revogado.")
+
+    monkeypatch.setattr(reports, "overview", _raise)
+    resp = client.get("/api/traffic/report/geral/")
+    assert resp.status_code == 502
+    assert resp.json()["error"] == "O token da Meta expirou ou foi revogado."
 
 
 def test_unauthenticated_request_is_rejected():

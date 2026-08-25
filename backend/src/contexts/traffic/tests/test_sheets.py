@@ -55,6 +55,15 @@ def test_days_between_with_invalid_dates_returns_none_not_raises():
     assert sheets.days_between("01/01/2026 - 00:00", "AB/CD/2026 - 12:56") is None
 
 
+def test_iso_date_returns_none_for_out_of_range_calendar_date():
+    # Dia/mês fora do calendário: dígitos válidos, mas não é uma data real.
+    assert sheets.iso_date("45/13/2026 - 10:00") is None
+
+
+def test_days_between_with_out_of_range_date_returns_none_not_raises():
+    assert sheets.days_between("45/13/2026 - 10:00", "05/01/2026 - 00:00") is None
+
+
 def test_strip_accents():
     assert sheets.strip_accents("São Paulo") == "sao paulo"
 

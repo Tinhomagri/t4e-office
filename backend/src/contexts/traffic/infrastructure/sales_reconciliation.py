@@ -40,6 +40,9 @@ OPERATION_START = "2025-12-01"
 
 def calculate_sales() -> dict:
     fechados_url = getattr(settings, "TRAFFIC_SHEET_FECHADOS_URL", "")
+    if not fechados_url:
+        raise ValidationError("A planilha de vendas fechadas não está configurada no servidor.")
+
     hist_url = getattr(settings, "TRAFFIC_SHEET_HIST_URL", "")
     ad_account_id = getattr(settings, "META_AD_ACCOUNT_ID", "")
 
