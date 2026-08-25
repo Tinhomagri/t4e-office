@@ -40,6 +40,21 @@ def test_iso_date_returns_none_for_invalid_format():
     assert sheets.iso_date(None) is None
 
 
+def test_iso_date_returns_none_for_non_digit_day_or_month():
+    # Non-digit day should return None
+    assert sheets.iso_date("AB/04/2026 - 12:56") is None
+    # Non-digit month should return None
+    assert sheets.iso_date("12/CD/2026 - 12:56") is None
+    # Both non-digit should return None
+    assert sheets.iso_date("AB/CD/2026 - 12:56") is None
+
+
+def test_days_between_with_invalid_dates_returns_none_not_raises():
+    # days_between should return None instead of raising ValueError
+    assert sheets.days_between("AB/CD/2026 - 12:56", "05/01/2026 - 00:00") is None
+    assert sheets.days_between("01/01/2026 - 00:00", "AB/CD/2026 - 12:56") is None
+
+
 def test_strip_accents():
     assert sheets.strip_accents("São Paulo") == "sao paulo"
 

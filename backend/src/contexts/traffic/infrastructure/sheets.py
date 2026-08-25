@@ -83,10 +83,14 @@ def iso_date(raw: str | None) -> str | None:
     text = (raw or "").strip()
     if len(text) < 10 or text[2] != "/" or text[5] != "/":
         return None
+    day = text[0:2]
+    month = text[3:5]
     year = text[6:10]
+    if not re.fullmatch(r"\d{2}", day) or not re.fullmatch(r"\d{2}", month):
+        return None
     if not re.fullmatch(r"\d{4}", year):
         return None
-    return f"{year}-{text[3:5]}-{text[0:2]}"
+    return f"{year}-{month}-{day}"
 
 
 def strip_accents(text: str | None) -> str:
