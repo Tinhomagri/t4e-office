@@ -4,6 +4,7 @@ import {
   useRoomContext,
   useParticipants,
   useDisconnectButton,
+  useConnectionState,
   useMediaDeviceSelect,
   useTrackToggle,
   useTracks,
@@ -12,7 +13,7 @@ import type { TrackReferenceOrPlaceholder } from "@livekit/components-core"
 import "@livekit/components-styles"
 import { ROOM_OPTIONS } from "./roomOptions"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Track } from "livekit-client"
+import { ConnectionState, Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
 import { useLocation } from "react-router-dom"
@@ -725,9 +726,14 @@ function DeviceMenu({
   label: string
 }) {
   const [open, setOpen] = useState(false)
+  const connectionState = useConnectionState()
   const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({
     kind,
-    requestPermissions: true,
+    // A sala já adquire as permissões ao conectar. Pedir os dois dispositivos
+    // durante a montagem, antes do handshake, pode devolver uma lista vazia
+    // (e as duas solicitações simultâneas também podem disputar a permissão).
+    // Quando a conexão muda para Connected o hook refaz a enumeração.
+    requestPermissions: connectionState === ConnectionState.Connected,
   })
 
   return (
