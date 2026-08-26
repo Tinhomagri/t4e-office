@@ -35,7 +35,7 @@ from contexts.identity.infrastructure.django.models import (
     WorkspaceModel,
 )
 from contexts.presence.infrastructure.django.models import UserAvatarModel
-from contexts.projects.infrastructure.django.models import CardModel
+from contexts.projects.infrastructure.django.models import CardModel, WorkflowStatusModel
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.permissions import (
     assert_project_capability,
@@ -49,6 +49,20 @@ _vote_repo = DjangoPokerVoteRepository()
 
 # Valores válidos de pontuação final — mesmo deck usado na votação (sem "?").
 DECK_POINTS = read_services.DECK_POINTS
+
+
+def _exclude_completed_cards(cards, *, workspace_id: str):
+    """Tira da estimativa qualquer card que já chegou ao fim do workflow.
+
+    Não basta testar `status="done"`: cada projeto pode nomear a coluna final
+    como Entregue, Publicado etc. O workflow é a fonte de verdade.
+    """
+    completed = Q(status__in=("done", "publicado"))
+    for project_id, slug in WorkflowStatusModel.objects.filter(
+        project__workspace_id=workspace_id
+    ).filter(Q(category="done") | Q(is_done=True)).values_list("project_id", "slug"):
+        completed |= Q(project_id=project_id, status=slug)
+    return cards.exclude(completed)
 
 
 def _initials(name: str) -> str:
@@ -432,17 +446,16 @@ class ProjectPokerListCreateView(APIView):
         if requested_ids:
             # Seleção explícita do board: mantém a ordem enviada, aceita só
             # cards do próprio projeto e descarta épicos.
-            valid = set(
-                str(c) for c in CardModel.objects.filter(
-                    project_id=project_id, id__in=requested_ids
-                ).exclude(type="epic").values_list("id", flat=True)
-            )
+            valid = set(str(c) for c in _exclude_completed_cards(
+                CardModel.objects.filter(project_id=project_id, id__in=requested_ids),
+                workspace_id=str(project.workspace_id),
+            ).exclude(type="epic").values_list("id", flat=True))
             card_ids = [str(c) for c in requested_ids if str(c) in valid]
         else:
             card_ids = [
-                str(c) for c in CardModel.objects.filter(
+                str(c) for c in _exclude_completed_cards(CardModel.objects.filter(
                     project_id=project_id, points__isnull=True
-                )
+                ), workspace_id=str(project.workspace_id))
                 .exclude(type="epic")
                 .order_by("rank", "number")
                 .values_list("id", flat=True)
@@ -584,13 +597,11 @@ class PokerCardsView(APIView):
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
 
-        cards = (
+        cards = _exclude_completed_cards(
             CardModel.objects.filter(
                 project__workspace_id=session.workspace_id, points__isnull=True
-            )
-            .exclude(type="epic")
-            .select_related("project")
-        )
+            ), workspace_id=session.workspace_id
+        ).exclude(type="epic").select_related("project")
         projeto = request.query_params.get("project")
         if projeto:
             cards = cards.filter(project_id=projeto)
