@@ -2100,6 +2100,7 @@ export function CardCell({
   const { data: epics } = useEpics(card.epic_id ? card.project_id : null)
   const epic = card.epic_id ? (epics ?? []).find((e) => e.id === card.epic_id) : null
   const nSub = card.subtasks_count ?? 0
+  const allSubtasksDone = nSub > 0 && (card.subtasks_done ?? 0) === nSub
   const nComments = card.comments_count ?? 0
   const nFiles = card.attachments_count ?? 0
   const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null || !!card.doing_since
@@ -2114,7 +2115,13 @@ export function CardCell({
         "hover:-translate-y-0.5 hover:shadow-panel hover:border-paper-300 dark:hover:border-ink-600",
         "active:translate-y-0 active:shadow-card active:duration-75",
         dragging && "shadow-pop ring-1 ring-ink/10",
-        isEpic ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800" : "border-paper-200 dark:border-ink-700",
+        nSub > 0
+          ? allSubtasksDone
+            ? "border-success/60 bg-success/5 dark:border-success/60 dark:bg-success/10"
+            : "border-violet-400/60 bg-violet-50/60 dark:border-violet-500/60 dark:bg-violet-900/20"
+          : isEpic
+            ? "border-violet-200 dark:border-violet-900 bg-gradient-to-br from-violet-50/60 dark:from-violet-900/20 to-paper dark:to-ink-800"
+            : "border-paper-200 dark:border-ink-700",
         isDone && "opacity-60",
         // Flag de atenção: cliente marcou na criação (ou o time marcou depois)
         // — aura laranja pra saltar aos olhos na varredura do board.
