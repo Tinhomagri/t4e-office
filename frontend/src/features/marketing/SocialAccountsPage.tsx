@@ -50,6 +50,7 @@ import {
 } from "@/shared/ui/command-center"
 import { Badge, Button, EmptyState, Input, Kbd, Modal, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
+import { isAxiosError } from "axios"
 
 import { SocialAppConfigDialog } from "./SocialAppConfigDialog"
 import { DriveConfigDialog } from "./DriveConfigDialog"
@@ -188,8 +189,11 @@ export function SocialAccountsPage() {
       load()
       void health.refetch()
       toast.success("Instagram conectado com sucesso.")
-    } catch {
-      toast.error("Não foi possível validar o token do Instagram.")
+    } catch (error) {
+      const detail = isAxiosError(error)
+        ? (error.response?.data?.detail ?? error.response?.data?.message)
+        : ""
+      toast.error(detail || "Não foi possível validar o token do Instagram.")
     } finally {
       setBusy(null)
     }
@@ -366,8 +370,17 @@ export function SocialAccountsPage() {
             description="Na Meta, abra Instagram → Gerar token. Cole-o abaixo uma única vez; ele é cifrado e nunca será exibido novamente."
             footer={
               <>
-                <Button variant="ghost" onClick={() => setInstagramTokenOpen(false)}>Cancelar</Button>
-                <Button loading={busy === "instagram"} onClick={() => void connectInstagramToken}>Conectar</Button>
+                <Button type="button" variant="ghost" onClick={() => setInstagramTokenOpen(false)}>Cancelar</Button>
+                <Button
+                  type="button"
+                  loading={busy === "instagram"}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void connectInstagramToken()
+                  }}
+                >
+                  Conectar
+                </Button>
               </>
             }
           >
