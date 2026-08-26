@@ -107,7 +107,8 @@ export async function getOauthProviders(
 
 // ── Credenciais dos apps OAuth (dono configura pelo frontend) ───────────────
 export interface OauthCredential {
-  client_id: string
+  client_id_hint: string
+  has_client_id: boolean
   has_secret: boolean
   configured: boolean
   source: "workspace" | "none"

@@ -55,11 +55,11 @@ export function SocialAppConfigDialog({
         setCreds(c)
         setDrafts(
           Object.fromEntries(
-            PROVIDERS.map((p) => [p, { id: c[p]?.client_id ?? "", secret: "" }]),
+          PROVIDERS.map((p) => [p, { id: "", secret: "" }]),
           ),
         )
       })
-      .catch(() => toast.error("Falha ao carregar credenciais (apenas o dono)."))
+      .catch(() => toast.error("Falha ao carregar credenciais (apenas dono ou administrador)."))
   }
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function SocialAppConfigDialog({
 
   const save = async (provider: string) => {
     const d = drafts[provider] ?? { id: "", secret: "" }
-    if (!d.id.trim()) {
+    if (!creds[provider]?.has_client_id && !d.id.trim()) {
       toast.error("Informe o Client ID.")
       return
     }
@@ -84,7 +84,7 @@ export function SocialAppConfigDialog({
       load()
       onSaved?.()
     } catch {
-      toast.error("Falha ao salvar (apenas o dono).")
+      toast.error("Falha ao salvar (apenas dono ou administrador).")
     } finally {
       setBusy(null)
     }
@@ -150,7 +150,7 @@ export function SocialAppConfigDialog({
               <Input
                 value={d.id}
                 onChange={(e) => setD({ id: e.target.value })}
-                placeholder="Client ID"
+                placeholder={c?.has_client_id ? `Client ID salvo (${c.client_id_hint}) — deixe vazio para manter` : "Client ID"}
               />
               <Input
                 type="password"

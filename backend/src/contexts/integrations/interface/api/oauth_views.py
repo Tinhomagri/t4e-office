@@ -35,6 +35,18 @@ def _front(path: str, query: str) -> str:
     return f"{base}{path or '/app/marketing/redes'}?{query}"
 
 
+def _require_marketing_admin(request: Request, workspace_id: str | None) -> None:
+    if not workspace_id:
+        raise ValidationError("Informe o workspace_id.")
+    role = DjangoWorkspaceAccess().role(workspace_id=workspace_id, user_id=str(request.user.id))
+    if role not in ("owner", "admin"):
+        raise PermissionDeniedError("Apenas dono ou administrador podem configurar redes sociais.")
+
+
+def _hint(value: str) -> str:
+    return f"••••{value[-4:]}" if value else ""
+
+
 class OAuthProvidersView(APIView):
     """Quais providers têm app OAuth configurado no workspace."""
 
@@ -70,9 +82,7 @@ class OAuthUrlView(APIView):
                 f"App OAuth de {provider} não configurado. Preencha o "
                 f"Client ID/Secret em Configurar apps."
             )
-        access = DjangoWorkspaceAccess()
-        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
-            raise PermissionDeniedError("Apenas o dono pode conectar contas sociais.")
+        _require_marketing_admin(request, workspace_id)
 
         verifier, challenge = ("", "")
         if social_oauth.PROVIDERS[provider].uses_pkce:
@@ -149,7 +159,7 @@ class OAuthCallbackView(APIView):
 class OAuthCredentialsView(APIView):
     """Credenciais dos apps OAuth por workspace (admin configura no frontend).
 
-    * GET    ?workspace_id=  → status por provider (client_id, has_secret,
+    * GET    ?workspace_id=  → status mascarado por provider (nunca credenciais),
       configured, source, redirect_uri a registrar no app do provedor).
     * PUT    <provider>/     → salva {workspace_id, client_id, client_secret}.
       client_secret vazio no PUT mantém o segredo já salvo (não sobrescreve).
@@ -159,18 +169,9 @@ class OAuthCredentialsView(APIView):
     permission_classes = [IsAuthenticated, SpaceAccessPermission]
     required_space = "marketing"
 
-    def _require_owner(self, request: Request, workspace_id: str) -> None:
-        if not workspace_id:
-            raise ValidationError("Informe o workspace_id.")
-        access = DjangoWorkspaceAccess()
-        if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
-            raise PermissionDeniedError(
-                "Apenas o dono pode configurar apps sociais."
-            )
-
     def get(self, request: Request) -> Response:
         workspace_id = request.query_params.get("workspace_id")
-        self._require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         saved = {
             c.provider: c
             for c in SocialAppCredentialModel.objects.filter(workspace_id=workspace_id)
@@ -180,7 +181,8 @@ class OAuthCredentialsView(APIView):
             cred = saved.get(name)
             has_ws = bool(cred and cred.client_id and cred.client_secret_encrypted)
             out[name] = {
-                "client_id": (cred.client_id if cred else "") or "",
+                "client_id_hint": _hint(cred.client_id if cred else ""),
+                "has_client_id": bool(cred and cred.client_id),
                 "has_secret": bool(cred and cred.client_secret_encrypted),
                 "configured": social_oauth.is_configured(name, workspace_id),
                 "source": "workspace" if has_ws else "none",
@@ -192,15 +194,16 @@ class OAuthCredentialsView(APIView):
         if provider not in social_oauth.PROVIDERS:
             raise ValidationError(f"Provider desconhecido: {provider}")
         workspace_id = str(request.data.get("workspace_id") or "")
-        self._require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         client_id = str(request.data.get("client_id") or "").strip()
         client_secret = str(request.data.get("client_secret") or "").strip()
-        if not client_id:
-            raise ValidationError("Informe o Client ID.")
         cred, _ = SocialAppCredentialModel.objects.get_or_create(
             workspace_id=workspace_id, provider=provider
         )
-        cred.client_id = client_id
+        if client_id:
+            cred.client_id = client_id
+        elif not cred.client_id:
+            raise ValidationError("Informe o Client ID.")
         if client_secret:  # vazio = mantém o segredo já salvo
             from contexts.github.infrastructure.django.crypto import encrypt
 
@@ -212,7 +215,8 @@ class OAuthCredentialsView(APIView):
         return Response(
             {
                 "provider": provider,
-                "client_id": cred.client_id,
+                "client_id_hint": _hint(cred.client_id),
+                "has_client_id": True,
                 "has_secret": bool(cred.client_secret_encrypted),
                 "configured": True,
                 "source": "workspace",
@@ -223,7 +227,7 @@ class OAuthCredentialsView(APIView):
         workspace_id = request.query_params.get("workspace_id") or str(
             request.data.get("workspace_id") or ""
         )
-        self._require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         SocialAppCredentialModel.objects.filter(
             workspace_id=workspace_id, provider=provider
         ).delete()
