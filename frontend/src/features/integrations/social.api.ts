@@ -159,6 +159,14 @@ export async function getOauthUrl(
   return data.url
 }
 
+/** Token obtido em Meta > Instagram > Gerar token. Nunca é devolvido pela API. */
+export async function connectInstagramWithToken(workspaceId: string, accessToken: string): Promise<void> {
+  await api.post("/integrations/oauth/instagram/token/", {
+    workspace_id: workspaceId,
+    access_token: accessToken,
+  })
+}
+
 // ── Analytics ───────────────────────────────────────────────────────────────
 export interface ChannelAnalytics extends PostMetrics {
   posts: number

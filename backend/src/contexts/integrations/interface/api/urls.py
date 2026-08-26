@@ -26,6 +26,7 @@ from contexts.integrations.interface.api.oauth_views import (
     OAuthCredentialsView,
     OAuthProvidersView,
     OAuthUrlView,
+    InstagramTokenConnectView,
 )
 from contexts.integrations.interface.api.views import (
     AnalyticsView,
@@ -59,6 +60,11 @@ urlpatterns = [
         name="integrations-oauth-credentials-detail",
     ),
     path("oauth/<str:provider>/url/", OAuthUrlView.as_view(), name="integrations-oauth-url"),
+    path(
+        "oauth/instagram/token/",
+        InstagramTokenConnectView.as_view(),
+        name="integrations-instagram-token-connect",
+    ),
     path(
         "oauth/<str:provider>/callback/",
         OAuthCallbackView.as_view(),

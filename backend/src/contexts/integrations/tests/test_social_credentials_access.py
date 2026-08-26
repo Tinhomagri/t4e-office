@@ -2,6 +2,7 @@
 import pytest
 from rest_framework.test import APIClient
 
+from contexts.copilot.infrastructure.django.models import SocialAccountModel
 from contexts.identity.infrastructure.django.models import MembershipModel, UserModel, WorkspaceModel
 
 
@@ -52,3 +53,23 @@ def test_admin_marketing_salva_e_ve_apenas_dicas_mascaradas(marketing_admin):
     assert "client_id" not in credential
     assert "linkedin-client-secret" not in str(listed.data)
     assert connect.status_code == 200
+
+
+@pytest.mark.django_db
+def test_admin_marketing_conecta_instagram_com_token_gerado_na_meta(marketing_admin, monkeypatch):
+    client, workspace = marketing_admin
+
+    monkeypatch.setattr(
+        "contexts.integrations.interface.api.oauth_views.social_oauth.fetch_account_info",
+        lambda provider, token: {"external_id": "17841416137684403", "account_name": "@t4egroup"},
+    )
+    response = client.post(
+        "/api/integrations/oauth/instagram/token/",
+        {"workspace_id": str(workspace.id), "access_token": "meta-generated-token"},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    account = SocialAccountModel.objects.get(workspace=workspace, channel="instagram")
+    assert account.account_name == "@t4egroup"
+    assert account.access_token_encrypted != "meta-generated-token"

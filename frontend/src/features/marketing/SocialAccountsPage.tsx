@@ -33,7 +33,7 @@ import {
   type AccountHealthStatus,
   useAccountsHealth,
 } from "@/features/integrations/insights.api"
-import { getOauthProviders, getOauthUrl } from "@/features/integrations/social.api"
+import { connectInstagramWithToken, getOauthProviders, getOauthUrl } from "@/features/integrations/social.api"
 import { useWorkspaceStore } from "@/features/workspace/workspace.store"
 import { EASE } from "@/shared/lib/motion"
 import {
@@ -48,7 +48,7 @@ import {
   useCommandPalette,
   useHotkey,
 } from "@/shared/ui/command-center"
-import { Badge, Button, EmptyState, Kbd, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
+import { Badge, Button, EmptyState, Input, Kbd, Modal, PageHeader, Skeleton, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 
 import { SocialAppConfigDialog } from "./SocialAppConfigDialog"
@@ -102,6 +102,8 @@ export function SocialAccountsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [driveConfigOpen, setDriveConfigOpen] = useState(false)
+  const [instagramTokenOpen, setInstagramTokenOpen] = useState(false)
+  const [instagramToken, setInstagramToken] = useState("")
   const [query, setQuery] = useState("")
   const [onlyIssues, setOnlyIssues] = useState(false)
 
@@ -156,6 +158,11 @@ export function SocialAccountsPage() {
   const connect = useCallback(
     async (provider: string) => {
       if (!workspaceId) return
+      if (provider === "instagram") {
+        setInstagramToken("")
+        setInstagramTokenOpen(true)
+        return
+      }
       setBusy(provider)
       try {
         const url = await getOauthUrl(provider, workspaceId, "/app/marketing/redes")
@@ -167,6 +174,26 @@ export function SocialAccountsPage() {
     },
     [workspaceId],
   )
+
+  const connectInstagramToken = async () => {
+    if (!workspaceId || !instagramToken.trim()) {
+      toast.error("Cole o token gerado pela Meta.")
+      return
+    }
+    setBusy("instagram")
+    try {
+      await connectInstagramWithToken(workspaceId, instagramToken.trim())
+      setInstagramToken("")
+      setInstagramTokenOpen(false)
+      load()
+      void health.refetch()
+      toast.success("Instagram conectado com sucesso.")
+    } catch {
+      toast.error("Não foi possível validar o token do Instagram.")
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const disconnect = async (ch: string) => {
     if (!workspaceId) return
@@ -332,6 +359,31 @@ export function SocialAccountsPage() {
             onSaved={load}
           />
           <DriveConfigDialog open={driveConfigOpen} onClose={() => setDriveConfigOpen(false)} workspaceId={workspaceId} />
+          <Modal
+            open={instagramTokenOpen}
+            onClose={() => setInstagramTokenOpen(false)}
+            title="Conectar Instagram"
+            description="Na Meta, abra Instagram → Gerar token. Cole-o abaixo uma única vez; ele é cifrado e nunca será exibido novamente."
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setInstagramTokenOpen(false)}>Cancelar</Button>
+                <Button loading={busy === "instagram"} onClick={() => void connectInstagramToken}>Conectar</Button>
+              </>
+            }
+          >
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-ink dark:text-paper" htmlFor="instagram-access-token">Token de acesso do Instagram</label>
+              <Input
+                id="instagram-access-token"
+                type="password"
+                autoComplete="off"
+                value={instagramToken}
+                onChange={(event) => setInstagramToken(event.target.value)}
+                placeholder="Cole o token gerado pela Meta"
+              />
+              <p className="text-xs text-paper-500">Não use a URL de callback de webhook: ela não é usada neste fluxo.</p>
+            </div>
+          </Modal>
         </>
       )}
 

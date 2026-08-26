@@ -156,6 +156,57 @@ class OAuthCallbackView(APIView):
         return redirect(_front(return_to, f"social=connected&channel={provider}"))
 
 
+class InstagramTokenConnectView(APIView):
+    """Conecta o Instagram API with Instagram Login pelo token gerado na Meta.
+
+    A experiência atual desse produto da Meta disponibiliza o token no painel
+    "Gerar token" e não cadastra uma redirect URI de OAuth. O token é usado
+    apenas nesta requisição para validar a conta e é guardado cifrado.
+    """
+
+    permission_classes = [IsAuthenticated, SpaceAccessPermission]
+    required_space = "marketing"
+
+    def post(self, request: Request) -> Response:
+        workspace_id = str(request.data.get("workspace_id") or "")
+        _require_marketing_admin(request, workspace_id)
+        access_token = str(request.data.get("access_token") or "").strip()
+        if not access_token:
+            raise ValidationError("Informe o token de acesso gerado pela Meta.")
+        try:
+            info = social_oauth.fetch_account_info("instagram", access_token)
+        except Exception as exc:
+            raise ValidationError(
+                "Não foi possível validar o token do Instagram. Gere um novo token na Meta "
+                "e confirme que a conta possui as permissões de publicação."
+            ) from exc
+        if not info.get("external_id"):
+            raise ValidationError("A Meta não retornou a identificação da conta Instagram.")
+
+        account, _ = SocialAccountModel.objects.update_or_create(
+            workspace_id=workspace_id,
+            channel="instagram",
+            defaults={
+                "account_name": info["account_name"],
+                "external_id": info["external_id"],
+                "access_token_encrypted": encrypt(access_token),
+                "refresh_token_encrypted": "",
+                # A Meta informa a duração ao gerar o token, mas não a entrega
+                # neste fluxo. Não inventamos uma data de expiração.
+                "token_expires_at": None,
+                "connected_by_id": str(request.user.id),
+            },
+        )
+        return Response(
+            {
+                "id": str(account.id),
+                "channel": account.channel,
+                "account_name": account.account_name,
+            },
+            status=201,
+        )
+
+
 class OAuthCredentialsView(APIView):
     """Credenciais dos apps OAuth por workspace (admin configura no frontend).
 

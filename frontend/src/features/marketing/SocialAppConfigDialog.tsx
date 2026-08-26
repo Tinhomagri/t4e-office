@@ -158,7 +158,11 @@ export function SocialAppConfigDialog({
                 onChange={(e) => setD({ secret: e.target.value })}
                 placeholder={c?.has_secret ? "Client Secret (salvo — deixe vazio p/ manter)" : "Client Secret"}
               />
-              {c?.redirect_uri && (
+              {p === "instagram" ? (
+                <p className="text-[11px] text-paper-500">
+                  Neste produto da Meta, gere o token em Instagram → Gerar token. A URL de webhook não é usada para conectar o Office.
+                </p>
+              ) : c?.redirect_uri && (
                 <button
                   type="button"
                   onClick={() => copyRedirect(c.redirect_uri)}
