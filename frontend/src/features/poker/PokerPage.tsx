@@ -1795,7 +1795,10 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
       observer.disconnect()
       window.removeEventListener("resize", measure)
     }
-  }, [])
+  // A área da mesa só existe depois que a sessão chega da API. Sem essa
+  // dependência o primeiro efeito encontra `areaRef` nulo e nunca instala o
+  // ResizeObserver, deixando a escala provisória de segurança (0.35) presa.
+  }, [session?.id])
 
   useEffect(() => () => timers.current.forEach(clearTimeout), [])
 
