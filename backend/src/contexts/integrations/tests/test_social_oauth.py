@@ -47,6 +47,15 @@ def test_build_authorize_url_tiktok_uses_client_key():
     assert q["scope"] == ["user.info.basic,video.publish"]
 
 
+def test_redirect_social_usa_dominio_google_quando_social_ainda_e_localhost(settings):
+    settings.SOCIAL_OAUTH_REDIRECT_BASE = "http://localhost:8000"
+    settings.GOOGLE_OAUTH_REDIRECT_URI = "https://office.t4egroup.com.br/api/google/callback/"
+
+    assert social_oauth.redirect_uri("instagram") == (
+        "https://office.t4egroup.com.br/api/integrations/oauth/instagram/callback/"
+    )
+
+
 def test_is_configured_is_workspace_scoped():
     with patch.object(social_oauth, "credentials", return_value=("a", "b")):
         assert social_oauth.is_configured("linkedin", "workspace")

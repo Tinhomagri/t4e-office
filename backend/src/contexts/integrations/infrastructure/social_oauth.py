@@ -32,7 +32,7 @@ import base64
 import hashlib
 import secrets
 from dataclasses import dataclass, field
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from django.conf import settings
@@ -133,6 +133,14 @@ def is_configured(provider: str, workspace_id: str | None = None) -> bool:
 
 def redirect_uri(provider: str) -> str:
     base = settings.SOCIAL_OAUTH_REDIRECT_BASE.rstrip("/")
+    # Instalações antigas não tinham SOCIAL_OAUTH_REDIRECT_BASE em produção e
+    # por isso caíam em localhost. Quando isso ocorre, usamos o domínio
+    # público já provado pela integração Google, preservando um valor social
+    # explícito caso ele tenha sido configurado.
+    social = urlsplit(base)
+    google = urlsplit(settings.GOOGLE_OAUTH_REDIRECT_URI)
+    if social.hostname in ("localhost", "127.0.0.1") and google.hostname not in ("localhost", "127.0.0.1", None):
+        base = urlunsplit((google.scheme, google.netloc, "", "", ""))
     return f"{base}/api/integrations/oauth/{provider}/callback/"
 
 
