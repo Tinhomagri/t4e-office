@@ -24,7 +24,7 @@ def drive_owner(db):
 @pytest.mark.django_db
 def test_dono_salva_dados_do_app_sem_refresh_e_inicia_oauth(drive_owner, settings):
     client, workspace = drive_owner
-    settings.GOOGLE_OAUTH_LOGIN_REDIRECT_URI = "https://api.office.t4e.com/api/auth/google/callback/"
+    settings.GOOGLE_OAUTH_REDIRECT_URI = "https://api.office.t4e.com/api/google/callback/"
     payload = {
         "workspace_id": str(workspace.id),
         "client_id": "google-client-id",
