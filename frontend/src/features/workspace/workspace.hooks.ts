@@ -6,6 +6,7 @@ import { refreshAccessToken } from "@/shared/api/client"
 import { toast } from "@/shared/ui/toast"
 
 import * as wsApi from "./workspace.api"
+import type { CardChild } from "./workspace.api"
 import { useWorkspaceStore } from "./workspace.store"
 import type { Card } from "./workspace.types"
 import type {
@@ -122,7 +123,14 @@ export function useUpdateCard(projectId: string | null) {
       qc.setQueriesData<Card[]>({ queryKey: ["cards", projectId] }, (current) =>
         current?.map((card) => card.id === cardId ? { ...card, ...updatedCard } : card),
       )
+      // A prévia expansível do card pai usa esta query menor, separada da
+      // listagem do board. Atualizá-la também evita progresso novo com mini-card
+      // antigo (status/avatar só mudavam depois de F5).
+      qc.setQueriesData<CardChild[]>({ queryKey: ["card-children"] }, (current) =>
+        current?.map((child) => child.id === cardId ? { ...child, ...updatedCard } : child),
+      )
       qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      qc.invalidateQueries({ queryKey: ["card-children"] })
       qc.invalidateQueries({ queryKey: ["card-history", cardId] })
       qc.invalidateQueries({ queryKey: ["my-work"] })
       qc.invalidateQueries({ queryKey: ["active-card"] })
