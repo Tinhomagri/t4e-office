@@ -1133,10 +1133,12 @@ function SharedCardPresentation({
   card,
   isHost,
   onClose,
+  onVote,
 }: {
   card: NonNullable<PokerSession["presented_card"]>
   isHost: boolean
   onClose: () => void
+  onVote: () => void
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#07090d]/55 p-5 backdrop-blur-sm">
@@ -1168,6 +1170,17 @@ function SharedCardPresentation({
             <div><dt className="text-[10px] uppercase tracking-wider text-[#8590A2]">Responsável</dt><dd className="mt-0.5 text-[#F7F8F9]">{card.assignee_name}</dd></div>
           </dl>
         </div>
+        {isHost && (
+          <footer className="flex justify-end border-t border-[#2E3036] px-5 py-3">
+            <button
+              type="button"
+              onClick={onVote}
+              className="rounded-md bg-[#0C66E4] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0055CC]"
+            >
+              Iniciar votação
+            </button>
+          </footer>
+        )}
       </article>
     </div>
   )
@@ -2011,7 +2024,12 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
 
   const handleSelectCard = (id: string) => {
     const nextIds = selectedIds.includes(id) ? selectedIds : [...selectedIds, id]
-    updateSession.mutate({ status: "voting", current_card_id: id, card_ids: nextIds })
+    updateSession.mutate({
+      status: "voting",
+      current_card_id: id,
+      presented_card_id: null,
+      card_ids: nextIds,
+    })
   }
 
   const handlePresentCard = (id: string | null) => {
@@ -2393,6 +2411,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               card={session.presented_card}
               isHost={isHost}
               onClose={() => handlePresentCard(null)}
+              onVote={() => handleSelectCard(session.presented_card!.id)}
             />
           )}
         </div>
