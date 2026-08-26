@@ -87,3 +87,39 @@ def test_callback_cifra_refresh_token_sem_devolve_lo_ao_navegador(drive_owner):
     status = client.get("/api/integrations/drive/config/", {"workspace_id": str(workspace.id)})
     assert status.data["configured"] is True
     assert "never-send-this-to-browser" not in str(status.data)
+
+
+@pytest.mark.django_db
+def test_admin_com_acesso_ao_marketing_tambem_configura_drive(drive_owner):
+    owner_client, workspace = drive_owner
+    admin = UserModel.objects.create_user(
+        email="marketing-admin@t4e.com", password="x", full_name="Admin Marketing", is_active=True
+    )
+    MembershipModel.objects.create(
+        workspace=workspace, user=admin, role="admin", allowed_spaces=["marketing"]
+    )
+    owner_client.put(
+        "/api/integrations/drive/config/",
+        {
+            "workspace_id": str(workspace.id),
+            "client_id": "google-client-id",
+            "client_secret": "google-client-secret",
+            "takes_folder_id": "takes-folder",
+            "projects_folder_id": "projects-folder",
+        },
+        format="json",
+    )
+    admin_client = APIClient()
+    admin_client.force_authenticate(user=admin)
+
+    config = admin_client.get(
+        "/api/integrations/drive/config/", {"workspace_id": str(workspace.id)}
+    )
+    oauth = admin_client.get(
+        "/api/integrations/drive/oauth/url/", {"workspace_id": str(workspace.id)}
+    )
+
+    assert config.status_code == 200
+    assert config.data["can_configure"] is True
+    assert config.data["hints"]["client_id"].startswith("••••")
+    assert oauth.status_code == 200

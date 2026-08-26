@@ -29,12 +29,12 @@ from shared.domain.errors import PermissionDeniedError, ValidationError
 from shared.interface.permissions import SpaceAccessPermission
 
 
-def _require_owner(request: Request, workspace_id: str) -> None:
+def _require_marketing_admin(request: Request, workspace_id: str) -> None:
     if not workspace_id:
         raise ValidationError("Informe o workspace_id.")
-    access = DjangoWorkspaceAccess()
-    if access.role(workspace_id=workspace_id, user_id=str(request.user.id)) != "owner":
-        raise PermissionDeniedError("Apenas o dono pode configurar o Google Drive.")
+    role = DjangoWorkspaceAccess().role(workspace_id=workspace_id, user_id=str(request.user.id))
+    if role not in ("owner", "admin"):
+        raise PermissionDeniedError("Apenas dono ou administrador podem configurar o Google Drive.")
 
 
 def _require_member(request: Request, workspace_id: str) -> bool:
@@ -43,7 +43,7 @@ def _require_member(request: Request, workspace_id: str) -> bool:
     role = DjangoWorkspaceAccess().role(workspace_id=workspace_id, user_id=str(request.user.id))
     if role is None:
         raise PermissionDeniedError("Você não tem acesso a este workspace.")
-    return role == "owner"
+    return role in ("owner", "admin")
 
 
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
@@ -77,7 +77,7 @@ class DriveConfigView(APIView):
 
     def put(self, request: Request) -> Response:
         workspace_id = str(request.data.get("workspace_id") or "")
-        _require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         cfg = save_config(
             workspace_id=workspace_id,
             actor_id=str(request.user.id),
@@ -95,7 +95,7 @@ class DriveOAuthUrlView(APIView):
 
     def get(self, request: Request) -> Response:
         workspace_id = str(request.query_params.get("workspace_id") or "")
-        _require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         client_id, _ = oauth_client_for_workspace(workspace_id)
         state = secrets.token_urlsafe(32)
         SocialOAuthStateModel.objects.create(
@@ -174,7 +174,7 @@ class DriveConfigTestView(APIView):
 
     def post(self, request: Request) -> Response:
         workspace_id = str(request.data.get("workspace_id") or "")
-        _require_owner(request, workspace_id)
+        _require_marketing_admin(request, workspace_id)
         try:
             drive = credentials_for_workspace(workspace_id)
             credentials = Credentials(
