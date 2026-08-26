@@ -15,7 +15,7 @@ from contexts.projects.application.use_cases.update_card import UpdateCard
 from contexts.projects.domain.entities.card import Card
 from contexts.projects.domain.entities.comment import CardComment
 from contexts.projects.domain.entities.history import CardHistoryEntry
-from contexts.projects.infrastructure.django.models import CardModel
+from contexts.projects.infrastructure.django.models import CardModel, WorkflowStatusModel
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoCardRepository,
     DjangoCommentRepository,
@@ -86,6 +86,51 @@ def _deps():
         DjangoCardRepository(),
         DjangoWorkspaceAccess(),
     )
+
+
+def _complete_parent_when_all_subtasks_done(*, child: Card, actor_id: str) -> None:
+    """Conclui o pai quando a última subtarefa foi concluída.
+
+    O status final vem da coluna marcada como ``is_done`` no workflow do
+    projeto, nunca de um slug fixo. Isso deixa a regra funcionar também em
+    projetos importados do Jira que renomearam a coluna de conclusão.
+    """
+    if not child.parent_id:
+        return
+
+    parent = CardModel.objects.filter(id=child.parent_id).first()
+    if parent is None:
+        return
+
+    done_slugs = list(
+        WorkflowStatusModel.objects.filter(
+            project_id=parent.project_id, is_done=True
+        )
+        .order_by("order")
+        .values_list("slug", flat=True)
+    )
+    # Projetos antigos, anteriores ao workflow configurável, ainda usam o
+    # status canônico. Em projeto com workflow configurado mas sem coluna final
+    # marcada, não adivinhamos uma coluna (poderia ser "Cancelado").
+    if not done_slugs:
+        if WorkflowStatusModel.objects.filter(project_id=parent.project_id).exists():
+            return
+        done_slugs = ["done"]
+
+    children = CardModel.objects.filter(parent_id=parent.id)
+    if not children.exists() or children.exclude(status__in=done_slugs).exists():
+        return
+    if parent.status in done_slugs:
+        return
+
+    projects, cards, access = _deps()
+    UpdateCard(
+        projects,
+        cards,
+        access,
+        DjangoHistoryRepository(),
+        DjangoStatusCategoryResolver(),
+    ).execute(card_id=str(parent.id), actor_id=actor_id, status=done_slugs[0])
 
 
 def _working_since_map(project_id: str) -> dict[str, str]:
@@ -364,6 +409,10 @@ class CardDetailView(APIView):
             actor_id=str(request.user.id),
             **serializer.validated_data,
         )
+        if "status" in serializer.validated_data:
+            _complete_parent_when_all_subtasks_done(
+                child=card, actor_id=str(request.user.id)
+            )
         project = projects.get(project_id=card.project_id)
 
         # Notify new assignee if assignment changed

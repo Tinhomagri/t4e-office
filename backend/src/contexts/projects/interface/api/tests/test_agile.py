@@ -91,6 +91,21 @@ def test_atribui_epico_via_patch(scenario):
     assert resp.json()["epic_id"] == str(epic.id)
 
 
+def test_ultima_subtarefa_concluida_finaliza_card_pai(scenario):
+    project = scenario["project"]
+    parent = _card(project, 1, status="todo")
+    _card(project, 2, parent=parent, status="done")
+    last_child = _card(project, 3, parent=parent, status="todo")
+
+    resp = scenario["client"].patch(
+        f"/api/cards/{last_child.id}/", {"status": "done"}, format="json"
+    )
+
+    assert resp.status_code == 200
+    parent.refresh_from_db()
+    assert parent.status == "done"
+
+
 def test_time_alterna_flag_de_atencao_via_patch(scenario):
     p = scenario["project"]
     card = _card(p, 1, flagged=True)  # veio marcado pelo cliente
