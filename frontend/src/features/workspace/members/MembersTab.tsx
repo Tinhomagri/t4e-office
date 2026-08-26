@@ -225,23 +225,24 @@ export function MembersTab({ workspaceId }: { workspaceId: string }) {
 
                   {/* Só o dono declara os módulos de admin e membro. */}
                   {canManageSpaces && m.role !== "owner" && (
-                    <div className="flex shrink-0 items-center gap-2.5">
+                    <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label={`Acessos de ${m.name}`}>
                       {SPACES.map((s) => {
                         const checked = m.allowed_spaces?.includes(s.id) ?? false
                         return (
-                          <label
+                          <button
+                            type="button"
                             key={s.id}
-                            className="flex cursor-pointer items-center gap-1 text-[11px] text-paper-500"
+                            aria-pressed={checked}
+                            onClick={() => handleSpaceToggle(m, s.id, !checked)}
+                            className={
+                              checked
+                                ? "rounded-full border border-brand-500 bg-brand-500 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
+                                : "rounded-full border border-paper-300 px-2.5 py-1 text-[11px] text-paper-500 transition-colors hover:border-paper-400 hover:text-ink dark:border-ink-600 dark:hover:border-ink-500 dark:hover:text-paper"
+                            }
                             title={SPACE_LABEL[s.id]}
                           >
-                            <input
-                              type="checkbox"
-                              className="size-3.5 accent-brand-500 focus-ring"
-                              checked={checked}
-                              onChange={(e) => handleSpaceToggle(m, s.id, e.target.checked)}
-                            />
                             {SPACE_LABEL[s.id]}
-                          </label>
+                          </button>
                         )
                       })}
                     </div>
