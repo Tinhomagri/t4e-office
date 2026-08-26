@@ -1836,6 +1836,7 @@ const DraggableCard = memo(forwardRef<HTMLDivElement, {
           <CardCell
             card={card}
             members={members}
+            onOpen={onOpen}
             onDone={onDone}
             onAssign={onAssign && ((assigneeId) => onAssign(card.id, assigneeId))}
           />
@@ -2020,11 +2021,20 @@ function AssigneePicker({
  * andamento das subtarefas. Os filhos só são buscados quando a pessoa abre a
  * seção, para não multiplicar requests em um quadro grande.
  */
-function SubtaskPreview({ card, members }: { card: Card; members: Member[] }) {
+function SubtaskPreview({
+  card,
+  members,
+  onOpen,
+}: {
+  card: Card
+  members: Member[]
+  onOpen?: (card: Card) => void
+}) {
   const [open, setOpen] = useState(false)
   const total = card.subtasks_count ?? 0
   const done = card.subtasks_done ?? 0
   const { data: children = [], isLoading } = useCardChildren(open ? card.id : null)
+  const { data: projectCards = [] } = useCards(open ? card.project_id : null)
 
   if (total === 0) return null
 
@@ -2061,14 +2071,19 @@ function SubtaskPreview({ card, members }: { card: Card; members: Member[] }) {
               children.map((child) => {
                 const childDone = child.status === "done"
                 const assignee = members.find((member) => member.user_id === child.assignee_id)
+                const fullCard = projectCards.find((projectCard) => projectCard.id === child.id)
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={child.id}
+                    disabled={!fullCard || !onOpen}
+                    onClick={() => fullCard && onOpen?.(fullCard)}
                     className={cx(
-                      "rounded-lg border px-2.5 py-2",
+                      "block w-full rounded-lg border px-2.5 py-2 text-left transition-colors disabled:cursor-default",
                       childDone
                         ? "border-success/40 bg-success/5 dark:border-success/40 dark:bg-success/10"
                         : "border-paper-200 bg-paper-50 dark:border-ink-700 dark:bg-ink-900/50",
+                      fullCard && onOpen && "cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 dark:hover:border-brand-500 dark:hover:bg-brand-500/10",
                     )}
                   >
                     <p className={cx("line-clamp-2 text-xs leading-4", childDone ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>{child.title}</p>
@@ -2091,7 +2106,7 @@ function SubtaskPreview({ card, members }: { card: Card; members: Member[] }) {
                         )}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 )
               })
             )}
@@ -2108,6 +2123,7 @@ export function CardCell({
   dragging = false,
   onDone,
   onAssign,
+  onOpen,
 }: {
   card: Card
   members: Member[]
@@ -2115,6 +2131,7 @@ export function CardCell({
   onDone?: (cardId: string) => void
   /** Ausente no clone do arrasto: o menu não deve abrir no card em voo. */
   onAssign?: (userId: string | null) => void
+  onOpen?: (card: Card) => void
 }) {
   const assignee = members.find((m) => m.user_id === card.assignee_id)
   const isEpic = card.type === "epic"
@@ -2277,7 +2294,7 @@ export function CardCell({
           </div>
         )}
 
-        <SubtaskPreview card={card} members={members} />
+        <SubtaskPreview card={card} members={members} onOpen={onOpen} />
 
         {/* Rodapé: tipo + chave + prioridade + peso + responsável */}
         <div className="mt-2 flex items-center justify-between gap-2">
