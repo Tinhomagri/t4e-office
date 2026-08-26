@@ -1140,7 +1140,7 @@ function SharedCardPresentation({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#07090d]/55 p-5 backdrop-blur-sm">
-      <article className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-[#2E3036] bg-[#17191E] shadow-2xl poker-pop">
+      <article className="pointer-events-auto flex max-h-[calc(100dvh-2.5rem)] w-full max-w-2xl flex-col rounded-2xl border border-[#2E3036] bg-[#17191E] shadow-2xl poker-pop">
         <header className="flex items-start gap-3 border-b border-[#2E3036] px-5 py-4">
           <div className="grid size-9 place-items-center rounded-lg bg-[#0C66E4]/15 text-[#579DFF]">
             <FileText className="size-4" />
@@ -1157,7 +1157,7 @@ function SharedCardPresentation({
             <span className="text-[11px] text-[#8590A2]">Apresentado pelo host</span>
           )}
         </header>
-        <div className="grid gap-5 p-5 sm:grid-cols-[1fr_180px]">
+        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-5 sm:grid-cols-[1fr_180px]">
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#8590A2]">Descrição</p>
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#D5D9E0]">{card.description ? cardDescriptionText(card.description) : "Este card não possui descrição."}</p>
