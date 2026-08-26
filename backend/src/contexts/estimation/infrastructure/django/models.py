@@ -90,6 +90,8 @@ class PokerSessionModel(models.Model):
     name = models.CharField(max_length=200)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="waiting")
     current_card_id = models.UUIDField(null=True, blank=True)
+    # Card que o host está apresentando para toda a mesa (somente leitura).
+    presented_card_id = models.UUIDField(null=True, blank=True)
     card_ids = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 

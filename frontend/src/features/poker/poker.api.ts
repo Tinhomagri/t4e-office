@@ -98,7 +98,7 @@ export async function submitVote(sessionId: string, value: string): Promise<void
 
 export async function updateSession(
   sessionId: string,
-  patch: { status?: string; current_card_id?: string | null; card_ids?: string[] },
+  patch: { status?: string; current_card_id?: string | null; presented_card_id?: string | null; card_ids?: string[] },
 ): Promise<PokerSession> {
   const { data } = await api.patch(`/poker/${sessionId}/`, patch)
   return data

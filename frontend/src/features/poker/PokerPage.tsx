@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronDown,
   Eye,
+  FileText,
   Link2,
   ListOrdered,
   Mic,
@@ -983,6 +984,7 @@ function CardSelector({
   queueIds,
   currentCardId,
   onSelectCard,
+  onPresentCard,
   query,
   onQueryChange,
   projects,
@@ -993,6 +995,7 @@ function CardSelector({
   queueIds: string[]
   currentCardId: string | null
   onSelectCard: (id: string) => void
+  onPresentCard: (id: string) => void
   query: string
   onQueryChange: (value: string) => void
   projects: { id: string; name: string }[]
@@ -1020,7 +1023,12 @@ function CardSelector({
           done && !isCurrent && "opacity-60",
         )}
       >
-        <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={() => onPresentCard(card.id)}
+          className="min-w-0 flex-1 text-left"
+          title="Apresentar card para a mesa"
+        >
           <div className="flex items-center gap-1.5">
             <span className="font-mono text-[10px] text-[#8590A2]">{card.ref}</span>
             {done && (
@@ -1030,7 +1038,15 @@ function CardSelector({
             )}
           </div>
           <p className="truncate text-xs text-[#B3B9C4]">{card.title}</p>
-        </div>
+        </button>
+        <button
+          onClick={() => onPresentCard(card.id)}
+          className="grid size-7 shrink-0 place-items-center rounded-md border border-[#2E3036] text-[#B3B9C4] hover:border-[#0C66E4] hover:text-white"
+          title="Apresentar card para a mesa"
+          aria-label={`Apresentar ${card.ref} para a mesa`}
+        >
+          <FileText className="size-3.5" />
+        </button>
         <button
           onClick={() => onSelectCard(card.id)}
           disabled={isCurrent}
@@ -1109,6 +1125,50 @@ function CardSelector({
           <p className="pt-4 text-center text-xs text-[#494B52]">Nenhum card no projeto</p>
         )}
       </div>
+    </div>
+  )
+}
+
+function SharedCardPresentation({
+  card,
+  isHost,
+  onClose,
+}: {
+  card: NonNullable<PokerSession["presented_card"]>
+  isHost: boolean
+  onClose: () => void
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#07090d]/55 p-5 backdrop-blur-sm">
+      <article className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-[#2E3036] bg-[#17191E] shadow-2xl poker-pop">
+        <header className="flex items-start gap-3 border-b border-[#2E3036] px-5 py-4">
+          <div className="grid size-9 place-items-center rounded-lg bg-[#0C66E4]/15 text-[#579DFF]">
+            <FileText className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs text-[#579DFF]">{card.ref}</p>
+            <h2 className="mt-0.5 text-base font-semibold text-[#F7F8F9]">{card.title}</h2>
+          </div>
+          {isHost ? (
+            <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs text-[#B3B9C4] hover:bg-[#212328] hover:text-white">
+              Fechar para todos
+            </button>
+          ) : (
+            <span className="text-[11px] text-[#8590A2]">Apresentado pelo host</span>
+          )}
+        </header>
+        <div className="grid gap-5 p-5 sm:grid-cols-[1fr_180px]">
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#8590A2]">Descrição</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#D5D9E0]">{card.description || "Este card não possui descrição."}</p>
+          </div>
+          <dl className="space-y-3 rounded-xl bg-[#0A0B0D] p-4 text-sm">
+            <div><dt className="text-[10px] uppercase tracking-wider text-[#8590A2]">Status</dt><dd className="mt-0.5 text-[#F7F8F9]">{card.status}</dd></div>
+            <div><dt className="text-[10px] uppercase tracking-wider text-[#8590A2]">Prioridade</dt><dd className="mt-0.5 text-[#F7F8F9]">{card.priority}</dd></div>
+            <div><dt className="text-[10px] uppercase tracking-wider text-[#8590A2]">Responsável</dt><dd className="mt-0.5 text-[#F7F8F9]">{card.assignee_name}</dd></div>
+          </dl>
+        </div>
+      </article>
     </div>
   )
 }
@@ -1947,6 +2007,10 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     updateSession.mutate({ status: "voting", current_card_id: id, card_ids: nextIds })
   }
 
+  const handlePresentCard = (id: string | null) => {
+    updateSession.mutate({ presented_card_id: id })
+  }
+
   // Encerrar tira a sala da lista de "salas abertas" do board — sem isso as
   // salas velhas se acumulavam ali e não havia como limpá-las.
   const handleFinish = () => {
@@ -2317,6 +2381,13 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               </div>
             </div>
           )}
+          {session.presented_card && (
+            <SharedCardPresentation
+              card={session.presented_card}
+              isHost={isHost}
+              onClose={() => handlePresentCard(null)}
+            />
+          )}
         </div>
       </div>
 
@@ -2331,6 +2402,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             queueIds={selectedIds}
             currentCardId={session.current_card_id}
             onSelectCard={handleSelectCard}
+            onPresentCard={handlePresentCard}
             query={cardQuery}
             onQueryChange={setCardQuery}
             projects={projects}

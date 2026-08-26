@@ -82,6 +82,7 @@ def _session_dict(session: PokerSession, *, with_counts: bool = False) -> dict:
         "name": session.name,
         "status": session.status.value,
         "current_card_id": session.current_card_id,
+        "presented_card_id": session.presented_card_id,
         "card_ids": session.card_ids,
         "created_at": session.created_at.isoformat() if session.created_at else None,
     }
@@ -260,12 +261,30 @@ class PokerSessionDetailView(APIView):
         votes = []
         if session.current_card_id:
             votes = _vote_repo.list_by_card(session_id, session.current_card_id)
+        presented = None
+        if session.presented_card_id:
+            card = CardModel.objects.filter(
+                id=session.presented_card_id,
+                project__workspace_id=session.workspace_id,
+            ).select_related("project", "assignee").first()
+            if card:
+                presented = {
+                    "id": str(card.id),
+                    "ref": f"{card.project.key}-{card.number}",
+                    "title": card.title,
+                    "description": card.description,
+                    "status": card.status,
+                    "priority": card.priority,
+                    "type": card.type,
+                    "assignee_name": card.assignee.full_name if card.assignee_id else "Não atribuído",
+                }
         revealed = session.status == SessionStatus.REVEALED
         viewer_id = str(request.user.id)
         return Response({
             **_session_dict(session),
             "participants": [_participant_dict(p, avatars) for p in participants],
             "votes": [_vote_dict(v, revealed, viewer_id) for v in votes],
+            "presented_card": presented,
             # Vão junto do detalhe (que já roda em poll de 2s) em vez de num
             # endpoint próprio: uma reação só vale animada, e um segundo poll
             # dobraria o tráfego da sala para transportar quase sempre nada.
@@ -274,7 +293,7 @@ class PokerSessionDetailView(APIView):
 
     @extend_schema(request=dict, responses={200: dict})
     def patch(self, request: Request, session_id: str) -> Response:
-        """Host atualiza status, current_card_id ou card_ids."""
+        """Host atualiza status, card em votação, fila ou apresentação."""
         session = _session_or_404(session_id, str(request.user.id))
         if not session:
             return Response({"error": "Sessão não encontrada"}, status=404)
@@ -285,6 +304,13 @@ class PokerSessionDetailView(APIView):
             session.status = SessionStatus(request.data["status"])
         if "current_card_id" in request.data:
             session.current_card_id = request.data["current_card_id"]
+        if "presented_card_id" in request.data:
+            presented_id = request.data["presented_card_id"]
+            if presented_id and not CardModel.objects.filter(
+                id=presented_id, project__workspace_id=session.workspace_id
+            ).exists():
+                return Response({"error": "Card não pertence a este workspace"}, status=400)
+            session.presented_card_id = presented_id
         if "card_ids" in request.data:
             session.card_ids = request.data["card_ids"]
 

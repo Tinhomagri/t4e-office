@@ -27,12 +27,14 @@ export interface PokerSession {
   name: string
   status: SessionStatus
   current_card_id: string | null
+  presented_card_id?: string | null
   card_ids: string[]
   created_at: string
   participants: PokerParticipant[]
   votes: PokerVote[]
   // Só no detalhe da sala (GET /poker/<id>/); a listagem não carrega.
   reactions?: PokerReaction[]
+  presented_card?: PokerPresentedCard | null
   // Presentes apenas na listagem (GET /workspaces/<id>/poker/) — contadores
   // agregados para o resumo/histórico, sem custo de N+1 no card individual.
   rounds_count?: number
@@ -82,6 +84,17 @@ export interface PokerParticipant {
   // Sprite pixel-art da pessoa (o mesmo avatar do Escritório). `null` para
   // quem nunca criou um — nesse caso a mesa mostra as iniciais.
   avatar_config?: AvatarConfig | null
+}
+
+export interface PokerPresentedCard {
+  id: string
+  ref: string
+  title: string
+  description: string
+  status: string
+  priority: string
+  type: string
+  assignee_name: string
 }
 
 // Catálogo fechado, espelhando `PokerReactionModel.EMOJIS` no backend.

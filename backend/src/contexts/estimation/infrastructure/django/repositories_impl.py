@@ -42,6 +42,7 @@ def _session_to_entity(row: PokerSessionModel) -> PokerSession:
         name=row.name,
         status=SessionStatus(row.status),
         current_card_id=str(row.current_card_id) if row.current_card_id else None,
+        presented_card_id=str(row.presented_card_id) if row.presented_card_id else None,
         card_ids=[str(c) for c in (row.card_ids or [])],
         created_at=row.created_at,
     )
@@ -84,6 +85,7 @@ class DjangoPokerSessionRepository(PokerSessionRepository):
         PokerSessionModel.objects.filter(id=session.id).update(
             status=session.status.value,
             current_card_id=session.current_card_id,
+            presented_card_id=session.presented_card_id,
             card_ids=session.card_ids,
         )
         return session

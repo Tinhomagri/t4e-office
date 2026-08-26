@@ -134,7 +134,7 @@ export function useSendEmote(sessionId: string | null) {
 export function useUpdateSession(sessionId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (patch: { status?: string; current_card_id?: string | null; card_ids?: string[] }) =>
+    mutationFn: (patch: { status?: string; current_card_id?: string | null; presented_card_id?: string | null; card_ids?: string[] }) =>
       pokerApi.updateSession(sessionId!, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["poker-session", sessionId] }),
   })
