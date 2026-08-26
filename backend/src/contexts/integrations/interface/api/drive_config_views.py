@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from django.conf import settings
@@ -50,7 +50,17 @@ DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
 def _redirect_uri() -> str:
-    return f"{settings.DRIVE_OAUTH_REDIRECT_BASE.rstrip('/')}/api/integrations/drive/oauth/callback/"
+    # Reaproveita o host público já configurado para a integração Google
+    # existente. O callback da biblioteca é outro caminho para não misturar
+    # o OAuth individual de Calendar/Meet com a credencial do workspace.
+    google_redirect = urlsplit(settings.GOOGLE_OAUTH_REDIRECT_URI)
+    return urlunsplit((
+        google_redirect.scheme,
+        google_redirect.netloc,
+        "/api/integrations/drive/oauth/callback/",
+        "",
+        "",
+    ))
 
 
 def _front(result: str) -> str:

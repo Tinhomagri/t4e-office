@@ -273,11 +273,6 @@ GITHUB_TOKEN_ENC_KEY = env("GITHUB_TOKEN_ENC_KEY", default="")
 SOCIAL_OAUTH_REDIRECT_BASE = env(
     "SOCIAL_OAUTH_REDIRECT_BASE", default="http://localhost:8000"
 )
-# Callback do OAuth da biblioteca Drive. Em produção aponta para a URL pública
-# da API, por exemplo https://api.office.exemplo.com.
-DRIVE_OAUTH_REDIRECT_BASE = env(
-    "DRIVE_OAUTH_REDIRECT_BASE", default=SOCIAL_OAUTH_REDIRECT_BASE
-)
 SOCIAL_INSTAGRAM_CLIENT_ID = env("SOCIAL_INSTAGRAM_CLIENT_ID", default="")
 SOCIAL_INSTAGRAM_CLIENT_SECRET = env("SOCIAL_INSTAGRAM_CLIENT_SECRET", default="")
 SOCIAL_FACEBOOK_CLIENT_ID = env("SOCIAL_FACEBOOK_CLIENT_ID", default="")
