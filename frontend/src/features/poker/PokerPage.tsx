@@ -2018,12 +2018,12 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
 
   return (
     <div
-      className="flex h-full flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
+      className="flex h-full max-h-full flex-col overflow-hidden lg:flex-row"
       style={{
         background: `radial-gradient(ellipse 80% 60% at 50% -10%, rgba(12,102,228,0.14), transparent), ${P.bg}`,
       }}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header da sala */}
         <div
           className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 backdrop-blur"
@@ -2135,7 +2135,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
         </div>
 
         {/* Mesa */}
-        <div ref={areaRef} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 py-4">
+        <div ref={areaRef} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden px-6 py-4">
           {/* Palco: o que sobrou depois do baralho e dos controles do host —
               são eles que não podem ser cortados. A mesa se encaixa no que
               restar; ligar as câmeras a faz crescer bem além desta área.

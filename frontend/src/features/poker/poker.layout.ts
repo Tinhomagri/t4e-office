@@ -161,11 +161,11 @@ export function fitScale(
   stage: { width: number; height: number },
 ): number {
   if (wrapper.width <= 0 || wrapper.height <= 0) return 1
-  // Palco degenerado é medição inválida (ainda não montou, container sem
-  // altura resolvida), não uma tela minúscula de verdade. Encolher por esse
-  // número deixaria a mesa do tamanho de uma moeda; melhor manter o tamanho
-  // natural e, no pior caso, cortar.
-  if (stage.width < MIN_STAGE || stage.height < MIN_STAGE) return 1
+  // Antes da primeira medição o palco pode valer zero. Nunca devolvemos 1
+  // nesse momento: numa mesa cheia isso deixa a geometria natural vazar para
+  // fora da sala. Um tamanho provisório compacto é substituído assim que o
+  // ResizeObserver mede a área real.
+  if (stage.width < MIN_STAGE || stage.height < MIN_STAGE) return 0.35
   return Math.min(1, stage.width / wrapper.width, stage.height / wrapper.height)
 }
 

@@ -173,11 +173,11 @@ describe("fitScale", () => {
     }
   })
 
-  it("devolve 1 antes da primeira medição do palco", () => {
-    expect(fitScale(wrapper, { width: 0, height: 0 })).toBe(1)
+  it("usa escala provisória compacta antes da primeira medição do palco", () => {
+    expect(fitScale(wrapper, { width: 0, height: 0 })).toBe(0.35)
   })
 
-  it("ignora medição degenerada em vez de encolher a mesa a um selo", () => {
-    expect(fitScale(wrapper, { width: 1300, height: 12 })).toBe(1)
+  it("não deixa a mesa vazar com medição degenerada", () => {
+    expect(fitScale(wrapper, { width: 1300, height: 12 })).toBe(0.35)
   })
 })
