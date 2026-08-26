@@ -34,6 +34,9 @@ export interface PokerSession {
   votes: PokerVote[]
   // Só no detalhe da sala (GET /poker/<id>/); a listagem não carrega.
   reactions?: PokerReaction[]
+  // Vem no detalhe da sala para todos renderizarem a mesa, mesmo que não
+  // tenham a fila do host ou estejam com outra busca aplicada.
+  current_card?: PokerCard | null
   presented_card?: PokerPresentedCard | null
   // Presentes apenas na listagem (GET /workspaces/<id>/poker/) — contadores
   // agregados para o resumo/histórico, sem custo de N+1 no card individual.

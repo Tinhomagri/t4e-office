@@ -72,6 +72,28 @@ def _initials(name: str) -> str:
     return name[:2].upper() if name else "??"
 
 
+def _card_for_poker(card: CardModel, *, include_description: bool = False) -> dict:
+    """Formato único do card que viaja no estado compartilhado da mesa."""
+    data = {
+        "id": str(card.id),
+        "ref": f"{card.project.key}-{card.number}",
+        "title": card.title,
+        "status": card.status,
+        "priority": card.priority,
+        "type": card.type,
+        "points": card.points,
+        "parent_id": str(card.parent_id) if card.parent_id else None,
+        "parent_ref": (
+            f"{card.parent.project.key}-{card.parent.number}" if card.parent_id else None
+        ),
+        "parent_title": card.parent.title if card.parent_id else None,
+    }
+    if include_description:
+        data["description"] = card.description
+        data["assignee_name"] = card.assignee.full_name if card.assignee_id else "Não atribuído"
+    return data
+
+
 def _session_dict(session: PokerSession, *, with_counts: bool = False) -> dict:
     data = {
         "id": session.id,
@@ -261,34 +283,27 @@ class PokerSessionDetailView(APIView):
         votes = []
         if session.current_card_id:
             votes = _vote_repo.list_by_card(session_id, session.current_card_id)
-        presented = None
-        if session.presented_card_id:
+        def room_card(card_id: str | None, *, include_description: bool = False):
+            if not card_id:
+                return None
             card = CardModel.objects.filter(
-                id=session.presented_card_id,
+                id=card_id,
                 project__workspace_id=session.workspace_id,
             ).select_related("project", "assignee", "parent", "parent__project").first()
-            if card:
-                presented = {
-                    "id": str(card.id),
-                    "ref": f"{card.project.key}-{card.number}",
-                    "title": card.title,
-                    "description": card.description,
-                    "status": card.status,
-                    "priority": card.priority,
-                    "type": card.type,
-                    "assignee_name": card.assignee.full_name if card.assignee_id else "Não atribuído",
-                    "parent_id": str(card.parent_id) if card.parent_id else None,
-                    "parent_ref": (
-                        f"{card.parent.project.key}-{card.parent.number}" if card.parent_id else None
-                    ),
-                    "parent_title": card.parent.title if card.parent_id else None,
-                }
+            return _card_for_poker(card, include_description=include_description) if card else None
+
+        # Participantes não carregam a fila do host (e podem estar com outra
+        # busca aplicada). O card ativo precisa vir junto da sessão para que
+        # todos renderizem o mesmo item no centro da mesa.
+        current_card = room_card(session.current_card_id)
+        presented = room_card(session.presented_card_id, include_description=True)
         revealed = session.status == SessionStatus.REVEALED
         viewer_id = str(request.user.id)
         return Response({
             **_session_dict(session),
             "participants": [_participant_dict(p, avatars) for p in participants],
             "votes": [_vote_dict(v, revealed, viewer_id) for v in votes],
+            "current_card": current_card,
             "presented_card": presented,
             # Vão junto do detalhe (que já roda em poll de 2s) em vez de num
             # endpoint próprio: uma reação só vale animada, e um segundo poll
@@ -648,18 +663,7 @@ class PokerCardsView(APIView):
         # montou mesmo depois de eles saírem do filtro de "sem pontos".
         cards = cards.order_by("project__key", "rank", "number")[:200]
         return Response([
-            {
-                "id": str(c.id),
-                "title": c.title,
-                "ref": f"{c.project.key}-{c.number}",
-                "status": c.status,
-                "points": c.points,
-                "parent_id": str(c.parent_id) if c.parent_id else None,
-                "parent_ref": (
-                    f"{c.parent.project.key}-{c.parent.number}" if c.parent_id else None
-                ),
-                "parent_title": c.parent.title if c.parent_id else None,
-            }
+            _card_for_poker(c)
             for c in cards
         ])
 

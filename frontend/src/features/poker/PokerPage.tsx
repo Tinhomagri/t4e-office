@@ -2038,7 +2038,9 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
     const slot = i === -1 ? null : seats[i]
     return slot ? { x: slot.ox, y: slot.oy } : null
   }
-  const currentCard = allCards.find((c) => c.id === session.current_card_id) ?? null
+  // A fila é local ao host e pode estar filtrada. O estado da sessão traz o
+  // card ativo para que todos enxerguem o mesmo item no centro da mesa.
+  const currentCard = session.current_card ?? allCards.find((c) => c.id === session.current_card_id) ?? null
   const selectedIds = session.card_ids
 
   const handleSelectCard = (id: string) => {

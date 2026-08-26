@@ -35,6 +35,15 @@ def sala(db):
     for u in (host, colega):
         MembershipModel.objects.create(workspace=ws, user=u, role="member")
     project = ProjectModel.objects.create(workspace=ws, name="P", key="PRJ")
+    parent = CardModel.objects.create(project=project, number=90, title="Card pai", status="todo")
+    CardModel.objects.create(
+        id=CARD_ID,
+        project=project,
+        number=91,
+        title="Subtarefa ativa",
+        status="todo",
+        parent=parent,
+    )
     session = PokerSessionModel.objects.create(
         workspace=ws,
         project=project,
@@ -97,6 +106,19 @@ def test_voto_sem_join_senta_a_pessoa_na_mesa(sala):
     assert PokerParticipantModel.objects.filter(
         session=sala["session"], user=sala["colega"]
     ).exists()
+
+
+def test_detalhe_da_sala_entrega_card_ativo_para_todo_participante(sala):
+    """A mesa não pode depender da fila/busca local de quem está assistindo."""
+    response = _client(sala["host"]).get(f"/api/poker/{sala['session'].id}/")
+
+    assert response.status_code == 200
+    card = response.data["current_card"]
+    assert card["id"] == CARD_ID
+    assert card["ref"] == "PRJ-91"
+    assert card["title"] == "Subtarefa ativa"
+    assert card["parent_ref"] == "PRJ-90"
+    assert card["parent_title"] == "Card pai"
 
 
 def test_quem_entra_pelo_voto_nao_vira_host(sala):

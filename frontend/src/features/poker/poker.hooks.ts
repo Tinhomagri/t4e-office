@@ -8,7 +8,9 @@ export function useSession(sessionId: string | null) {
     queryKey: ["poker-session", sessionId],
     queryFn: () => pokerApi.getSession(sessionId!),
     enabled: !!sessionId,
-    refetchInterval: 2000, // polling 2s
+    // A mesa é colaborativa: um segundo mantém a sensação de tempo real sem
+    // transformar uma sala com vários participantes em polling agressivo.
+    refetchInterval: 1000,
   })
 }
 
