@@ -50,10 +50,11 @@ DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
 def _redirect_uri() -> str:
-    # Reaproveita o host público já configurado para a integração Google
-    # existente. O callback da biblioteca é outro caminho para não misturar
-    # o OAuth individual de Calendar/Meet com a credencial do workspace.
-    google_redirect = urlsplit(settings.GOOGLE_OAUTH_REDIRECT_URI)
+    # O login Google já precisa de um domínio público e é a configuração mais
+    # estável do deploy. Reaproveitamos só sua origem; o callback da biblioteca
+    # é outro caminho para não misturar login individual e credencial do
+    # workspace.
+    google_redirect = urlsplit(settings.GOOGLE_OAUTH_LOGIN_REDIRECT_URI)
     return urlunsplit((
         google_redirect.scheme,
         google_redirect.netloc,
