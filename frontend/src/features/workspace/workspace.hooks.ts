@@ -115,9 +115,17 @@ export function useUpdateCard(projectId: string | null) {
   return useMutation({
     mutationFn: ({ cardId, input }: { cardId: string; input: UpdateCardInput }) =>
       wsApi.updateCard(cardId, input),
-    onSuccess: (_data, { cardId }) => {
+    onSuccess: (updatedCard, { cardId }) => {
+      // Atualiza a cópia que o Kanban já tem antes da reconsulta. Sem isto a
+      // subtarefa aberta dentro do card pai continuava com avatar/status
+      // antigos até o próximo poll ou F5, apesar do PATCH já ter sido salvo.
+      qc.setQueriesData<Card[]>({ queryKey: ["cards", projectId] }, (current) =>
+        current?.map((card) => card.id === cardId ? { ...card, ...updatedCard } : card),
+      )
       qc.invalidateQueries({ queryKey: ["cards", projectId] })
       qc.invalidateQueries({ queryKey: ["card-history", cardId] })
+      qc.invalidateQueries({ queryKey: ["my-work"] })
+      qc.invalidateQueries({ queryKey: ["active-card"] })
     },
   })
 }
