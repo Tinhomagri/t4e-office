@@ -192,8 +192,18 @@ export function CardDrawer({
   const [savedHint, setSavedHint] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => setDraft(card), [card])
+
+  // O título pode vir longo do Jira. Textarea cresce pelas linhas necessárias
+  // para nunca esconder o final do texto; o corpo do drawer já tem rolagem.
+  useEffect(() => {
+    const title = titleRef.current
+    if (!title) return
+    title.style.height = "0px"
+    title.style.height = `${title.scrollHeight}px`
+  }, [draft?.title])
 
   // Publica o card aberto como contexto do Copiloto — é o que faz "resuma
   // este card" funcionar sem a pessoa repetir o código do card por escrito.
@@ -336,11 +346,14 @@ export function CardDrawer({
         <div className="grid flex-1 grid-cols-1 overflow-y-auto scrollbar-slim lg:grid-cols-[1fr_340px]">
           {/* Coluna principal */}
           <div className="min-w-0 space-y-6 p-5">
-            <input
+            <textarea
+              ref={titleRef}
+              rows={1}
               value={draft.title}
               onChange={(e) => set("title", e.target.value)}
               onBlur={() => draft.title !== card.title && persist({ title: draft.title })}
-              className="-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent text-[28px] font-semibold leading-8 text-ink dark:text-ink-200 outline-none transition-colors hover:bg-paper-50 dark:hover:bg-ink-800 focus:border-brand-300 focus:bg-paper dark:focus:bg-ink-800 px-2 py-1"
+              aria-label="Título do card"
+              className="-mx-2 w-[calc(100%+1rem)] resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-1 text-[28px] font-semibold leading-8 text-ink outline-none transition-colors hover:bg-paper-50 focus:border-brand-300 focus:bg-paper dark:text-ink-200 dark:hover:bg-ink-800 dark:focus:bg-ink-800"
             />
 
             <Section title="Descrição">
