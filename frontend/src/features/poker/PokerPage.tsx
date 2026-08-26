@@ -817,7 +817,7 @@ function TableCenter({
 
       {session.status === "revealed" && (
         <span className="rounded-full bg-[#0C66E4]/15 px-3 py-1 text-[11px] font-semibold text-[#579DFF]">
-          ✨ Votos revelados — veja abaixo
+          ✨ Votos revelados
         </span>
       )}
     </div>
@@ -2138,7 +2138,7 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
         </div>
 
         {/* Mesa */}
-        <div ref={areaRef} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden px-6 py-4">
+        <div ref={areaRef} className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden px-6 py-4">
           {/* Palco: o que sobrou depois do baralho e dos controles do host —
               são eles que não podem ser cortados. A mesa se encaixa no que
               restar; ligar as câmeras a faz crescer bem além desta área.
@@ -2265,22 +2265,29 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
               espaço que a mesa não pode ocupar, sob pena de cortar o baralho
               ou o botão de revelar. */}
           <div ref={belowRef} className="flex w-full shrink-0 flex-col items-center gap-4">
-          {session.status === "voting" && (
-            <VoteProgress
-              voted={liveVotes.filter((v) => v.has_voted).length}
-              total={participants.length}
-            />
+          {session.status === "revealed" ? (
+            // Mantém a reserva do rodapé que existia durante a votação. Sem
+            // ela, o resultado liberaria espaço, a mesa recalcularia a escala
+            // e daria o zoom perceptível justamente ao revelar as cartas.
+            <div className="h-[210px]" aria-hidden />
+          ) : (
+            <>
+              {session.status === "voting" && (
+                <VoteProgress
+                  voted={liveVotes.filter((v) => v.has_voted).length}
+                  total={participants.length}
+                />
+              )}
+              <RoundPanel
+                session={liveSession}
+                isHost={isHost}
+                onReveal={handleReveal}
+                onNextCard={handleNextCard}
+                onApply={handleApply}
+                applying={applyPoints.isPending}
+              />
+            </>
           )}
-
-          {/* Stats da rodada + ações do host (abaixo da mesa) */}
-          <RoundPanel
-            session={liveSession}
-            isHost={isHost}
-            onReveal={handleReveal}
-            onNextCard={handleNextCard}
-            onApply={handleApply}
-            applying={applyPoints.isPending}
-          />
 
           {/* Baralho do jogador */}
           {session.status === "voting" && (
@@ -2296,6 +2303,20 @@ function RoomView({ sessionId, userId }: { sessionId: string; userId: string }) 
             </div>
           )}
           </div>
+          {session.status === "revealed" && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-4">
+              <div className="pointer-events-auto poker-pop rounded-xl border border-[#2E3036] bg-[#17191E]/95 p-4 shadow-2xl backdrop-blur">
+                <RoundPanel
+                  session={liveSession}
+                  isHost={isHost}
+                  onReveal={handleReveal}
+                  onNextCard={handleNextCard}
+                  onApply={handleApply}
+                  applying={applyPoints.isPending}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
