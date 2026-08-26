@@ -11,6 +11,7 @@ import {
   BarChart3,
   Check,
   CheckCircle2,
+  CornerDownRight,
   LogOut,
   ChevronDown,
   Eye,
@@ -800,6 +801,12 @@ function TableCenter({
         <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-[#F7F8F9]">
           {currentCard.title}
         </p>
+        {currentCard.parent_ref && (
+          <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-violet-300">
+            <CornerDownRight className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">Subtarefa de {currentCard.parent_ref}</span>
+          </p>
+        )}
       </div>
 
       {session.status === "voting" && (
@@ -1038,6 +1045,12 @@ function CardSelector({
             )}
           </div>
           <p className="truncate text-xs text-[#B3B9C4]">{card.title}</p>
+          {card.parent_ref && (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-violet-300">
+              <CornerDownRight className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">Subtarefa de {card.parent_ref} · {card.parent_title}</span>
+            </p>
+          )}
         </button>
         <button
           onClick={() => onPresentCard(card.id)}
@@ -1150,6 +1163,12 @@ function SharedCardPresentation({
           <div className="min-w-0 flex-1">
             <p className="font-mono text-xs text-[#579DFF]">{card.ref}</p>
             <h2 className="mt-0.5 text-base font-semibold text-[#F7F8F9]">{card.title}</h2>
+            {card.parent_ref && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-violet-300">
+                <CornerDownRight className="size-3.5 shrink-0" aria-hidden />
+                <span>Subtarefa de {card.parent_ref} · {card.parent_title}</span>
+              </p>
+            )}
           </div>
           {isHost ? (
             <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs text-[#B3B9C4] hover:bg-[#212328] hover:text-white">

@@ -95,6 +95,9 @@ export interface PokerPresentedCard {
   priority: string
   type: string
   assignee_name: string
+  parent_id: string | null
+  parent_ref: string | null
+  parent_title: string | null
 }
 
 // Catálogo fechado, espelhando `PokerReactionModel.EMOJIS` no backend.
@@ -138,4 +141,7 @@ export interface PokerCard {
   ref: string
   status: string
   points: number | null
+  parent_id: string | null
+  parent_ref: string | null
+  parent_title: string | null
 }

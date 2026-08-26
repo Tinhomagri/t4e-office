@@ -156,6 +156,28 @@ def test_fila_busca_tambem_por_chave_do_projeto(cenario):
 
 
 @pytest.mark.django_db
+def test_fila_identifica_subtarefa_e_seu_card_pai(cenario):
+    """A mesa precisa deixar claro que a estimativa é de uma subtarefa."""
+    squad = SquadModel.objects.create(workspace=cenario["ws"], name="Squad Alfa")
+    sessao = PokerSessionModel.objects.create(
+        workspace=cenario["ws"], squad=squad, created_by=cenario["dono"], name="s"
+    )
+    pai = CardModel.objects.create(
+        project=cenario["alfa"], number=10, title="Implementar login", status="todo"
+    )
+    filha = CardModel.objects.create(
+        project=cenario["alfa"], number=11, title="Criar formulário", status="todo", parent=pai
+    )
+
+    response = _cli(cenario["dono"]).get(reverse("poker-cards", args=[str(sessao.id)]))
+    subtask = next(card for card in response.json() if card["id"] == str(filha.id))
+
+    assert subtask["parent_id"] == str(pai.id)
+    assert subtask["parent_ref"] == "ALF-10"
+    assert subtask["parent_title"] == "Implementar login"
+
+
+@pytest.mark.django_db
 def test_apagar_squad_preserva_o_historico_de_sessoes(cenario):
     squad = SquadModel.objects.create(workspace=cenario["ws"], name="Squad Alfa")
     SquadMemberModel.objects.create(squad=squad, user=cenario["dev"])

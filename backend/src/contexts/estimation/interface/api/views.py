@@ -266,7 +266,7 @@ class PokerSessionDetailView(APIView):
             card = CardModel.objects.filter(
                 id=session.presented_card_id,
                 project__workspace_id=session.workspace_id,
-            ).select_related("project", "assignee").first()
+            ).select_related("project", "assignee", "parent", "parent__project").first()
             if card:
                 presented = {
                     "id": str(card.id),
@@ -277,6 +277,11 @@ class PokerSessionDetailView(APIView):
                     "priority": card.priority,
                     "type": card.type,
                     "assignee_name": card.assignee.full_name if card.assignee_id else "Não atribuído",
+                    "parent_id": str(card.parent_id) if card.parent_id else None,
+                    "parent_ref": (
+                        f"{card.parent.project.key}-{card.parent.number}" if card.parent_id else None
+                    ),
+                    "parent_title": card.parent.title if card.parent_id else None,
                 }
         revealed = session.status == SessionStatus.REVEALED
         viewer_id = str(request.user.id)
@@ -627,7 +632,7 @@ class PokerCardsView(APIView):
             CardModel.objects.filter(
                 project__workspace_id=session.workspace_id, points__isnull=True
             ), workspace_id=session.workspace_id
-        ).exclude(type="epic").select_related("project")
+        ).exclude(type="epic").select_related("project", "parent", "parent__project")
         projeto = request.query_params.get("project")
         if projeto:
             cards = cards.filter(project_id=projeto)
@@ -649,6 +654,11 @@ class PokerCardsView(APIView):
                 "ref": f"{c.project.key}-{c.number}",
                 "status": c.status,
                 "points": c.points,
+                "parent_id": str(c.parent_id) if c.parent_id else None,
+                "parent_ref": (
+                    f"{c.parent.project.key}-{c.parent.number}" if c.parent_id else None
+                ),
+                "parent_title": c.parent.title if c.parent_id else None,
             }
             for c in cards
         ])
