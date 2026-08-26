@@ -2020,7 +2020,7 @@ function AssigneePicker({
  * andamento das subtarefas. Os filhos só são buscados quando a pessoa abre a
  * seção, para não multiplicar requests em um quadro grande.
  */
-function SubtaskPreview({ card }: { card: Card }) {
+function SubtaskPreview({ card, members }: { card: Card; members: Member[] }) {
   const [open, setOpen] = useState(false)
   const total = card.subtasks_count ?? 0
   const done = card.subtasks_done ?? 0
@@ -2060,14 +2060,37 @@ function SubtaskPreview({ card }: { card: Card }) {
             ) : (
               children.map((child) => {
                 const childDone = child.status === "done"
+                const assignee = members.find((member) => member.user_id === child.assignee_id)
                 return (
                   <div
                     key={child.id}
-                    className="flex items-center gap-1.5 rounded-md border border-paper-200 bg-paper-50 px-2 py-1.5 dark:border-ink-700 dark:bg-ink-900/50"
+                    className={cx(
+                      "rounded-lg border px-2.5 py-2",
+                      childDone
+                        ? "border-success/40 bg-success/5 dark:border-success/40 dark:bg-success/10"
+                        : "border-paper-200 bg-paper-50 dark:border-ink-700 dark:bg-ink-900/50",
+                    )}
                   >
-                    <span className={cx("size-1.5 shrink-0 rounded-full", childDone ? "bg-success" : "bg-paper-300 dark:bg-ink-600")} />
-                    <span className={cx("min-w-0 flex-1 truncate text-[11px]", childDone ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>{child.title}</span>
-                    <span className="font-mono text-[10px] text-paper-400">{child.ref}</span>
+                    <p className={cx("line-clamp-2 text-xs leading-4", childDone ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>{child.title}</p>
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <ListTree className={cx("size-3.5", childDone ? "text-success" : "text-brand-500")} />
+                      <span className="font-mono text-[10px] text-paper-400">{child.ref}</span>
+                      <span className={cx(
+                        "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                        childDone
+                          ? "bg-success/15 text-success"
+                          : "bg-paper-100 text-paper-500 dark:bg-ink-700 dark:text-paper-400",
+                      )}>
+                        {childDone ? "Concluído" : "Em aberto"}
+                      </span>
+                      <span className="ml-auto">
+                        {assignee ? (
+                          <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
+                        ) : (
+                          <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400">?</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
                 )
               })
@@ -2254,7 +2277,7 @@ export function CardCell({
           </div>
         )}
 
-        <SubtaskPreview card={card} />
+        <SubtaskPreview card={card} members={members} />
 
         {/* Rodapé: tipo + chave + prioridade + peso + responsável */}
         <div className="mt-2 flex items-center justify-between gap-2">
