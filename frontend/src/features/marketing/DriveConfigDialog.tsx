@@ -1,8 +1,9 @@
-import { ExternalLink, ShieldCheck } from "lucide-react"
+import { ExternalLink, Link2, ShieldCheck } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
   getDriveConfig,
+  getDriveOauthUrl,
   saveDriveConfig,
   testDriveConfig,
   type DriveConfigStatus,
@@ -65,21 +66,34 @@ export function DriveConfigDialog({ open, onClose, workspaceId }: { open: boolea
     }
   }
 
+  const connect = async () => {
+    if (!workspaceId) return
+    setBusy(true)
+    try {
+      window.location.assign(await getDriveOauthUrl(workspaceId))
+    } catch {
+      setBusy(false)
+      toast.error("Salve primeiro o Client ID, Client Secret e as duas pastas do Drive.")
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} size="lg" title="Google Drive" description="Takes e projetos prontos ficam no Drive do workspace. Os valores são cifrados e jamais voltam para o navegador.">
       <div className="space-y-3">
         <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-xs text-brand-800 dark:border-brand-900/60 dark:bg-brand-950/30 dark:text-brand-200">
-          <ShieldCheck className="mr-1 inline size-3.5" /> Crie um OAuth Client no Google Cloud com escopo <code>drive</code>, gere um refresh token e informe os IDs das duas pastas raiz.
+          <ShieldCheck className="mr-1 inline size-3.5" /> Crie um OAuth Client no Google Cloud com escopo <code>drive</code>, informe o Client ID, Secret e as duas pastas raiz. Em seguida, conecte a conta Google aqui — o token é salvo cifrado sem aparecer no navegador.
           <a className="ml-1 inline-flex items-center gap-0.5 underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Abrir Google Cloud <ExternalLink className="size-3" /></a>
         </div>
-        {FIELDS.map(([key, label]) => {
+        {status?.redirect_uri && <p className="rounded-md border border-paper-200 bg-paper-50 px-3 py-2 text-[11px] text-paper-600 dark:border-ink-700 dark:bg-ink-900 dark:text-paper-400">No OAuth Client do Google, cadastre este URI de redirecionamento: <code className="break-all text-brand-600 dark:text-brand-300">{status.redirect_uri}</code></p>}
+        {FIELDS.filter(([key]) => key !== "refresh_token").map(([key, label]) => {
           const hint = status?.hints[key] ?? ""
           return <Input key={key} type="password" value={draft[key] ?? ""} onChange={(e) => setDraft((previous) => ({ ...previous, [key]: e.target.value }))} placeholder={hint ? `${label} salvo (${hint}) — deixe vazio para manter` : label} />
         })}
         <p className="text-[11px] text-paper-500">O segredo mestre de cifragem continua no ambiente seguro do servidor; ele não é uma chave de integração e nunca é exibido.</p>
         <div className="flex justify-end gap-2">
           <Button variant="outline" loading={busy} disabled={!status?.configured} onClick={() => void test()}>Testar conexão</Button>
-          <Button loading={busy} onClick={() => void save()}>Salvar com segurança</Button>
+          <Button variant="outline" loading={busy} disabled={!status?.oauth_ready} icon={<Link2 className="size-3.5" />} onClick={() => void connect()}>{status?.configured ? "Reconectar conta Google" : "Conectar conta Google"}</Button>
+          <Button loading={busy} onClick={() => void save()}>Salvar dados do app</Button>
         </div>
       </div>
     </Modal>

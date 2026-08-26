@@ -2,10 +2,19 @@ import { api } from "@/shared/api/client"
 
 export interface DriveConfigStatus {
   configured: boolean
+  oauth_ready: boolean
   is_active: boolean
   hints: Partial<Record<"client_id" | "client_secret" | "refresh_token" | "takes_folder_id" | "projects_folder_id", string>>
   updated_at: string | null
   can_configure?: boolean
+  redirect_uri?: string
+}
+
+export async function getDriveOauthUrl(workspaceId: string): Promise<string> {
+  const { data } = await api.get<{ url: string }>("/integrations/drive/oauth/url/", {
+    params: { workspace_id: workspaceId },
+  })
+  return data.url
 }
 
 export async function getDriveConfig(workspaceId: string): Promise<DriveConfigStatus> {

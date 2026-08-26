@@ -29,7 +29,13 @@ def get_config(workspace_id: str) -> WorkspaceDriveConfigModel | None:
 
 def public_config(cfg: WorkspaceDriveConfigModel | None) -> dict:
     if cfg is None:
-        return {"configured": False, "is_active": True, "hints": {}, "updated_at": None}
+        return {
+            "configured": False,
+            "oauth_ready": False,
+            "is_active": True,
+            "hints": {},
+            "updated_at": None,
+        }
     values = {
         "client_id": cfg.client_id_encrypted,
         "client_secret": cfg.client_secret_encrypted,
@@ -45,6 +51,11 @@ def public_config(cfg: WorkspaceDriveConfigModel | None) -> dict:
             hints[key] = "••••" if value else ""
     return {
         "configured": all(bool(value) for value in values.values()),
+        # ID, Secret e as duas raízes bastam para iniciar o OAuth. O refresh
+        # token só existe depois que o dono autoriza sua conta Google.
+        "oauth_ready": all(bool(values[key]) for key in (
+            "client_id", "client_secret", "takes_folder_id", "projects_folder_id"
+        )),
         "is_active": cfg.is_active,
         "hints": hints,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
@@ -64,12 +75,28 @@ def save_config(*, workspace_id: str, actor_id: str, values: dict, is_active: bo
         value = str(values.get(incoming) or "").strip()
         if value:
             setattr(cfg, field, encrypt(value))
-    if not all(bool(getattr(cfg, field)) for field in fields.values()):
-        raise ValidationError("Preencha Client ID, Client Secret, Refresh Token e as duas pastas do Drive.")
+    required_before_oauth = (
+        "client_id_encrypted", "client_secret_encrypted", "takes_folder_id_encrypted",
+        "projects_folder_id_encrypted",
+    )
+    if not all(bool(getattr(cfg, field)) for field in required_before_oauth):
+        raise ValidationError("Preencha Client ID, Client Secret e as duas pastas do Drive.")
     cfg.is_active = is_active
     cfg.updated_by_id = actor_id
     cfg.save()
     return cfg
+
+
+def oauth_client_for_workspace(workspace_id: str) -> tuple[str, str]:
+    """Credenciais do app necessárias para iniciar/trocar o código OAuth."""
+    cfg = get_config(workspace_id)
+    if cfg is None:
+        raise ValidationError("Configure primeiro o Client ID e Client Secret do Google Drive.")
+    client_id = _plain(cfg.client_id_encrypted)
+    client_secret = _plain(cfg.client_secret_encrypted)
+    if not client_id or not client_secret:
+        raise ValidationError("Configure primeiro o Client ID e Client Secret do Google Drive.")
+    return client_id, client_secret
 
 
 def credentials_for_workspace(workspace_id: str) -> DriveCredentials:

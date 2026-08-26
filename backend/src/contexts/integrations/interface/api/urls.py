@@ -7,6 +7,8 @@ from contexts.integrations.interface.api.insight_views import (
     QueueStatsView,
 )
 from contexts.integrations.interface.api.drive_config_views import (
+    DriveOAuthCallbackView,
+    DriveOAuthUrlView,
     DriveConfigTestView,
     DriveConfigView,
 )
@@ -35,6 +37,8 @@ from contexts.integrations.interface.api.views import (
 urlpatterns = [
     path("drive/config/", DriveConfigView.as_view(), name="integrations-drive-config"),
     path("drive/config/test/", DriveConfigTestView.as_view(), name="integrations-drive-config-test"),
+    path("drive/oauth/url/", DriveOAuthUrlView.as_view(), name="integrations-drive-oauth-url"),
+    path("drive/oauth/callback/", DriveOAuthCallbackView.as_view(), name="integrations-drive-oauth-callback"),
     path("drive/takes/", DriveTakesView.as_view(), name="integrations-drive-takes"),
     path("drive/takes/<str:file_id>/", DriveTakesView.as_view(), name="integrations-drive-take-trash"),
     path("drive/days/", DriveDaysView.as_view(), name="integrations-drive-days"),

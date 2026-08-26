@@ -45,6 +45,21 @@ export function DriveLibraryPage() {
     void getDriveConfig(workspaceId).then((x) => { setConfigured(x.configured); setCanConfigure(x.can_configure ?? false) }).catch(() => setConfigured(false))
   }, [workspaceId])
   useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("drive")
+    if (!result || !workspaceId) return
+    const messages: Record<string, string> = {
+      connected: "Google Drive conectado com sucesso.",
+      denied: "A autorização do Google Drive foi cancelada.",
+      error: "Não foi possível conectar o Google Drive. Confira o OAuth Client e tente novamente.",
+    }
+    toast[result === "connected" ? "success" : "error"](messages[result] ?? messages.error)
+    window.history.replaceState({}, "", window.location.pathname)
+    void getDriveConfig(workspaceId).then((x) => {
+      setConfigured(x.configured)
+      setCanConfigure(x.can_configure ?? false)
+    })
+  }, [workspaceId])
+  useEffect(() => {
     if (configured === true) void load()
     // A busca depende do estado de configuração, mas `load` é recriada a cada
     // render; listar a função aqui causaria um loop de requisições.
