@@ -1160,7 +1160,7 @@ function SharedCardPresentation({
         <div className="grid gap-5 p-5 sm:grid-cols-[1fr_180px]">
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#8590A2]">Descrição</p>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#D5D9E0]">{card.description || "Este card não possui descrição."}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#D5D9E0]">{card.description ? cardDescriptionText(card.description) : "Este card não possui descrição."}</p>
           </div>
           <dl className="space-y-3 rounded-xl bg-[#0A0B0D] p-4 text-sm">
             <div><dt className="text-[10px] uppercase tracking-wider text-[#8590A2]">Status</dt><dd className="mt-0.5 text-[#F7F8F9]">{card.status}</dd></div>
@@ -1171,6 +1171,13 @@ function SharedCardPresentation({
       </article>
     </div>
   )
+}
+
+// O Jira pode trazer descrições antigas em HTML. No Poker a leitura é rápida
+// e não deve executar nem mostrar a marcação; convertemos só para esta tela.
+function cardDescriptionText(description: string): string {
+  const withBreaks = description.replace(/<(?:br\s*\/?|\/p|\/div|\/li)>/gi, "\n")
+  return new DOMParser().parseFromString(withBreaks, "text/html").body.textContent?.trim() ?? description
 }
 
 // ─── Criação/listagem de sessões ─────────────────────────────────────────────
