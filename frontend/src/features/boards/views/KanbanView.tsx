@@ -72,6 +72,7 @@ import {
 } from "../board.shared"
 import {
   useCards,
+  useCardChildren,
   useCreateCard,
   useCreateSavedFilter,
   useCreateSprint,
@@ -2014,6 +2015,70 @@ function AssigneePicker({
   )
 }
 
+/**
+ * Prévia expansível no próprio card: evita abrir o drawer só para conferir o
+ * andamento das subtarefas. Os filhos só são buscados quando a pessoa abre a
+ * seção, para não multiplicar requests em um quadro grande.
+ */
+function SubtaskPreview({ card }: { card: Card }) {
+  const [open, setOpen] = useState(false)
+  const total = card.subtasks_count ?? 0
+  const done = card.subtasks_done ?? 0
+  const { data: children = [], isLoading } = useCardChildren(open ? card.id : null)
+
+  if (total === 0) return null
+
+  const progress = Math.round((done / total) * 100)
+  return (
+    <div
+      className="mt-2 border-t border-paper-100 pt-2 dark:border-ink-700"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded px-0.5 py-1 text-left text-[11px] font-medium text-paper-500 transition-colors hover:text-ink dark:hover:text-paper"
+      >
+        <ListTree className="size-3.5" />
+        <span className="flex-1">Subtarefas</span>
+        <span className="rounded bg-paper-100 px-1.5 py-0.5 tabular text-[10px] text-paper-500 dark:bg-ink-700">
+          {done}/{total}
+        </span>
+        <ChevronRight className={cx("size-3.5 transition-transform", open && "rotate-90")} />
+      </button>
+
+      {open && (
+        <div className="mt-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-paper-100 dark:bg-ink-700">
+            <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">
+            {isLoading ? (
+              <p className="py-2 text-center text-[11px] text-paper-400">Carregando subtarefas…</p>
+            ) : (
+              children.map((child) => {
+                const childDone = child.status === "done"
+                return (
+                  <div
+                    key={child.id}
+                    className="flex items-center gap-1.5 rounded-md border border-paper-200 bg-paper-50 px-2 py-1.5 dark:border-ink-700 dark:bg-ink-900/50"
+                  >
+                    <span className={cx("size-1.5 shrink-0 rounded-full", childDone ? "bg-success" : "bg-paper-300 dark:bg-ink-600")} />
+                    <span className={cx("min-w-0 flex-1 truncate text-[11px]", childDone ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>{child.title}</span>
+                    <span className="font-mono text-[10px] text-paper-400">{child.ref}</span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CardCell({
   card,
   members,
@@ -2181,6 +2246,8 @@ export function CardCell({
             )}
           </div>
         )}
+
+        <SubtaskPreview card={card} />
 
         {/* Rodapé: tipo + chave + prioridade + peso + responsável */}
         <div className="mt-2 flex items-center justify-between gap-2">
