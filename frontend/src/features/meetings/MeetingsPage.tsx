@@ -974,8 +974,26 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
     (a, b) => (handsRaised.has(b.identity) ? 1 : 0) - (handsRaised.has(a.identity) ? 1 : 0),
   )
 
+  const raisedParticipants = sortedParticipants.filter((p) => handsRaised.has(p.identity))
+
   return (
     <div className="flex min-h-0 flex-1 basis-0 flex-col">
+      {/* Faixa fixa no topo com quem levantou a mão — com o quadro cheio de
+          gente, achar a marquinha certa dentro da grade é lento. Aqui é uma
+          lista só, sempre visível, ordenada por quem levantou primeiro. */}
+      {raisedParticipants.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-700 bg-ink-900/95 px-3 py-1.5">
+          <Hand className="size-3.5 shrink-0 text-amber-400" />
+          {raisedParticipants.map((p) => (
+            <span
+              key={p.identity}
+              className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300"
+            >
+              ✋ {p.name || p.identity}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 basis-0">
         <VideoStage handsRaised={handsRaised} reactions={reactions} />
         {(chatOpen || peopleOpen) && <aside className="flex w-72 shrink-0 flex-col border-l border-ink-700 bg-ink-900 text-paper-200">
