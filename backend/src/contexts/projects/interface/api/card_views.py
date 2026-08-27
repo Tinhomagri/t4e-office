@@ -215,6 +215,18 @@ def _counts_map(project_id: str) -> dict[str, dict]:
     numa única query anotada — evita N+1 ao montar a lista do board."""
     from django.db.models import Count, Q
 
+    from contexts.projects.infrastructure.django.models import WorkflowStatusModel
+
+    # Slug de "concluído" é por projeto (coluna renomeada, workflow importado
+    # do Jira etc.) — mesma fonte que `_hidden_done_ids` usa acima. Comparar
+    # contra o literal "done" fazia `subtasks_done` ficar sempre 0 em
+    # qualquer board cuja coluna concluída não se chamasse exatamente isso.
+    done_slugs = list(
+        WorkflowStatusModel.objects.filter(
+            Q(is_done=True) | Q(category="done"), project_id=project_id
+        ).values_list("slug", flat=True)
+    )
+
     rows = (
         CardModel.objects.filter(project_id=project_id)
         .annotate(
@@ -222,7 +234,7 @@ def _counts_map(project_id: str) -> dict[str, dict]:
             c_attachments=Count("attachments", distinct=True),
             c_subtasks=Count("subtasks", distinct=True),
             c_subtasks_done=Count(
-                "subtasks", filter=Q(subtasks__status="done"), distinct=True
+                "subtasks", filter=Q(subtasks__status__in=done_slugs), distinct=True
             ),
         )
         .values("id", "c_comments", "c_attachments", "c_subtasks", "c_subtasks_done")

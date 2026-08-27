@@ -71,6 +71,7 @@ import {
   useUploadAttachmentVersion,
   useUpsertFieldValue,
   useVersions,
+  useWorkflowStatuses,
   useWorklogs,
 } from "@/features/workspace/workspace.hooks"
 import type {
@@ -881,14 +882,24 @@ function Subtasks({
   onOpenCard?: (card: Card) => void
 }) {
   const { data: cards } = useCards(projectId)
+  const { data: statuses } = useWorkflowStatuses(projectId)
   const createCard = useCreateCard(projectId)
   const updateCard = useUpdateCard(projectId)
   const [title, setTitle] = useState("")
   const [adding, setAdding] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
 
+  // Slug real das colunas do projeto — nunca "todo"/"done" fixos. Board
+  // importado ou com coluna renomeada não tem esses slugs, e a subtarefa
+  // nascia (ou marcava concluída) numa coluna que não existe: some do quadro.
+  const defaultSlug = statuses?.find((s) => s.is_default)?.slug ?? statuses?.[0]?.slug ?? "todo"
+  const doneSlugs = new Set(
+    (statuses ?? []).filter((s) => s.is_done || s.category === "done").map((s) => s.slug),
+  )
+  const isDone = (c: Card) => doneSlugs.has(c.status)
+
   const children = (cards ?? []).filter((c) => c.parent_id === parentCard.id)
-  const doneN = children.filter((c) => c.status === "done").length
+  const doneN = children.filter(isDone).length
   const pct = children.length ? Math.round((doneN / children.length) * 100) : 0
 
   const add = async () => {
@@ -899,6 +910,7 @@ function Subtasks({
     await createCard.mutateAsync({
       title: t,
       type: "chore",
+      status: defaultSlug as CardStatus,
       parent_id: parentCard.id,
       sprint_id: parentCard.sprint_id,
     })
@@ -907,7 +919,7 @@ function Subtasks({
   const toggle = (c: Card) =>
     updateCard.mutate({
       cardId: c.id,
-      input: { status: c.status === "done" ? "todo" : "done" },
+      input: { status: (isDone(c) ? defaultSlug : ([...doneSlugs][0] ?? "done")) as CardStatus },
     })
 
   return (
@@ -931,14 +943,14 @@ function Subtasks({
               onClick={(e) => { e.stopPropagation(); toggle(c) }}
               className="text-paper-400 hover:text-success"
             >
-              {c.status === "done" ? (
+              {isDone(c) ? (
                 <CheckSquare className="size-4 text-success" />
               ) : (
                 <Square className="size-4" />
               )}
             </button>
             <span className="font-mono text-[11px] text-paper-400">{c.ref}</span>
-            <span className={cx("flex-1 truncate text-sm", c.status === "done" ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>
+            <span className={cx("flex-1 truncate text-sm", isDone(c) ? "text-paper-400 line-through" : "text-ink dark:text-paper")}>
               {c.title}
             </span>
           </li>
@@ -986,6 +998,7 @@ function Subtasks({
               await createCard.mutateAsync({
                 title: t,
                 type: "chore",
+                status: defaultSlug as CardStatus,
                 parent_id: parentCard.id,
                 sprint_id: parentCard.sprint_id,
               })
