@@ -22,12 +22,15 @@ import {
   Check,
   ChevronUp,
   Clock,
+  Globe2,
   Loader2,
+  Lock,
   LogIn,
   LogOut,
   Mic,
   MicOff,
   Phone,
+  Pin,
   Plus,
   ScreenShare,
   TrendingUp,
@@ -45,9 +48,12 @@ import {
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { useSquads } from "@/features/poker/poker.hooks"
+import type { Squad } from "@/features/poker/poker.types"
 import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
+import type { Member } from "@/features/workspace/workspace.types"
 import { extractApiError } from "@/shared/api/client"
-import { Button, Input, Spinner, cx } from "@/shared/ui/primitives"
+import { Button, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
 import * as meetApi from "./meetings.api"
 import { useMeetingSessionStore } from "./meeting.session.store"
 
@@ -65,8 +71,9 @@ export function MeetingsPage() {
   const myRole = (members ?? []).find((m) => m.user_id === me?.id)?.role ?? null
   const isAdmin = myRole === "owner" || myRole === "admin"
   const setSession = useMeetingSessionStore((s) => s.setSession)
-  const [name, setName] = useState("")
+  const { data: squads } = useSquads(activeWorkspaceId)
   const [tab, setTab] = useState<"open" | "history">("open")
+  const [createOpen, setCreateOpen] = useState(false)
   // Encerrar é irreversível: guarda o id da sala aguardando confirmação em vez
   // de fechar no primeiro clique.
   const [confirmClose, setConfirmClose] = useState<string | null>(null)
@@ -85,10 +92,21 @@ export function MeetingsPage() {
   })
 
   const create = useMutation({
-    mutationFn: () =>
-      meetApi.createRoom({ workspaceId: activeWorkspaceId!, name: name.trim() }),
+    mutationFn: (input: {
+      name: string
+      visibility: "restricted" | "workspace"
+      squadId: string | null
+      audienceUserIds: string[]
+    }) =>
+      meetApi.createRoom({
+        workspaceId: activeWorkspaceId!,
+        name: input.name,
+        visibility: input.visibility,
+        squadId: input.squadId,
+        audienceUserIds: input.audienceUserIds,
+      }),
     onSuccess: async (room) => {
-      setName("")
+      setCreateOpen(false)
       qc.invalidateQueries({ queryKey: ["meeting-rooms", activeWorkspaceId] })
       // Quem cria a sala quer entrar nela — não faz sentido criar e ficar olhando.
       setSession(await meetApi.joinRoom(room.id))
@@ -147,19 +165,8 @@ export function MeetingsPage() {
             >
               <BarChart3 className="size-4" /> Relatório
             </button>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && name.trim() && create.mutate()}
-              placeholder="Nome da sala"
-              className="w-full sm:w-56"
-            />
             <Button
-              onClick={() => {
-                create.mutate()
-              }}
-              loading={create.isPending}
-              disabled={!name.trim()}
+              onClick={() => setCreateOpen(true)}
               icon={<Plus className="size-4" />}
             >
               Criar sala
@@ -171,6 +178,15 @@ export function MeetingsPage() {
       <AnimatePresence>
         {reportOpen && <MeetingReportPanel workspaceId={activeWorkspaceId} />}
       </AnimatePresence>
+
+      <CreateRoomDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        squads={squads ?? []}
+        members={members ?? []}
+        pending={create.isPending}
+        onSubmit={(input) => create.mutate(input)}
+      />
 
       <div className="flex gap-1 border-b border-paper-200 dark:border-ink-700">
         {([["open", "Salas abertas"], ["history", "Histórico"]] as const).map(([id, label]) => (
@@ -285,9 +301,23 @@ export function MeetingsPage() {
                     <Video className="size-[18px]" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink dark:text-ink-200">
-                      {room.name}
+                    <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-ink dark:text-ink-200">
+                      <span className="truncate">{room.name}</span>
+                      {room.is_permanent && (
+                        <span
+                          title="Sala fixa — sempre disponível"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-paper-100 px-1.5 py-0.5 text-[10px] font-medium text-paper-500 dark:bg-ink-700 dark:text-ink-400"
+                        >
+                          <Pin className="size-2.5" />
+                          Fixa
+                        </span>
+                      )}
                     </p>
+                    {room.squad_id && (
+                      <p className="mt-0.5 truncate text-[11px] text-paper-400">
+                        {squads?.find((s) => s.id === room.squad_id)?.name ?? "Squad"}
+                      </p>
+                    )}
                     {live ? (
                       <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-brand-600 dark:text-brand-300">
                         {/* Ponto pulsante: o estado "tem gente agora" muda
@@ -308,8 +338,11 @@ export function MeetingsPage() {
                 </div>
 
                 {/* Encerrar aparece no hover: ação destrutiva não deve
-                    competir com "Entrar", que é o que se faz 99% das vezes. */}
-                {confirmClose === room.id ? (
+                    competir com "Entrar", que é o que se faz 99% das vezes.
+                    Sala fixa de squad não pode ser encerrada por aqui — o
+                    backend rejeita, e o botão nem aparece pra não sugerir a
+                    ação. */}
+                {!room.is_permanent && confirmClose === room.id ? (
                   <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-danger/10 p-1.5">
                     <span className="flex-1 pl-1 text-[11px] text-danger">Encerrar sala?</span>
                     <button
@@ -352,18 +385,23 @@ export function MeetingsPage() {
                   <button
                     onClick={() => setConfirmEndCall(room.id)}
                     title="Encerrar chamada para todos"
-                    className="absolute right-9 top-2 rounded-lg p-1.5 text-paper-400 opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                    className={cx(
+                      "absolute top-2 rounded-lg p-1.5 text-paper-400 opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100",
+                      room.is_permanent ? "right-2" : "right-9",
+                    )}
                   >
                     <LogOut className="size-3.5" />
                   </button>
                 )}
-                <button
-                  onClick={() => setConfirmClose(room.id)}
-                  title="Encerrar sala"
-                  className="absolute right-2 top-2 rounded-lg p-1.5 text-paper-400 opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                {!room.is_permanent && (
+                  <button
+                    onClick={() => setConfirmClose(room.id)}
+                    title="Encerrar sala"
+                    className="absolute right-2 top-2 rounded-lg p-1.5 text-paper-400 opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
                 <Button
                   size="sm"
                   variant={live ? "primary" : "outline"}
@@ -383,6 +421,192 @@ export function MeetingsPage() {
       )}
 
     </div>
+  )
+}
+
+/** Diálogo de criação de sala: nome + audiência (visibilidade/squad/pessoas).
+ * Mesmo padrão visual do `AccessCard` das configurações de board — toggle de
+ * visibilidade, select de squad e grade de chips de pessoas, ambos
+ * desabilitados quando a sala é aberta ao workspace inteiro. */
+function CreateRoomDialog({
+  open,
+  onClose,
+  squads,
+  members,
+  pending,
+  onSubmit,
+}: {
+  open: boolean
+  onClose: () => void
+  squads: Squad[]
+  members: Member[]
+  pending: boolean
+  onSubmit: (input: {
+    name: string
+    visibility: "restricted" | "workspace"
+    squadId: string | null
+    audienceUserIds: string[]
+  }) => void
+}) {
+  const [name, setName] = useState("")
+  const [visibility, setVisibility] = useState<"restricted" | "workspace">("restricted")
+  const [squadId, setSquadId] = useState("")
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+
+  // O diálogo cancelado e reaberto depois não deve mostrar as últimas
+  // escolhas — só reseta ao abrir, não a cada re-render.
+  useEffect(() => {
+    if (open) {
+      setName("")
+      setVisibility("restricted")
+      setSquadId("")
+      setSelectedUsers(new Set())
+    }
+  }, [open])
+
+  const toggleUser = (userId: string) => {
+    setSelectedUsers((old) => {
+      const next = new Set(old)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
+  const submit = () => {
+    if (!name.trim()) return
+    onSubmit({
+      name: name.trim(),
+      visibility,
+      squadId: visibility === "workspace" ? null : squadId || null,
+      audienceUserIds: visibility === "workspace" ? [] : [...selectedUsers],
+    })
+  }
+
+  const noAudience = visibility === "restricted" && !squadId && selectedUsers.size === 0
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Criar sala"
+      description="Quem vê e pode entrar nesta sala."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} loading={pending} disabled={!name.trim()} icon={<Plus className="size-4" />}>
+            Criar sala
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Nome da sala">
+          <Input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Ex.: Daily do time"
+          />
+        </Field>
+
+        <Field label="Visibilidade">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibility("restricted")}
+              className={cx(
+                "flex items-center gap-2 rounded-lg border p-2.5 text-left text-[13px] transition-colors",
+                visibility === "restricted"
+                  ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  : "border-paper-200 dark:border-ink-700 hover:border-brand-300",
+              )}
+            >
+              <Lock className="size-3.5 shrink-0" />
+              Restrito
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibility("workspace")}
+              className={cx(
+                "flex items-center gap-2 rounded-lg border p-2.5 text-left text-[13px] transition-colors",
+                visibility === "workspace"
+                  ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  : "border-paper-200 dark:border-ink-700 hover:border-brand-300",
+              )}
+            >
+              <Globe2 className="size-3.5 shrink-0" />
+              Workspace
+            </button>
+          </div>
+        </Field>
+
+        <Field label="Squad dona" hint="Opcional — toda a squad enxerga a sala.">
+          <Select
+            value={squadId}
+            disabled={visibility === "workspace"}
+            onChange={(e) => setSquadId(e.target.value)}
+          >
+            <option value="">Nenhuma</option>
+            {squads.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Users className="size-3.5 text-brand-500" />
+            <p className="text-[13px] font-medium text-ink dark:text-paper">Pessoas com acesso direto</p>
+            <span className="text-[11px] text-paper-500">
+              {selectedUsers.size} selecionada{selectedUsers.size === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="grid max-h-44 gap-1.5 overflow-y-auto sm:grid-cols-2">
+            {members.map((member) => {
+              const selected = selectedUsers.has(member.user_id)
+              return (
+                <button
+                  key={member.user_id}
+                  type="button"
+                  disabled={visibility === "workspace"}
+                  onClick={() => toggleUser(member.user_id)}
+                  className={cx(
+                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+                    selected
+                      ? "border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-500/50 dark:bg-brand-500/15 dark:text-brand-300"
+                      : "border-paper-200 text-paper-600 hover:border-brand-300 dark:border-ink-700 dark:text-ink-200 dark:hover:border-brand-500/50",
+                    visibility === "workspace" && "cursor-not-allowed opacity-50",
+                  )}
+                >
+                  <span
+                    className={cx(
+                      "grid size-5 shrink-0 place-items-center rounded-md border",
+                      selected ? "border-brand-500 bg-brand-500 text-white" : "border-paper-300 dark:border-ink-600",
+                    )}
+                  >
+                    {selected && <Check className="size-3" />}
+                  </span>
+                  <span className="min-w-0 truncate">{member.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {noAudience && (
+          <p className="text-[11px] text-paper-400">
+            Sem squad nem pessoas escolhidas, só você vai enxergar esta sala — a audiência não dá
+            pra mudar depois de criada, então escolha agora quem mais deve ver.
+          </p>
+        )}
+      </div>
+    </Modal>
   )
 }
 
