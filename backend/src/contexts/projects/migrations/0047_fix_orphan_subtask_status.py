@@ -31,8 +31,19 @@ def fix_orphan_status(apps, schema_editor):
 
         valid_slugs = {s.slug for s in statuses}
         default_status = next((s for s in statuses if s.is_default), statuses[0])
+        # `is_done` é o flag explícito — prioridade sobre a categoria. Quando
+        # nenhuma coluna tem o flag e existe mais de uma com `category=done`
+        # (workflow com duas colunas "terminais", ex.: "Code review" e
+        # "Concluído" ambas marcadas done), a de MAIOR order é a mais perto
+        # do fim do fluxo — a "concluído" de verdade, não uma parada
+        # intermediária que só reaproveitou a categoria.
         done_status = next(
-            (s for s in statuses if s.is_done or s.category == "done"), None
+            (s for s in statuses if s.is_done),
+            max(
+                (s for s in statuses if s.category == "done"),
+                key=lambda s: s.order,
+                default=None,
+            ),
         )
 
         orphans = CardModel.objects.filter(project_id=project_id).exclude(
