@@ -931,7 +931,9 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
             else next.delete(identity)
             return next
           })
-          if (data.raised && identity !== room.localParticipant.identity) beep()
+          // `dataReceived` só chega de outros participantes — o bipe de
+          // quem levanta a própria mão é disparado em `toggleHand`.
+          if (data.raised) beep()
         }
       } catch { /* mensagens desconhecidas não afetam a chamada */ }
     }
@@ -961,6 +963,9 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
       if (raising) next.add(identity)
       else next.delete(identity)
       void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "hand", raised: raising })), { reliable: true })
+      // LiveKit não devolve `dataReceived` pra quem publicou — sem isto só
+      // o resto da sala ouvia o bipe, nunca quem levantou a própria mão.
+      if (raising) beep()
       return next
     })
   }, [room])
