@@ -404,23 +404,30 @@
    quase preto puro, busca meio deslocada da paleta). As variáveis CSS abaixo
    são as documentadas pela lib — sobrescrever aqui alinha ela aos tokens
    ink/brand do resto do app em vez de destoar dentro do overlay de chamada. */
-/* !important em cada variável: a lib injeta os valores default dela como
-   `style` INLINE no próprio elemento (não via folha de estilo), e inline
-   style vence qualquer seletor de stylesheet sem `!important` — foi por
-   isso que a primeira versão deste bloco não mudava nada visualmente,
-   mesmo com o seletor certo. Confirmado lendo o bundle da lib
-   (`emoji-picker-react.esm.js`), não é suposição. */
-.EmojiPickerReact.epr-dark-theme {
+/* Duas correções sobre a versão anterior deste bloco (que não tinha efeito
+   visual nenhum), achadas lendo o bundle real da lib
+   (`emoji-picker-react.esm.js`):
+   1. `--epr-search-placeholder-color` não existe — a variável real é
+      `--epr-search-input-placeholder-color`. Nome errado = var nunca
+      aplicada, sem erro nem aviso (custom property desconhecida é só
+      ignorada).
+   2. `input.epr-search` não existe — o input de busca da lib não recebe
+      essa classe (o bundle não declara `'.': 'epr-search'` pra ela, só um
+      hash de CSS-in-JS interno). Seletor nunca batia em nada.
+   Prefixo `.meet-reaction-picker` (classe no wrapper em MeetingsPage.tsx)
+   garante especificidade acima da regra própria da lib mesmo se ela algum
+   dia mudar a ordem de inserção do `<style>` dela no DOM. */
+.meet-reaction-picker .EmojiPickerReact.epr-dark-theme {
   --epr-bg-color: #242528 !important; /* ink-800 */
   --epr-category-label-bg-color: #242528 !important;
   --epr-text-color: #cecfd2 !important; /* ink-200 */
   --epr-search-input-bg-color: #1f1f21 !important; /* ink-900 */
   --epr-search-input-bg-color-active: #1f1f21 !important;
   --epr-search-input-text-color: #cecfd2 !important;
-  --epr-search-placeholder-color: #7e8188 !important; /* ink-500 */
-  --epr-search-border-color: #0c66e4 !important; /* brand-500 */
+  --epr-search-input-placeholder-color: #7e8188 !important; /* ink-500 */
+  --epr-search-border-color: #3d3f43 !important; /* ink-700 */
+  --epr-search-border-color-active: #0c66e4 !important; /* brand-500 */
   --epr-picker-border-color: #3d3f43 !important; /* ink-700 */
-  --epr-header-border-color: #3d3f43 !important;
   --epr-hover-bg-color: #2b2c2f !important; /* ink-750 */
   --epr-focus-bg-color: #2b2c2f !important;
   --epr-highlight-color: #0c66e4 !important; /* brand-500 */
@@ -430,13 +437,17 @@
   --epr-preview-border-color: #3d3f43 !important;
   border-radius: 0.75rem !important;
 }
-/* A borda "ativa" da busca vem branca por padrão — troca pro brand pra
-   combinar com o resto do app, em vez de destoar do tema escuro. */
-.EmojiPickerReact.epr-dark-theme input.epr-search {
-  border-color: #3d3f43 !important;
+/* Scrollbar da lista de emojis é nativa do browser, não CSS var da lib —
+   fica branca por padrão mesmo com o resto do picker escuro. */
+.meet-reaction-picker .EmojiPickerReact.epr-dark-theme ::-webkit-scrollbar {
+  width: 8px;
 }
-.EmojiPickerReact.epr-dark-theme input.epr-search:focus {
-  border-color: #0c66e4 !important;
+.meet-reaction-picker .EmojiPickerReact.epr-dark-theme ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.meet-reaction-picker .EmojiPickerReact.epr-dark-theme ::-webkit-scrollbar-thumb {
+  background-color: #3d3f43; /* ink-700 */
+  border-radius: 999px;
 }
 
 /* Transição suave padrão em controles interativos (microanimação global) */

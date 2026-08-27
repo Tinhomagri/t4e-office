@@ -1126,7 +1126,7 @@ function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
               // de posição no primeiro frame, antes de renderizar de verdade.
               maxHeight: PICKER_HEIGHT,
             }}
-            className="fixed z-[121] -translate-x-1/2 overflow-hidden rounded-xl shadow-lg"
+            className="meet-reaction-picker fixed z-[121] -translate-x-1/2 overflow-hidden rounded-xl shadow-lg"
           >
             <Suspense fallback={<div style={{ width: PICKER_WIDTH, height: PICKER_HEIGHT }} className="grid place-items-center bg-ink-800"><Loader2 className="size-5 animate-spin text-paper-400" /></div>}>
               <EmojiPicker
