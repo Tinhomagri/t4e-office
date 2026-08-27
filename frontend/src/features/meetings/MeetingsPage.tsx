@@ -56,7 +56,7 @@ import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import type { Member } from "@/features/workspace/workspace.types"
 import { extractApiError } from "@/shared/api/client"
 import { Button, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
-import { beep } from "@/shared/ui/sound"
+import { handRaiseChime } from "@/shared/ui/sound"
 import * as meetApi from "./meetings.api"
 import { useMeetingSessionStore } from "./meeting.session.store"
 
@@ -933,7 +933,7 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
           })
           // `dataReceived` só chega de outros participantes — o bipe de
           // quem levanta a própria mão é disparado em `toggleHand`.
-          if (data.raised) beep()
+          if (data.raised) handRaiseChime()
         }
       } catch { /* mensagens desconhecidas não afetam a chamada */ }
     }
@@ -965,7 +965,7 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
       void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "hand", raised: raising })), { reliable: true })
       // LiveKit não devolve `dataReceived` pra quem publicou — sem isto só
       // o resto da sala ouvia o bipe, nunca quem levantou a própria mão.
-      if (raising) beep()
+      if (raising) handRaiseChime()
       return next
     })
   }, [room])
