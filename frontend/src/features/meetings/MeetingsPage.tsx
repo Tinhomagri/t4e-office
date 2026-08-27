@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ConnectionState, Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
+import { Theme, type EmojiClickData } from "emoji-picker-react"
 import { useLocation } from "react-router-dom"
 import {
   BarChart3,
@@ -60,18 +61,16 @@ import { handRaiseChime } from "@/shared/ui/sound"
 import * as meetApi from "./meetings.api"
 import { useMeetingSessionStore } from "./meeting.session.store"
 
-/** Emojis do seletor de reações — mesma variedade do Google Meet, sem
- * precisar bater item a item com a lista deles. */
-const REACTION_EMOJIS = [
-  "👍", "👎", "👏", "❤️", "😂", "😮", "😢", "🎉", "🔥", "🤔",
-  "👀", "💯", "🙌", "😍", "😅", "🤯", "👋", "🙏", "😴", "🥳",
-  "😡", "✅",
-] as const
-
 // O SDK do LiveKit puxa o engine WebRTC inteiro. Carregar sob demanda mantém o
 // bundle inicial do app fora do caminho de quem nunca abre uma reunião.
 const LiveKitRoom = lazy(() =>
   import("@livekit/components-react").then((m) => ({ default: m.LiveKitRoom })),
+)
+
+// O catálogo de emoji inteiro (busca, categorias) só carrega quando alguém
+// abre o seletor de reação — ninguém paga esse peso pra só entrar na sala.
+const EmojiPicker = lazy(() =>
+  import("emoji-picker-react").then((m) => ({ default: m.default })),
 )
 
 export function MeetingsPage() {
@@ -1065,12 +1064,17 @@ function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
 
+  // Picker completo (busca, categoria, recentes) em vez da grade fixa de 22
+  // emoji — a lib cobre o catálogo inteiro, refazer isso na mão não valia.
+  const PICKER_WIDTH = 320
+  const PICKER_HEIGHT = 400
+
   useLayoutEffect(() => {
     if (!open) return
     const place = () => {
       const rect = anchorRef.current?.getBoundingClientRect()
       if (!rect) return
-      const half = 128
+      const half = PICKER_WIDTH / 2
       const center = Math.min(
         Math.max(rect.left + rect.width / 2, half + 8),
         Math.max(window.innerWidth - half - 8, half + 8),
@@ -1099,19 +1103,28 @@ function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
         <>
           <div className="fixed inset-0 z-[120]" onClick={() => setOpen(false)} />
           <div
-            style={{ left: pos.left, bottom: pos.bottom }}
-            className="fixed z-[121] grid w-64 -translate-x-1/2 grid-cols-6 gap-1 rounded-xl bg-ink-800 p-2 shadow-lg"
+            style={{
+              left: pos.left,
+              bottom: pos.bottom,
+              width: PICKER_WIDTH,
+              // A lib mede a própria altura — isto só evita o picker "pular"
+              // de posição no primeiro frame, antes de renderizar de verdade.
+              maxHeight: PICKER_HEIGHT,
+            }}
+            className="fixed z-[121] -translate-x-1/2 overflow-hidden rounded-xl shadow-lg"
           >
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => { onPick(emoji); setOpen(false) }}
-                className="grid size-9 place-items-center rounded-lg text-lg hover:bg-white/10"
-              >
-                {emoji}
-              </button>
-            ))}
+            <Suspense fallback={<div style={{ width: PICKER_WIDTH, height: PICKER_HEIGHT }} className="grid place-items-center bg-ink-800"><Loader2 className="size-5 animate-spin text-paper-400" /></div>}>
+              <EmojiPicker
+                theme={Theme.DARK}
+                lazyLoadEmojis
+                searchDisabled={false}
+                skinTonesDisabled
+                width={PICKER_WIDTH}
+                height={PICKER_HEIGHT}
+                previewConfig={{ showPreview: false }}
+                onEmojiClick={(data: EmojiClickData) => { onPick(data.emoji); setOpen(false) }}
+              />
+            </Suspense>
           </div>
         </>,
         document.body,
