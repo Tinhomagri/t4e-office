@@ -397,6 +397,40 @@
 }
 .meet-reaction-rise { animation: meet-reaction-rise 2.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* ── Reuniões — tema do seletor de reação (emoji-picker-react) ─────────────
+   A lib já vem com `theme="dark"`, mas o resultado padrão é genérico (fundo
+   quase preto puro, busca meio deslocada da paleta). As variáveis CSS abaixo
+   são as documentadas pela lib — sobrescrever aqui alinha ela aos tokens
+   ink/brand do resto do app em vez de destoar dentro do overlay de chamada. */
+.EmojiPickerReact.epr-dark-theme {
+  --epr-bg-color: #242528; /* ink-800 */
+  --epr-category-label-bg-color: #242528;
+  --epr-text-color: #cecfd2; /* ink-200 */
+  --epr-search-input-bg-color: #1f1f21; /* ink-900 */
+  --epr-search-input-bg-color-active: #1f1f21;
+  --epr-search-input-text-color: #cecfd2;
+  --epr-search-placeholder-color: #7e8188; /* ink-500 */
+  --epr-search-border-color: #0c66e4; /* brand-500 */
+  --epr-picker-border-color: #3d3f43; /* ink-700 */
+  --epr-header-border-color: #3d3f43;
+  --epr-hover-bg-color: #2b2c2f; /* ink-750 */
+  --epr-focus-bg-color: #2b2c2f;
+  --epr-highlight-color: #0c66e4; /* brand-500 */
+  --epr-emoji-hover-color: #2b2c2f;
+  --epr-category-icon-active-color: #0c66e4;
+  --epr-skin-tone-picker-menu-color: #242528;
+  --epr-preview-border-color: #3d3f43;
+  border-radius: 0.75rem;
+}
+/* A borda "ativa" da busca vem branca por padrão — troca pro brand pra
+   combinar com o resto do app, em vez de destoar do tema escuro. */
+.EmojiPickerReact.epr-dark-theme input.epr-search {
+  border-color: #3d3f43 !important;
+}
+.EmojiPickerReact.epr-dark-theme input.epr-search:focus {
+  border-color: #0c66e4 !important;
+}
+
 /* Transição suave padrão em controles interativos (microanimação global) */
 @layer base {
   button,
