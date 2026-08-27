@@ -23,6 +23,7 @@ import {
   ChevronUp,
   Clock,
   Globe2,
+  Hand,
   Loader2,
   Lock,
   LogIn,
@@ -33,6 +34,7 @@ import {
   Pin,
   Plus,
   ScreenShare,
+  SmilePlus,
   TrendingUp,
   Trash2,
   Users,
@@ -54,8 +56,17 @@ import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import type { Member } from "@/features/workspace/workspace.types"
 import { extractApiError } from "@/shared/api/client"
 import { Button, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
+import { beep } from "@/shared/ui/sound"
 import * as meetApi from "./meetings.api"
 import { useMeetingSessionStore } from "./meeting.session.store"
+
+/** Emojis do seletor de reações — mesma variedade do Google Meet, sem
+ * precisar bater item a item com a lista deles. */
+const REACTION_EMOJIS = [
+  "👍", "👎", "👏", "❤️", "😂", "😮", "😢", "🎉", "🔥", "🤔",
+  "👀", "💯", "🙌", "😍", "😅", "🤯", "👋", "🙏", "😴", "🥳",
+  "😡", "✅",
+] as const
 
 // O SDK do LiveKit puxa o engine WebRTC inteiro. Carregar sob demanda mantém o
 // bundle inicial do app fora do caminho de quem nunca abre uma reunião.
@@ -858,6 +869,11 @@ function MetricTile({
   )
 }
 
+/** Uma reação flutuante na tela: nasce, sobe e desaparece sozinha. */
+type FloatingReaction = { id: string; emoji: string; left: number }
+
+let reactionSeq = 0
+
 function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModerate: boolean }) {
   const room = useRoomContext()
   const participants = useParticipants()
@@ -865,6 +881,31 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>([])
   const [draft, setDraft] = useState("")
+  const [reactions, setReactions] = useState<FloatingReaction[]>([])
+  // Quem levantou a mão agora, por identity — inclui o próprio participante
+  // local, pra tratar o badge dele igual ao de qualquer outro na hora de
+  // renderizar (ver VideoStage e o painel de participantes abaixo).
+  const [handsRaised, setHandsRaised] = useState<Set<string>>(new Set())
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+
+  const spawnReaction = useCallback((emoji: string) => {
+    const id = `${Date.now()}-${reactionSeq++}`
+    // Deslocamento horizontal aleatório: uma rajada do mesmo emoji vindo de
+    // várias pessoas (ou repetido pela mesma) não deve virar um blob único.
+    const left = 10 + Math.random() * 80
+    setReactions((old) => [...old, { id, emoji, left }])
+    const timeout = setTimeout(() => {
+      setReactions((old) => old.filter((r) => r.id !== id))
+      timeoutsRef.current.delete(timeout)
+    }, 2600)
+    timeoutsRef.current.add(timeout)
+  }, [])
+
+  useEffect(() => {
+    const timeouts = timeoutsRef.current
+    return () => { timeouts.forEach((t) => clearTimeout(t)); timeouts.clear() }
+  }, [])
+
   useEffect(() => {
     const onData = (payload: Uint8Array, participant?: { name?: string; identity?: string }) => {
       try {
@@ -875,11 +916,29 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
           if (data.action === "mute") void room.localParticipant.setMicrophoneEnabled(false)
           if (data.action === "camera") void room.localParticipant.setCameraEnabled(false)
         }
+        if (data.type === "reaction" && typeof data.emoji === "string") {
+          // A reação do próprio participante local já é mostrada na hora do
+          // clique (feedback instantâneo) — não duplica ao voltar pelo canal.
+          if (participant?.identity && participant.identity !== room.localParticipant.identity) {
+            spawnReaction(String(data.emoji))
+          }
+        }
+        if (data.type === "hand" && participant?.identity) {
+          const identity = participant.identity
+          setHandsRaised((old) => {
+            const next = new Set(old)
+            if (data.raised) next.add(identity)
+            else next.delete(identity)
+            return next
+          })
+          if (data.raised && identity !== room.localParticipant.identity) beep()
+        }
       } catch { /* mensagens desconhecidas não afetam a chamada */ }
     }
     room.on("dataReceived", onData)
     return () => { room.off("dataReceived", onData) }
-  }, [room])
+  }, [room, spawnReaction])
+
   const send = () => {
     const text = draft.trim()
     if (!text) return
@@ -887,19 +946,49 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
     setMessages((old) => [...old, { from: "Você", text, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }])
     setDraft("")
   }
+
+  const sendReaction = useCallback((emoji: string) => {
+    void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "reaction", emoji })), { reliable: false })
+    // Feedback local imediato — não espera o round-trip do canal de dados.
+    spawnReaction(emoji)
+  }, [room, spawnReaction])
+
+  const toggleHand = useCallback(() => {
+    const identity = room.localParticipant.identity
+    setHandsRaised((old) => {
+      const next = new Set(old)
+      const raising = !next.has(identity)
+      if (raising) next.add(identity)
+      else next.delete(identity)
+      void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "hand", raised: raising })), { reliable: true })
+      return next
+    })
+  }, [room])
+
+  const sortedParticipants = [...participants].sort(
+    (a, b) => (handsRaised.has(b.identity) ? 1 : 0) - (handsRaised.has(a.identity) ? 1 : 0),
+  )
+
   return (
     <div className="flex min-h-0 flex-1 basis-0 flex-col">
       <div className="flex min-h-0 flex-1 basis-0">
-        <VideoStage />
+        <VideoStage handsRaised={handsRaised} reactions={reactions} />
         {(chatOpen || peopleOpen) && <aside className="flex w-72 shrink-0 flex-col border-l border-ink-700 bg-ink-900 text-paper-200">
           <div className="flex items-center justify-between border-b border-ink-700 px-3 py-3 text-sm font-semibold">
             {chatOpen ? "Chat da reunião" : "Participantes"}
             <button onClick={() => { setChatOpen(false); setPeopleOpen(false) }} className="text-paper-400 hover:text-white"><X className="size-4" /></button>
           </div>
-          {chatOpen ? <><div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{messages.length === 0 && <p className="text-xs text-paper-500">Nenhuma mensagem ainda.</p>}{messages.map((m, i) => <div key={i} className="rounded-lg bg-white/5 p-2"><div className="flex justify-between text-[10px] text-paper-500"><span>{m.from}</span><span>{m.time}</span></div><p className="mt-1 break-words text-sm">{m.text}</p></div>)}</div><form onSubmit={(e) => { e.preventDefault(); send() }} className="flex gap-2 border-t border-ink-700 p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escreva uma mensagem" className="min-w-0 flex-1 rounded-lg bg-ink-800 px-3 py-2 text-xs outline-none ring-brand-500 focus:ring-1" /><button className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white"><Send className="size-4" /></button></form></> : <div className="space-y-2 overflow-y-auto p-3">{participants.map((p) => <div key={p.identity} className="flex items-center gap-2 rounded-lg bg-white/5 p-2 text-xs"><span className="grid size-7 place-items-center rounded-full bg-brand-500/20 text-[10px]">{initialsOf(p.name || p.identity)}</span><span className="min-w-0 flex-1 truncate">{p.name || p.identity}</span>{canModerate && p.identity !== room.localParticipant.identity && <button title="Remover participante" onClick={() => void meetApi.removeParticipant(roomId, p.identity)} className="rounded p-1 text-red-300 hover:bg-red-500/20"><LogOut className="size-3.5" /></button>}</div>)}</div>}
+          {chatOpen ? <><div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{messages.length === 0 && <p className="text-xs text-paper-500">Nenhuma mensagem ainda.</p>}{messages.map((m, i) => <div key={i} className="rounded-lg bg-white/5 p-2"><div className="flex justify-between text-[10px] text-paper-500"><span>{m.from}</span><span>{m.time}</span></div><p className="mt-1 break-words text-sm">{m.text}</p></div>)}</div><form onSubmit={(e) => { e.preventDefault(); send() }} className="flex gap-2 border-t border-ink-700 p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escreva uma mensagem" className="min-w-0 flex-1 rounded-lg bg-ink-800 px-3 py-2 text-xs outline-none ring-brand-500 focus:ring-1" /><button className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white"><Send className="size-4" /></button></form></> : <div className="space-y-2 overflow-y-auto p-3">{sortedParticipants.map((p) => <div key={p.identity} className="flex items-center gap-2 rounded-lg bg-white/5 p-2 text-xs"><span className="relative grid size-7 place-items-center rounded-full bg-brand-500/20 text-[10px]">{initialsOf(p.name || p.identity)}{handsRaised.has(p.identity) && <span title="Mão levantada" className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full bg-amber-400 text-[8px] leading-none">✋</span>}</span><span className="min-w-0 flex-1 truncate">{p.name || p.identity}</span>{canModerate && p.identity !== room.localParticipant.identity && <button title="Remover participante" onClick={() => void meetApi.removeParticipant(roomId, p.identity)} className="rounded p-1 text-red-300 hover:bg-red-500/20"><LogOut className="size-3.5" /></button>}</div>)}</div>}
         </aside>}
       </div>
-      <MeetControlBar onChat={() => { setChatOpen((v) => !v); setPeopleOpen(false) }} onPeople={() => { setPeopleOpen((v) => !v); setChatOpen(false) }} peopleCount={participants.length} />
+      <MeetControlBar
+        onChat={() => { setChatOpen((v) => !v); setPeopleOpen(false) }}
+        onPeople={() => { setPeopleOpen((v) => !v); setChatOpen(false) }}
+        peopleCount={participants.length}
+        onReact={sendReaction}
+        handRaised={handsRaised.has(room.localParticipant.identity)}
+        onToggleHand={toggleHand}
+      />
     </div>
   )
 }
@@ -913,8 +1002,9 @@ function CallButton({
   children,
 }: {
   /** off = mic/câmera desligados (vermelho); sharing = tela sendo
-   * compartilhada agora (azul da marca); danger = encerrar chamada. */
-  variant?: "default" | "off" | "sharing" | "danger"
+   * compartilhada agora (azul da marca); danger = encerrar chamada; raised =
+   * mão levantada agora (âmbar, mesmo tratamento de "estado ativo"). */
+  variant?: "default" | "off" | "sharing" | "danger" | "raised"
   onClick: React.MouseEventHandler<HTMLButtonElement>
   label: string
   children: React.ReactNode
@@ -931,11 +1021,79 @@ function CallButton({
           ? "bg-red-600 text-white hover:bg-red-500"
           : variant === "sharing"
             ? "bg-brand-600 text-white hover:bg-brand-500"
-            : "bg-white/10 text-white hover:bg-white/20",
+            : variant === "raised"
+              ? "bg-amber-500 text-white hover:bg-amber-400"
+              : "bg-white/10 text-white hover:bg-white/20",
       )}
     >
       {children}
     </button>
+  )
+}
+
+// Seletor de reações: mesmo padrão do DeviceMenu (botão que abre um painel
+// flutuante ancorado acima de si, fecha ao clicar fora), só que com uma
+// grade de emoji em vez de uma lista de dispositivos. Portal pro body pelo
+// mesmo motivo do DeviceMenu: a barra rola na horizontal (`overflow-x-auto`)
+// e o CSS promove o overflow-y a `auto` junto, recortando qualquer painel
+// `absolute` que suba acima dela.
+function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const rect = anchorRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const half = 128
+      const center = Math.min(
+        Math.max(rect.left + rect.width / 2, half + 8),
+        Math.max(window.innerWidth - half - 8, half + 8),
+      )
+      setPos({ left: center, bottom: window.innerHeight - rect.top + 12 })
+    }
+    place()
+    window.addEventListener("resize", place)
+    window.addEventListener("scroll", place, true)
+    return () => {
+      window.removeEventListener("resize", place)
+      window.removeEventListener("scroll", place, true)
+    }
+  }, [open])
+
+  return (
+    <div className="shrink-0" ref={anchorRef}>
+      <CallButton
+        variant="default"
+        onClick={() => setOpen((v) => !v)}
+        label="Enviar reação"
+      >
+        <SmilePlus className="size-5" />
+      </CallButton>
+      {open && pos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[120]" onClick={() => setOpen(false)} />
+          <div
+            style={{ left: pos.left, bottom: pos.bottom }}
+            className="fixed z-[121] grid w-64 -translate-x-1/2 grid-cols-6 gap-1 rounded-xl bg-ink-800 p-2 shadow-lg"
+          >
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => { onPick(emoji); setOpen(false) }}
+                className="grid size-9 place-items-center rounded-lg text-lg hover:bg-white/10"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+    </div>
   )
 }
 
@@ -1046,7 +1204,21 @@ function DeviceMenu({
   )
 }
 
-function MeetControlBar({ onChat, onPeople, peopleCount }: { onChat: () => void; onPeople: () => void; peopleCount: number }) {
+function MeetControlBar({
+  onChat,
+  onPeople,
+  peopleCount,
+  onReact,
+  handRaised,
+  onToggleHand,
+}: {
+  onChat: () => void
+  onPeople: () => void
+  peopleCount: number
+  onReact: (emoji: string) => void
+  handRaised: boolean
+  onToggleHand: () => void
+}) {
   const mic = useTrackToggle({ source: Track.Source.Microphone })
   const camera = useTrackToggle({ source: Track.Source.Camera })
   const screenShare = useTrackToggle({ source: Track.Source.ScreenShare })
@@ -1080,6 +1252,14 @@ function MeetControlBar({ onChat, onPeople, peopleCount }: { onChat: () => void;
         label={screenShare.enabled ? "Parar compartilhamento" : "Compartilhar tela"}
       >
         <ScreenShare className="size-5" />
+      </CallButton>
+      <ReactionPicker onPick={onReact} />
+      <CallButton
+        variant={handRaised ? "raised" : "default"}
+        onClick={onToggleHand}
+        label={handRaised ? "Abaixar a mão" : "Levantar a mão"}
+      >
+        <Hand className="size-5" />
       </CallButton>
       <CallButton onClick={onChat} label="Abrir chat"><MessageCircle className="size-5" /></CallButton>
       <CallButton onClick={onPeople} label={`Participantes (${peopleCount})`}><Users className="size-5" /></CallButton>
@@ -1179,7 +1359,27 @@ function SpotlightTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) 
   )
 }
 
-function VideoStage() {
+/** Selo de mão levantada — mesmo emoji, mesmo canto (superior direito) nos
+ * dois lugares onde aparece: aqui (tiles de vídeo) e no painel de
+ * participantes. */
+function HandRaisedBadge() {
+  return (
+    <span
+      title="Mão levantada"
+      className="absolute right-1.5 top-1.5 z-10 grid size-6 place-items-center rounded-full bg-amber-400 text-sm shadow"
+    >
+      ✋
+    </span>
+  )
+}
+
+function VideoStage({
+  handsRaised,
+  reactions,
+}: {
+  handsRaised: Set<string>
+  reactions: FloatingReaction[]
+}) {
   const cameraTracks = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: true }],
     { onlySubscribed: false },
@@ -1190,6 +1390,23 @@ function VideoStage() {
     { onlySubscribed: false },
   )
 
+  // Camada das reações flutuantes: cobre a área de vídeo inteira, não
+  // intercepta clique (os controles ficam fora deste container) e nasce a
+  // partir do rodapé, subindo.
+  const reactionLayer = (
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+      {reactions.map((r) => (
+        <span
+          key={r.id}
+          className="meet-reaction-rise absolute bottom-2 text-3xl"
+          style={{ left: `${r.left}%` }}
+        >
+          {r.emoji}
+        </span>
+      ))}
+    </div>
+  )
+
   if (screenTracks.length > 0) {
     // Estilo Meet: quem compartilha a tela domina o espaço; o resto vira uma
     // faixa de miniaturas ao lado. Antes a tela compartilhada entrava na
@@ -1197,19 +1414,24 @@ function VideoStage() {
     // gente nova na call, não que alguém tinha compartilhado algo.
     const spotlight = screenTracks[0]
     return (
-      <div className="meet-video-stage flex min-h-0 flex-1 basis-0 gap-2 overflow-hidden bg-ink-950 p-2">
-        <SpotlightTile trackRef={spotlight} />
-        {cameraTracks.length > 0 && (
-          <div className="scrollbar-slim-dark flex w-[180px] shrink-0 flex-col gap-2 overflow-y-auto">
-            {cameraTracks.map((track, i) => (
-              <ParticipantTile
-                key={`${track.participant.identity}-${track.source}-${i}`}
-                trackRef={track}
-                style={{ width: "100%", height: "120px", flexShrink: 0 }}
-              />
-            ))}
-          </div>
-        )}
+      <div className="relative flex min-h-0 flex-1 basis-0">
+        <div className="meet-video-stage flex min-h-0 flex-1 basis-0 gap-2 overflow-hidden bg-ink-950 p-2">
+          <SpotlightTile trackRef={spotlight} />
+          {cameraTracks.length > 0 && (
+            <div className="scrollbar-slim-dark flex w-[180px] shrink-0 flex-col gap-2 overflow-y-auto">
+              {cameraTracks.map((track, i) => (
+                <div key={`${track.participant.identity}-${track.source}-${i}`} className="relative shrink-0">
+                  {handsRaised.has(track.participant.identity) && <HandRaisedBadge />}
+                  <ParticipantTile
+                    trackRef={track}
+                    style={{ width: "100%", height: "120px", flexShrink: 0 }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {reactionLayer}
       </div>
     )
   }
@@ -1225,17 +1447,23 @@ function VideoStage() {
   const rows = Math.max(1, Math.ceil(count / columns))
 
   return (
-    <div className="meet-video-stage flex min-h-0 flex-1 basis-0 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
-      {cameraTracks.map((track, i) => (
-        <ParticipantTile
-          key={`${track.participant.identity}-${track.source}-${i}`}
-          trackRef={track}
-          style={{
-            width: `calc(${100 / columns}% - 0.5rem)`,
-            height: `calc(${100 / rows}% - 0.5rem)`,
-          }}
-        />
-      ))}
+    <div className="relative flex min-h-0 flex-1 basis-0">
+      <div className="meet-video-stage flex min-h-0 flex-1 basis-0 flex-wrap content-center justify-center gap-2 overflow-hidden bg-ink-950 p-2">
+        {cameraTracks.map((track, i) => (
+          <div
+            key={`${track.participant.identity}-${track.source}-${i}`}
+            className="relative"
+            style={{
+              width: `calc(${100 / columns}% - 0.5rem)`,
+              height: `calc(${100 / rows}% - 0.5rem)`,
+            }}
+          >
+            {handsRaised.has(track.participant.identity) && <HandRaisedBadge />}
+            <ParticipantTile trackRef={track} style={{ width: "100%", height: "100%" }} />
+          </div>
+        ))}
+      </div>
+      {reactionLayer}
     </div>
   )
 }

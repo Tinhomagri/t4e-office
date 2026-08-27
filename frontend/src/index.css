@@ -388,6 +388,15 @@
 .poker-float { animation: poker-float 3s ease-in-out infinite; }
 .poker-glow { animation: poker-glow 3.5s ease-in-out infinite; }
 
+/* ── Reuniões — reação flutuante estilo Meet ────────────────────────────── */
+@keyframes meet-reaction-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  15% { opacity: 1; transform: translateY(-20px) scale(1.1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-220px) scale(1); }
+}
+.meet-reaction-rise { animation: meet-reaction-rise 2.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Transição suave padrão em controles interativos (microanimação global) */
 @layer base {
   button,
