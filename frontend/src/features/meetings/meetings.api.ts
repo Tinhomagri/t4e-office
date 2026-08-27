@@ -13,6 +13,11 @@ export interface MeetingRoom {
   /** Preenchido só no histórico: quem participou e por quanto tempo. */
   history: { user_id: string; name: string; joined_at: string; minutes: number }[]
   duration_minutes: number
+  visibility: "restricted" | "workspace"
+  squad_id: string | null
+  audience_user_ids: string[]
+  /** Sala fixa de squad (criada automaticamente) — não pode ser encerrada pelo botão comum. */
+  is_permanent: boolean
 }
 
 export interface JoinResult {
@@ -58,12 +63,19 @@ export async function createRoom(input: {
   name: string
   projectId?: string | null
   cardId?: string | null
+  /** Default "restricted" no backend — omitir mantém o comportamento antigo. */
+  visibility?: "restricted" | "workspace"
+  squadId?: string | null
+  audienceUserIds?: string[]
 }): Promise<MeetingRoom> {
   const { data } = await api.post<MeetingRoom>("/meetings/rooms/", {
     workspace_id: input.workspaceId,
     name: input.name,
     project_id: input.projectId ?? null,
     card_id: input.cardId ?? null,
+    visibility: input.visibility ?? "restricted",
+    squad_id: input.squadId ?? null,
+    audience_user_ids: input.audienceUserIds ?? [],
   })
   return data
 }
