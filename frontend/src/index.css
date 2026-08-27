@@ -404,25 +404,31 @@
    quase preto puro, busca meio deslocada da paleta). As variáveis CSS abaixo
    são as documentadas pela lib — sobrescrever aqui alinha ela aos tokens
    ink/brand do resto do app em vez de destoar dentro do overlay de chamada. */
+/* !important em cada variável: a lib injeta os valores default dela como
+   `style` INLINE no próprio elemento (não via folha de estilo), e inline
+   style vence qualquer seletor de stylesheet sem `!important` — foi por
+   isso que a primeira versão deste bloco não mudava nada visualmente,
+   mesmo com o seletor certo. Confirmado lendo o bundle da lib
+   (`emoji-picker-react.esm.js`), não é suposição. */
 .EmojiPickerReact.epr-dark-theme {
-  --epr-bg-color: #242528; /* ink-800 */
-  --epr-category-label-bg-color: #242528;
-  --epr-text-color: #cecfd2; /* ink-200 */
-  --epr-search-input-bg-color: #1f1f21; /* ink-900 */
-  --epr-search-input-bg-color-active: #1f1f21;
-  --epr-search-input-text-color: #cecfd2;
-  --epr-search-placeholder-color: #7e8188; /* ink-500 */
-  --epr-search-border-color: #0c66e4; /* brand-500 */
-  --epr-picker-border-color: #3d3f43; /* ink-700 */
-  --epr-header-border-color: #3d3f43;
-  --epr-hover-bg-color: #2b2c2f; /* ink-750 */
-  --epr-focus-bg-color: #2b2c2f;
-  --epr-highlight-color: #0c66e4; /* brand-500 */
-  --epr-emoji-hover-color: #2b2c2f;
-  --epr-category-icon-active-color: #0c66e4;
-  --epr-skin-tone-picker-menu-color: #242528;
-  --epr-preview-border-color: #3d3f43;
-  border-radius: 0.75rem;
+  --epr-bg-color: #242528 !important; /* ink-800 */
+  --epr-category-label-bg-color: #242528 !important;
+  --epr-text-color: #cecfd2 !important; /* ink-200 */
+  --epr-search-input-bg-color: #1f1f21 !important; /* ink-900 */
+  --epr-search-input-bg-color-active: #1f1f21 !important;
+  --epr-search-input-text-color: #cecfd2 !important;
+  --epr-search-placeholder-color: #7e8188 !important; /* ink-500 */
+  --epr-search-border-color: #0c66e4 !important; /* brand-500 */
+  --epr-picker-border-color: #3d3f43 !important; /* ink-700 */
+  --epr-header-border-color: #3d3f43 !important;
+  --epr-hover-bg-color: #2b2c2f !important; /* ink-750 */
+  --epr-focus-bg-color: #2b2c2f !important;
+  --epr-highlight-color: #0c66e4 !important; /* brand-500 */
+  --epr-emoji-hover-color: #2b2c2f !important;
+  --epr-category-icon-active-color: #0c66e4 !important;
+  --epr-skin-tone-picker-menu-color: #242528 !important;
+  --epr-preview-border-color: #3d3f43 !important;
+  border-radius: 0.75rem !important;
 }
 /* A borda "ativa" da busca vem branca por padrão — troca pro brand pra
    combinar com o resto do app, em vez de destoar do tema escuro. */
