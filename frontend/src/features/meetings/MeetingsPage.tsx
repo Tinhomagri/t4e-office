@@ -16,7 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ConnectionState, Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
-import { Theme, type EmojiClickData } from "emoji-picker-react"
+import { Categories, Theme, type CategoryConfig, type EmojiClickData } from "emoji-picker-react"
 import { useLocation } from "react-router-dom"
 import {
   BarChart3,
@@ -1060,6 +1060,20 @@ function CallButton({
 // mesmo motivo do DeviceMenu: a barra rola na horizontal (`overflow-x-auto`)
 // e o CSS promove o overflow-y a `auto` junto, recortando qualquer painel
 // `absolute` que suba acima dela.
+// Nomes de categoria em português — a lib vem só em inglês por padrão, e o
+// resto do app inteiro é PT-BR; deixar essa telinha em inglês destoava.
+const REACTION_CATEGORIES_PT: CategoryConfig[] = [
+  { category: Categories.SUGGESTED, name: "Usados recentemente" },
+  { category: Categories.SMILEYS_PEOPLE, name: "Carinhas e pessoas" },
+  { category: Categories.ANIMALS_NATURE, name: "Animais e natureza" },
+  { category: Categories.FOOD_DRINK, name: "Comida e bebida" },
+  { category: Categories.TRAVEL_PLACES, name: "Viagens e lugares" },
+  { category: Categories.ACTIVITIES, name: "Atividades" },
+  { category: Categories.OBJECTS, name: "Objetos" },
+  { category: Categories.SYMBOLS, name: "Símbolos" },
+  { category: Categories.FLAGS, name: "Bandeiras" },
+]
+
 function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -1119,10 +1133,12 @@ function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
                 theme={Theme.DARK}
                 lazyLoadEmojis
                 searchDisabled={false}
+                searchPlaceholder="Pesquisar"
                 skinTonesDisabled
                 width={PICKER_WIDTH}
                 height={PICKER_HEIGHT}
                 previewConfig={{ showPreview: false }}
+                categories={REACTION_CATEGORIES_PT}
                 // Sem fechar no clique: igual o Meet, dá pra mandar vários
                 // seguidos sem reabrir o seletor toda vez. Fecha só ao clicar
                 // fora (o overlay abaixo já cuida disso).
