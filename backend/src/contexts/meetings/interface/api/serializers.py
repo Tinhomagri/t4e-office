@@ -9,6 +9,15 @@ class CreateRoomSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=120)
     project_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     card_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    # Audiência da sala. `is_permanent` não entra aqui de propósito — só o
+    # hook de criação de squad marca uma sala como fixa.
+    visibility = serializers.ChoiceField(
+        choices=["restricted", "workspace"], required=False, default="restricted"
+    )
+    squad_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    audience_user_ids = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
 
 
 class JoinRoomSerializer(serializers.Serializer):

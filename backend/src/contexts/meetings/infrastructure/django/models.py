@@ -55,6 +55,26 @@ class MeetingRoomModel(models.Model):
     # Encerrada: some da lista sem apagar o histórico de participação.
     closed_at = models.DateTimeField(null=True, blank=True)
 
+    # Quem enxerga a sala. Mesma filosofia do `ProjectModel.visibility`:
+    # "restricted" (padrão) fecha por padrão — abrir depois é decisão
+    # consciente, descobrir que a sala sigilosa estava aberta, não.
+    VISIBILITY_CHOICES = [
+        ("restricted", "Restrito"),
+        ("workspace", "Workspace"),
+    ]
+    visibility = models.CharField(max_length=12, choices=VISIBILITY_CHOICES, default="restricted", db_index=True)
+    # Squad dona da sala. Quem está na squad enxerga a reunião sem precisar
+    # entrar na lista de audiência pessoa a pessoa — mesmo papel do
+    # `ProjectModel.squad` para o board.
+    squad = models.ForeignKey(
+        "estimation.SquadModel", on_delete=models.SET_NULL, null=True, blank=True, related_name="meeting_rooms",
+    )
+    # Pessoas escolhidas manualmente para ver a sala, além da squad (se houver).
+    audience_user_ids = models.JSONField(default=list, blank=True)
+    # Sala fixa da squad: nunca fecha sozinha, não pode ser encerrada por
+    # `close/` (só admin pode tirar todo mundo da chamada de hoje via `end-call/`).
+    is_permanent = models.BooleanField(default=False, db_index=True)
+
     class Meta:
         db_table = "meetings_room"
         ordering = ["-created_at"]

@@ -15,7 +15,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from contexts.estimation.infrastructure.django.models import PokerSessionModel
+from contexts.estimation.infrastructure.django.models import (
+    PokerSessionModel,
+    SquadMemberModel,
+    SquadModel,
+)
 from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.meetings.infrastructure.django.models import (
     MeetingParticipantModel,
@@ -55,6 +59,55 @@ def _assert_admin(workspace_id: str, user_id: str) -> None:
         raise PermissionDeniedError("Só admin do workspace pode encerrar a chamada de todo mundo.")
 
 
+def _role_of(workspace_id: str, user_id: str) -> str | None:
+    return (
+        MembershipModel.objects.filter(workspace_id=workspace_id, user_id=user_id)
+        .values_list("role", flat=True)
+        .first()
+    )
+
+
+def can_see_room(
+    room: MeetingRoomModel,
+    user_id: str,
+    *,
+    role: str | None = None,
+    squad_ids: set | None = None,
+) -> bool:
+    """A pessoa pode ENXERGAR esta sala? Mesma lógica de `can_browse` do board:
+    admin/owner sempre veem, workspace aberto sempre vê, squad dona da sala
+    basta, senão só quem foi adicionado explicitamente — mais quem criou a
+    sala (nunca esconder do próprio criador).
+
+    `role` e `squad_ids` são pré-computados por quem chama em lote (listagem)
+    para não gerar uma query por sala — quando não vêm prontos, a função
+    resolve sozinha (uso pontual em join/close/etc.).
+    """
+    if role is None:
+        role = _role_of(room.workspace_id, user_id)
+    if role in ("owner", "admin"):
+        return True
+    # Escritório e Poker não têm conceito de audiência — são canais ambientes
+    # do SFU, não compromissos marcados. Só reunião ("meeting") é gateada.
+    if room.kind != "meeting":
+        return True
+    if str(user_id) == str(room.created_by):
+        return True
+    if room.visibility == "workspace":
+        return True
+    if room.squad_id:
+        if squad_ids is not None:
+            if str(room.squad_id) in {str(s) for s in squad_ids}:
+                return True
+        elif SquadMemberModel.objects.filter(
+            squad_id=room.squad_id, user_id=user_id
+        ).exists():
+            return True
+    if str(user_id) in {str(v) for v in (room.audience_user_ids or [])}:
+        return True
+    return False
+
+
 def _history_of(room: MeetingRoomModel) -> list[dict]:
     """Quem passou pela sala e por quanto tempo."""
     rows = room.participants.select_related("user").order_by("joined_at")
@@ -83,6 +136,10 @@ def _room_dict(
         "created_by": str(room.created_by),
         "created_at": room.created_at.isoformat(),
         "closed_at": room.closed_at.isoformat() if room.closed_at else None,
+        "visibility": room.visibility,
+        "squad_id": str(room.squad_id) if room.squad_id else None,
+        "audience_user_ids": room.audience_user_ids or [],
+        "is_permanent": room.is_permanent,
         "participants": live,
         # Só no histórico: quem participou e por quanto tempo. Na listagem de
         # salas abertas seria uma query por linha sem ninguém olhar.
@@ -118,6 +175,16 @@ class RoomListCreateView(APIView):
         rooms = MeetingRoomModel.objects.filter(
             workspace_id=workspace_id, closed_at__isnull=True, kind="meeting"
         )
+        # Contexto de audiência pré-computado UMA vez para o request inteiro —
+        # senão `can_see_room` viraria uma query de papel + uma de squad POR
+        # sala, e a listagem é exatamente o lugar onde isso mais dói.
+        uid = _uid(request)
+        role = _role_of(workspace_id, uid)
+        squad_ids = set(
+            SquadMemberModel.objects.filter(user_id=uid).values_list("squad_id", flat=True)
+        )
+        rooms = [r for r in rooms if can_see_room(r, uid, role=role, squad_ids=squad_ids)]
+
         # Presentes = participação aberta. Uma query só para todas as salas,
         # senão a listagem viraria N+1 com uma sala por linha.
         live: dict[str, int] = {}
@@ -138,12 +205,26 @@ class RoomListCreateView(APIView):
         workspace_id = str(v["workspace_id"])
         _assert_member(workspace_id, _uid(request))
 
+        squad_id = v.get("squad_id") or None
+        if squad_id and not SquadModel.objects.filter(
+            id=squad_id, workspace_id=workspace_id
+        ).exists():
+            return Response(
+                {"error": "Squad não pertence a este workspace."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
         room = MeetingRoomModel(
             workspace_id=workspace_id,
             name=v["name"],
             project_id=v.get("project_id") or None,
             card_id=v.get("card_id") or None,
             created_by=_uid(request),
+            # `visibility`/`squad_id`/`audience_user_ids` são a audiência da
+            # sala (Parte 1 do domínio de reuniões). `is_permanent` NUNCA vem
+            # deste endpoint — só o hook de criação de squad marca True.
+            visibility=v.get("visibility") or "restricted",
+            squad_id=squad_id,
+            audience_user_ids=v.get("audience_user_ids") or [],
         )
         # O slug precisa existir antes de salvar (é unique e não-nulo) e vem do
         # id justamente para não colidir entre workspaces.
@@ -165,6 +246,8 @@ class RoomJoinView(APIView):
             raise NotFoundError("Sala não encontrada ou já encerrada.")
         uid = _uid(request)
         _assert_member(str(room.workspace_id), uid)
+        if not can_see_room(room, uid):
+            raise PermissionDeniedError("Você não tem acesso a esta sala.")
 
         token = issue_token(
             room=room.slug,
@@ -256,6 +339,23 @@ class RoomLeaveView(APIView):
         MeetingParticipantModel.objects.filter(
             room_id=room_id, user_id=_uid(request), left_at=None
         ).update(left_at=timezone.now())
+
+        # Sala ad-hoc some sozinha quando o último sai: ninguém "encerra" uma
+        # reunião marcada de improviso, ela só esvazia. Sala fixa (squad) é o
+        # oposto — precisa sobreviver a todo mundo saindo, é o andar dela.
+        # `.filter(...).first()` em vez de `.get()`: sair de uma sala que já
+        # sumiu não pode virar 404 pra quem só está fechando a aba.
+        room = MeetingRoomModel.objects.filter(id=room_id).first()
+        if (
+            room is not None
+            and not room.is_permanent
+            and room.closed_at is None
+            and not MeetingParticipantModel.objects.filter(
+                room_id=room_id, left_at=None
+            ).exists()
+        ):
+            room.closed_at = timezone.now()
+            room.save(update_fields=["closed_at"])
         return Response({"ok": True})
 
 
@@ -268,7 +368,14 @@ class RoomCloseView(APIView):
         room = MeetingRoomModel.objects.filter(id=room_id).first()
         if room is None:
             raise NotFoundError("Sala não encontrada.")
-        _assert_member(str(room.workspace_id), _uid(request))
+        uid = _uid(request)
+        _assert_member(str(room.workspace_id), uid)
+        if room.is_permanent:
+            raise PermissionDeniedError(
+                "Sala fixa da squad não pode ser encerrada — peça pra um admin tirar todo mundo com 'Encerrar chamada'."
+            )
+        if not can_see_room(room, uid):
+            raise PermissionDeniedError("Você não tem acesso a esta sala.")
         room.closed_at = timezone.now()
         room.save(update_fields=["closed_at"])
         MeetingParticipantModel.objects.filter(room=room, left_at=None).update(
