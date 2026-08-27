@@ -869,7 +869,7 @@ function MetricTile({
 }
 
 /** Uma reação flutuante na tela: nasce, sobe e desaparece sozinha. */
-type FloatingReaction = { id: string; emoji: string; left: number }
+type FloatingReaction = { id: string; emoji: string; from: string; right: number }
 
 let reactionSeq = 0
 
@@ -887,12 +887,13 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
   const [handsRaised, setHandsRaised] = useState<Set<string>>(new Set())
   const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
-  const spawnReaction = useCallback((emoji: string) => {
+  const spawnReaction = useCallback((emoji: string, from: string) => {
     const id = `${Date.now()}-${reactionSeq++}`
-    // Deslocamento horizontal aleatório: uma rajada do mesmo emoji vindo de
-    // várias pessoas (ou repetido pela mesma) não deve virar um blob único.
-    const left = 10 + Math.random() * 80
-    setReactions((old) => [...old, { id, emoji, left }])
+    // Estilo Meet: nasce ancorada no canto inferior direito, não espalhada
+    // pela largura toda. Um jitter pequeno evita que uma rajada do mesmo
+    // emoji vire um blob único empilhado exatamente no mesmo pixel.
+    const right = 2 + Math.random() * 10
+    setReactions((old) => [...old, { id, emoji, from, right }])
     const timeout = setTimeout(() => {
       setReactions((old) => old.filter((r) => r.id !== id))
       timeoutsRef.current.delete(timeout)
@@ -919,7 +920,7 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
           // A reação do próprio participante local já é mostrada na hora do
           // clique (feedback instantâneo) — não duplica ao voltar pelo canal.
           if (participant?.identity && participant.identity !== room.localParticipant.identity) {
-            spawnReaction(String(data.emoji))
+            spawnReaction(String(data.emoji), participant.name || participant.identity)
           }
         }
         if (data.type === "hand" && participant?.identity) {
@@ -951,7 +952,7 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
   const sendReaction = useCallback((emoji: string) => {
     void room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "reaction", emoji })), { reliable: false })
     // Feedback local imediato — não espera o round-trip do canal de dados.
-    spawnReaction(emoji)
+    spawnReaction(emoji, "Você")
   }, [room, spawnReaction])
 
   const toggleHand = useCallback(() => {
@@ -1122,7 +1123,10 @@ function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
                 width={PICKER_WIDTH}
                 height={PICKER_HEIGHT}
                 previewConfig={{ showPreview: false }}
-                onEmojiClick={(data: EmojiClickData) => { onPick(data.emoji); setOpen(false) }}
+                // Sem fechar no clique: igual o Meet, dá pra mandar vários
+                // seguidos sem reabrir o seletor toda vez. Fecha só ao clicar
+                // fora (o overlay abaixo já cuida disso).
+                onEmojiClick={(data: EmojiClickData) => onPick(data.emoji)}
               />
             </Suspense>
           </div>
@@ -1434,10 +1438,13 @@ function VideoStage({
       {reactions.map((r) => (
         <span
           key={r.id}
-          className="meet-reaction-rise absolute bottom-2 text-3xl"
-          style={{ left: `${r.left}%` }}
+          className="meet-reaction-rise absolute bottom-2 flex flex-col items-center gap-0.5"
+          style={{ right: `${r.right}%` }}
         >
-          {r.emoji}
+          <span className="text-3xl leading-none">{r.emoji}</span>
+          <span className="whitespace-nowrap rounded-full bg-ink-950/80 px-2 py-0.5 text-[10px] font-medium text-paper-200">
+            {r.from}
+          </span>
         </span>
       ))}
     </div>

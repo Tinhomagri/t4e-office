@@ -389,11 +389,13 @@
 .poker-glow { animation: poker-glow 3.5s ease-in-out infinite; }
 
 /* ── Reuniões — reação flutuante estilo Meet ────────────────────────────── */
+/* Sobe até a METADE da altura da tela (não uma distância fixa em px) — em
+   `vh` pra escalar com o tamanho real da janela/monitor, igual o Meet. */
 @keyframes meet-reaction-rise {
   0% { opacity: 0; transform: translateY(0) scale(0.6); }
-  15% { opacity: 1; transform: translateY(-20px) scale(1.1); }
+  15% { opacity: 1; transform: translateY(-6vh) scale(1.1); }
   80% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-220px) scale(1); }
+  100% { opacity: 0; transform: translateY(-50vh) scale(1); }
 }
 .meet-reaction-rise { animation: meet-reaction-rise 2.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
