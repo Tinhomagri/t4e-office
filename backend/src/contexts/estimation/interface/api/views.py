@@ -715,6 +715,25 @@ class SquadListCreateView(APIView):
         )
         for user_id in request.data.get("member_ids") or []:
             SquadMemberModel.objects.get_or_create(squad=squad, user_id=user_id)
+
+        # Toda squad ganha uma sala de reunião fixa e sempre visível pra quem
+        # é do time — import tardio porque `meetings` é quem depende de
+        # `estimation` (sessão de poker aponta pra squad), não o contrário; um
+        # import no topo do arquivo criaria um ciclo entre os dois contextos.
+        from contexts.meetings.infrastructure.django.models import MeetingRoomModel
+
+        room = MeetingRoomModel(
+            workspace_id=workspace_id,
+            name=f"Squad {squad.name}",
+            kind="meeting",
+            visibility="restricted",
+            squad=squad,
+            is_permanent=True,
+            created_by=str(request.user.id),
+        )
+        room.slug = f"squad-{squad.id.hex[:12]}"
+        room.save()
+
         return Response(_squad_dict(squad), status=status.HTTP_201_CREATED)
 
 
@@ -753,6 +772,17 @@ class SquadDetailView(APIView):
         return Response(_squad_dict(squad))
 
     def delete(self, request: Request, squad_id: str) -> Response:
+        # A sala fixa da squad depende inteiramente da squad pra decidir quem
+        # vê ela (`is_permanent=True` não tem lista de audiência própria).
+        # Apagar a squad zera `squad_id` via SET_NULL — sem fechar antes, a
+        # sala ficaria invisível pra todo mundo (menos admin) e impossível de
+        # encerrar sozinha, um fantasma que ninguém consegue arrumar.
+        from contexts.meetings.infrastructure.django.models import MeetingRoomModel
+
+        MeetingRoomModel.objects.filter(
+            squad_id=squad_id, is_permanent=True, closed_at__isnull=True
+        ).update(closed_at=timezone.now())
+
         # As sessões que já aconteceram continuam existindo (squad vira nulo):
         # apagar histórico de estimativa junto com o time seria perda de dado.
         SquadModel.objects.filter(id=squad_id).delete()
