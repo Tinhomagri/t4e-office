@@ -129,3 +129,24 @@ class AuditLogSerializer(serializers.Serializer):
     old_role = serializers.CharField()
     new_role = serializers.CharField()
     created_at = serializers.DateTimeField()
+
+
+class CreatePersonalAccessTokenSerializer(serializers.Serializer):
+    """Payload de criação de token pessoal."""
+
+    name = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+
+
+class PersonalAccessTokenSerializer(serializers.Serializer):
+    """Representação pública de um token — nunca inclui o valor bruto."""
+
+    id = serializers.CharField()
+    name = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    last_used_at = serializers.DateTimeField(allow_null=True)
+
+
+class PersonalAccessTokenCreatedSerializer(PersonalAccessTokenSerializer):
+    """Só usada na resposta do POST — única vez que o token bruto é exposto."""
+
+    token = serializers.CharField()

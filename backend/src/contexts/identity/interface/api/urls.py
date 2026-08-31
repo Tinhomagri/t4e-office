@@ -8,6 +8,8 @@ from contexts.identity.interface.api.views import (
     GoogleLoginCallbackView,
     GoogleLoginUrlView,
     MeView,
+    PersonalAccessTokenListCreateView,
+    PersonalAccessTokenRevokeView,
     RegisterView,
     ResetPasswordView,
     TokenRefreshSafeView,
@@ -41,6 +43,8 @@ urlpatterns = [
     ),
     path("me/", MeView.as_view(), name="me"),
     path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("tokens/", PersonalAccessTokenListCreateView.as_view(), name="personal-token-list-create"),
+    path("tokens/<uuid:token_id>/", PersonalAccessTokenRevokeView.as_view(), name="personal-token-revoke"),
     path("workspaces/", WorkspaceCreateView.as_view(), name="workspace-list-create"),
     path(
         "workspaces/<uuid:workspace_id>/members/",

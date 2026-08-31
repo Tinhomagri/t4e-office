@@ -4,6 +4,7 @@ import logging
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import redirect
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -35,6 +36,7 @@ from contexts.identity.infrastructure.django.google_login_state import (
     verify_state,
 )
 from contexts.identity.infrastructure.django.models import UserModel
+from contexts.identity.infrastructure.django.personal_token_authentication import generate_token
 from contexts.identity.infrastructure.django.repositories_impl import (
     DjangoMembershipRepository,
     DjangoUserRepository,
@@ -42,7 +44,10 @@ from contexts.identity.infrastructure.django.repositories_impl import (
 )
 from contexts.identity.interface.api.serializers import (
     ChangePasswordSerializer,
+    CreatePersonalAccessTokenSerializer,
     CreateWorkspaceSerializer,
+    PersonalAccessTokenCreatedSerializer,
+    PersonalAccessTokenSerializer,
     RegisterSerializer,
     UserSerializer,
     WorkspaceListItemSerializer,
@@ -419,3 +424,48 @@ class WorkspaceCreateView(APIView):
         return Response(
             WorkspaceSerializer(result).data, status=status.HTTP_201_CREATED
         )
+
+
+class PersonalAccessTokenListCreateView(APIView):
+    """Lista e gera tokens pessoais do usuário autenticado."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        from contexts.identity.infrastructure.django.models import PersonalAccessToken
+
+        tokens = PersonalAccessToken.objects.filter(
+            user=request.user, revoked_at__isnull=True
+        ).order_by("-created_at")
+        return Response(PersonalAccessTokenSerializer(tokens, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        from contexts.identity.infrastructure.django.models import PersonalAccessToken
+
+        serializer = CreatePersonalAccessTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_token, digest = generate_token()
+        token = PersonalAccessToken.objects.create(
+            user=request.user, name=serializer.validated_data["name"], token_hash=digest
+        )
+        token.token = raw_token  # atributo em memória, nunca persistido — serializer lê daqui
+        data = PersonalAccessTokenCreatedSerializer(token).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class PersonalAccessTokenRevokeView(APIView):
+    """Revoga um token pessoal do próprio usuário."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, token_id: str) -> Response:
+        from contexts.identity.infrastructure.django.models import PersonalAccessToken
+
+        token = PersonalAccessToken.objects.filter(
+            id=token_id, user=request.user, revoked_at__isnull=True
+        ).first()
+        if not token:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        token.revoked_at = timezone.now()
+        token.save(update_fields=["revoked_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
