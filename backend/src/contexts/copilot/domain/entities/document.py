@@ -36,6 +36,9 @@ class Document:
     analysis: dict | None = None  # AnalysisResult serializado (preenchido na análise)
     project_id: str | None = None
     created_at: datetime | None = None  # preenchido pelo repositório na leitura/criação
+    # Caminho relativo do arquivo original (MEDIA_URL + isto), quando veio de
+    # upload de arquivo — texto colado nunca tem. A view monta a URL absoluta.
+    file_url: str | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip():

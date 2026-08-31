@@ -36,7 +36,7 @@ from contexts.projects.infrastructure.django.repositories_impl import (
 from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
 
-def _doc_dict(doc: Document) -> dict:
+def _doc_dict(doc: Document, request: Request) -> dict:
     return {
         "id": doc.id,
         "title": doc.title,
@@ -45,10 +45,11 @@ def _doc_dict(doc: Document) -> dict:
         "project_id": doc.project_id,
         "text_preview": doc.text[:400],
         "analysis": doc.analysis,
+        "file_url": request.build_absolute_uri(doc.file_url) if doc.file_url else None,
     }
 
 
-def _doc_detail_dict(doc: Document) -> dict:
+def _doc_detail_dict(doc: Document, request: Request) -> dict:
     return {
         "id": doc.id,
         "title": doc.title,
@@ -57,6 +58,7 @@ def _doc_detail_dict(doc: Document) -> dict:
         "project_id": doc.project_id,
         "text": doc.text,
         "created_at": doc.created_at,
+        "file_url": request.build_absolute_uri(doc.file_url) if doc.file_url else None,
     }
 
 
@@ -86,7 +88,7 @@ class DocumentListCreateView(APIView):
             )
         project_id = request.query_params.get("project_id")
         docs = repo.list_by_workspace(workspace_id=workspace_id, project_id=project_id)
-        return Response(DocumentSerializer([_doc_dict(d) for d in docs], many=True).data)
+        return Response(DocumentSerializer([_doc_dict(d, request) for d in docs], many=True).data)
 
     def post(self, request: Request) -> Response:
         workspace_id = request.data.get("workspace_id")
@@ -122,7 +124,7 @@ class DocumentListCreateView(APIView):
             project_id=str(project_id) if project_id else None,
         )
         return Response(
-            DocumentSerializer(_doc_dict(doc)).data, status=status.HTTP_201_CREATED
+            DocumentSerializer(_doc_dict(doc, request)).data, status=status.HTTP_201_CREATED
         )
 
 
@@ -139,7 +141,7 @@ class DocumentDetailView(APIView):
         access = DjangoWorkspaceAccess()
         if not access.is_member(workspace_id=doc.workspace_id, user_id=str(request.user.id)):
             raise PermissionDeniedError("Você não tem acesso a este workspace.")
-        return Response(DocumentDetailSerializer(_doc_detail_dict(doc)).data)
+        return Response(DocumentDetailSerializer(_doc_detail_dict(doc, request)).data)
 
 
 class DocumentAnalyzeView(APIView):

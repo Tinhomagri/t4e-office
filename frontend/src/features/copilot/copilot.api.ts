@@ -27,6 +27,7 @@ export interface CopilotDocument {
   text_preview: string
   analysis: Analysis | null
   project_id: string | null
+  file_url: string | null
 }
 
 export type DocKind = "text" | "pdf" | "docx" | "audio"

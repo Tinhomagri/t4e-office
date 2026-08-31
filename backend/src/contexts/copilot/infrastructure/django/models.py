@@ -33,6 +33,10 @@ class DocumentModel(models.Model):
     title = models.CharField(max_length=200)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default="text")
     text = models.TextField(help_text="Texto extraído do documento")
+    # Arquivo original (PDF/DOCX) — só existe quando o documento veio de
+    # upload de arquivo; texto colado (kind="text") nunca tem file. Guardado
+    # pra permitir download do bruto pela UI, além da leitura do texto via MCP.
+    file = models.FileField(upload_to="copilot_documents/", null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="uploaded")
     # Resultado da análise (resumo, tarefas, decisões, riscos)
     analysis = models.JSONField(null=True, blank=True)

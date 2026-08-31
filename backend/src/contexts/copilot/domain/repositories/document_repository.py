@@ -8,8 +8,10 @@ class DocumentRepository(ABC):
     """Contrato de persistência de documentos."""
 
     @abstractmethod
-    def create(self, *, document: Document) -> Document:
-        """Persiste um novo documento."""
+    def create(
+        self, *, document: Document, file_content: bytes | None = None, filename: str = ""
+    ) -> Document:
+        """Persiste um novo documento, opcionalmente com o arquivo original."""
 
     @abstractmethod
     def get(self, *, document_id: str) -> Document | None:

@@ -64,4 +64,6 @@ class IngestDocument:
             status=DocumentStatus.UPLOADED,
             project_id=project_id,
         )
-        return self.document_repository.create(document=document)
+        return self.document_repository.create(
+            document=document, file_content=content, filename=filename
+        )

@@ -2,7 +2,7 @@
 // servidor e compartilhados com todo o time do projeto (não mais um
 // protótipo em localStorage). Sincroniza com um poll leve (estilo Planning
 // Poker) para refletir edições de outros membros sem precisar de WebSocket.
-import { Calendar, Check, Clock, FileText, Paperclip, Plus, Trash2, Upload, Users } from "lucide-react"
+import { Calendar, Check, Clock, Download, FileText, Paperclip, Plus, Trash2, Upload, Users } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { cx } from "@/shared/ui/primitives"
@@ -370,9 +370,10 @@ function DeadlineStrip({
   )
 }
 
-// Lista passiva (sem clique) dos arquivos brutos anexados ao projeto — só
-// confirmação visual de que o upload funcionou. Leitura de verdade acontece
-// via MCP, fora desta UI.
+// Lista passiva (sem clique de abrir/visualizar) dos arquivos brutos
+// anexados ao projeto — confirmação visual de que o upload funcionou, com
+// download do arquivo original. Leitura de conteúdo de verdade (extrair
+// texto e decidir cards) acontece via MCP, fora desta UI.
 function RawFilesSection({ files }: { files: CopilotDocument[] | undefined }) {
   return (
     <div className="border-t border-paper-100 dark:border-ink-800 p-1.5">
@@ -390,6 +391,16 @@ function RawFilesSection({ files }: { files: CopilotDocument[] | undefined }) {
               <span className="shrink-0 rounded-md bg-paper-100 px-1.5 py-0.5 text-[9px] uppercase text-paper-400 dark:bg-ink-800">
                 {f.kind}
               </span>
+              {f.file_url && (
+                <a
+                  href={f.file_url}
+                  download
+                  title="Baixar arquivo original"
+                  className="grid size-5 shrink-0 place-items-center rounded-md text-paper-400 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper transition-colors"
+                >
+                  <Download className="size-3" />
+                </a>
+              )}
             </div>
           ))}
         </div>

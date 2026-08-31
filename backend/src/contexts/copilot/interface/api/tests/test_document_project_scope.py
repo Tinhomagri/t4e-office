@@ -169,3 +169,47 @@ def test_get_detalhe_de_documento_inexistente_e_404(scenario):
 
     resp = scenario["client"].get(f"/api/copilot/documents/{uuid.uuid4()}/")
     assert resp.status_code == 404
+
+
+def test_documento_de_texto_colado_nao_tem_file_url(scenario):
+    resp = scenario["client"].post(
+        "/api/copilot/documents/",
+        {
+            "workspace_id": str(scenario["workspace"].id),
+            "title": "Ata colada",
+            "kind": "text",
+            "text": "Conteúdo colado, sem arquivo original.",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert resp.data["file_url"] is None
+
+    detail = scenario["client"].get(f"/api/copilot/documents/{resp.data['id']}/")
+    assert detail.data["file_url"] is None
+
+
+def test_upload_de_arquivo_persiste_o_arquivo_original_e_expoe_file_url(scenario):
+    """Documento vindo de upload (não texto colado) guarda o arquivo bruto —
+    não só o texto extraído — pra permitir download pela UI. Testa direto na
+    camada de repositório pra não depender de parsing real de PDF/DOCX."""
+    from contexts.copilot.domain.entities.document import Document, DocumentKind
+    from contexts.copilot.infrastructure.django.repositories_impl import (
+        DjangoDocumentRepository,
+    )
+
+    repo = DjangoDocumentRepository()
+    doc = Document(
+        id=None,
+        workspace_id=str(scenario["workspace"].id),
+        title="Contrato.pdf",
+        kind=DocumentKind.PDF,
+        text="Texto extraído do PDF.",
+    )
+    saved = repo.create(document=doc, file_content=b"%PDF-1.4 conteudo fake", filename="contrato.pdf")
+
+    assert saved.file_url is not None
+    assert "contrato" in saved.file_url
+
+    fetched = repo.get(document_id=saved.id)
+    assert fetched.file_url == saved.file_url

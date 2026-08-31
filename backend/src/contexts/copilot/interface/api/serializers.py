@@ -27,6 +27,7 @@ class DocumentSerializer(serializers.Serializer):
     project_id = serializers.CharField(allow_null=True)
     text_preview = serializers.CharField()
     analysis = AnalysisSerializer(allow_null=True)
+    file_url = serializers.CharField(allow_null=True)
 
 
 class DocumentDetailSerializer(serializers.Serializer):
@@ -39,6 +40,7 @@ class DocumentDetailSerializer(serializers.Serializer):
     project_id = serializers.CharField(allow_null=True)
     text = serializers.CharField()
     created_at = serializers.DateTimeField(allow_null=True)
+    file_url = serializers.CharField(allow_null=True)
 
 
 class CreateTasksSerializer(serializers.Serializer):

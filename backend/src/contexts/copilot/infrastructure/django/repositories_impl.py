@@ -23,13 +23,16 @@ def _to_entity(row: DocumentModel) -> Document:
         analysis=row.analysis,
         project_id=str(row.project_id) if row.project_id else None,
         created_at=row.created_at,
+        file_url=row.file.url if row.file else None,
     )
 
 
 class DjangoDocumentRepository(DocumentRepository):
     """Persistência de documentos via Django ORM."""
 
-    def create(self, *, document: Document) -> Document:
+    def create(
+        self, *, document: Document, file_content: bytes | None = None, filename: str = ""
+    ) -> Document:
         row = DocumentModel.objects.create(
             workspace_id=document.workspace_id,
             project_id=document.project_id,
@@ -39,6 +42,9 @@ class DjangoDocumentRepository(DocumentRepository):
             status=document.status.value,
             analysis=document.analysis,
         )
+        if file_content is not None:
+            from django.core.files.base import ContentFile
+            row.file.save(filename or row.title, ContentFile(file_content), save=True)
         return _to_entity(row)
 
     def get(self, *, document_id: str) -> Document | None:
