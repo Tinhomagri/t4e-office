@@ -1,8 +1,8 @@
 import { motion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  Bell, Camera, Check, ChevronRight, CircleUserRound,
-  KeyRound, LockKeyhole, Mail, Palette, Save,
+  Bell, Camera, Check, ChevronRight, CircleUserRound, Copy,
+  KeyRound, LockKeyhole, Mail, Palette, Plus, Save,
   ShieldCheck, Sparkles, Trash2, UserRound,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -10,18 +10,20 @@ import { useEffect, useRef, useState } from "react"
 import { changePassword, profileImageDataUri, updateProfile } from "@/features/auth/auth.api"
 import type { AuthUser, ProfileUpdatePayload } from "@/features/auth/auth.types"
 import { useAuthStore } from "@/features/auth/auth.store"
+import { useCreateToken, useRevokeToken, useTokens } from "@/features/tokens/tokens.hooks"
 import { extractApiError } from "@/shared/api/client"
 import { useThemeStore } from "@/shared/theme.store"
-import { Button, Field, Input, Select, Textarea, cx } from "@/shared/ui/primitives"
+import { Button, Field, Input, Modal, Select, Textarea, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 import type { Member } from "@/features/workspace/workspace.types"
 
-type Section = "profile" | "preferences" | "security"
+type Section = "profile" | "preferences" | "security" | "tokens"
 
 const sections = [
   { id: "profile" as const, label: "Perfil", description: "Identidade e apresentação", icon: CircleUserRound },
   { id: "preferences" as const, label: "Preferências", description: "Aparência e notificações", icon: Palette },
   { id: "security" as const, label: "Segurança", description: "Acesso e senha", icon: ShieldCheck },
+  { id: "tokens" as const, label: "Tokens de API", description: "Acesso de integrações externas", icon: KeyRound },
 ]
 
 const defaults = {
@@ -149,6 +151,7 @@ export function ProfileSettingsPage() {
           {section === "profile" && <ProfileSection form={form} setForm={setForm} avatar={avatar} setAvatar={setAvatar} saving={saving} onSave={saveProfile} />}
           {section === "preferences" && <PreferencesSection form={form} setForm={setForm} saving={saving} onSave={savePreferences} />}
           {section === "security" && <SecuritySection user={user} passwords={passwords} setPasswords={setPasswords} saving={passwordSaving} onSave={savePassword} />}
+          {section === "tokens" && <TokensSection />}
         </motion.main>
       </div>
     </div>
@@ -173,4 +176,113 @@ function PreferencesSection({ form, setForm, saving, onSave }: { form: FormState
 
 function SecuritySection({ user, passwords, setPasswords, saving, onSave }: { user: AuthUser | null; passwords: { current: string; next: string; confirm: string }; setPasswords: React.Dispatch<React.SetStateAction<{ current: string; next: string; confirm: string }>>; saving: boolean; onSave: () => void }) {
   return <div className="space-y-5"><Card title="Conta" description="Informações usadas para entrar no T4E Office." icon={Mail}><div className="grid gap-4 sm:grid-cols-2"><Field label="Email de acesso" hint="Para alterar o email, fale com um administrador."><Input value={user?.email ?? ""} disabled /></Field><Field label="Conta criada em"><Input value={user?.date_joined ? new Date(user.date_joined).toLocaleDateString("pt-BR") : "—"} disabled /></Field></div></Card><Card title={user?.has_usable_password ? "Alterar senha" : "Criar senha"} description="Use pelo menos 8 caracteres e evite senhas de outros serviços." icon={KeyRound} footer={<Button loading={saving} icon={<LockKeyhole className="size-4" />} onClick={onSave}>{user?.has_usable_password ? "Alterar senha" : "Criar senha"}</Button>}><div className="grid gap-4 sm:grid-cols-2">{user?.has_usable_password && <div className="sm:col-span-2"><Field label="Senha atual"><Input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords((v) => ({ ...v, current: e.target.value }))} /></Field></div>}<Field label="Nova senha"><Input type="password" autoComplete="new-password" value={passwords.next} onChange={(e) => setPasswords((v) => ({ ...v, next: e.target.value }))} /></Field><Field label="Confirmar nova senha"><Input type="password" autoComplete="new-password" value={passwords.confirm} onChange={(e) => setPasswords((v) => ({ ...v, confirm: e.target.value }))} /></Field></div><div className="mt-5 flex items-start gap-3 rounded-xl bg-emerald-50 p-3 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><p className="text-xs leading-relaxed">Sua senha é armazenada usando hash seguro. O T4E Office nunca consegue visualizar a senha original.</p></div></Card></div>
+}
+
+function TokensSection() {
+  const { data: tokens, isLoading } = useTokens()
+  const createToken = useCreateToken()
+  const revokeToken = useRevokeToken()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [createdToken, setCreatedToken] = useState<string | null>(null)
+
+  const handleCreate = async () => {
+    try {
+      const result = await createToken.mutateAsync(name.trim() || undefined)
+      setCreatedToken(result.token)
+      setName("")
+    } catch (error) {
+      toast.error(extractApiError(error))
+    }
+  }
+
+  const handleRevoke = async (id: string) => {
+    try {
+      await revokeToken.mutateAsync(id)
+      toast.success("Token revogado.")
+    } catch (error) {
+      toast.error(extractApiError(error))
+    }
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setCreatedToken(null)
+    setName("")
+  }
+
+  const copyToken = async () => {
+    if (!createdToken) return
+    await navigator.clipboard.writeText(createdToken)
+    toast.success("Token copiado.")
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="Tokens de API"
+        description="Use um token pessoal pra conectar integrações externas (ex.: Claude via MCP) com sua conta."
+        icon={KeyRound}
+        footer={<Button icon={<Plus className="size-4" />} onClick={() => setModalOpen(true)}>Gerar novo token</Button>}
+      >
+        {isLoading && <p className="text-sm text-paper-500">Carregando...</p>}
+        {!isLoading && (tokens?.length ?? 0) === 0 && (
+          <p className="text-sm text-paper-500">Nenhum token gerado ainda.</p>
+        )}
+        {!isLoading && tokens && tokens.length > 0 && (
+          <div className="divide-y divide-paper-100 dark:divide-ink-800">
+            {tokens.map((token) => (
+              <div key={token.id} className="flex items-center justify-between gap-4 py-3.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink dark:text-paper">{token.name || "Sem nome"}</p>
+                  <p className="text-xs text-paper-500">
+                    Criado em {new Date(token.created_at).toLocaleDateString("pt-BR")}
+                    {token.last_used_at
+                      ? ` · último uso em ${new Date(token.last_used_at).toLocaleDateString("pt-BR")}`
+                      : " · nunca usado"}
+                  </p>
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon={<Trash2 className="size-4" />}
+                  loading={revokeToken.isPending}
+                  onClick={() => handleRevoke(token.id)}
+                >
+                  Revogar
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={closeModal}
+        title={createdToken ? "Token gerado" : "Gerar novo token"}
+        description={createdToken ? "Copie agora — ele não será mostrado de novo." : "Dê um nome pra reconhecer onde esse token vai ser usado."}
+        footer={
+          createdToken ? (
+            <Button onClick={closeModal}>Fechar</Button>
+          ) : (
+            <Button loading={createToken.isPending} icon={<Plus className="size-4" />} onClick={handleCreate}>
+              Gerar token
+            </Button>
+          )
+        }
+      >
+        {createdToken ? (
+          <div className="flex items-center gap-2 rounded-xl border border-paper-200 bg-paper-50 p-3 dark:border-ink-700 dark:bg-ink-950/40">
+            <code className="flex-1 truncate text-xs text-ink dark:text-paper">{createdToken}</code>
+            <Button variant="ghost" size="sm" icon={<Copy className="size-4" />} onClick={copyToken}>Copiar</Button>
+          </div>
+        ) : (
+          <Field label="Nome (opcional)">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Claude Desktop" />
+          </Field>
+        )}
+      </Modal>
+    </div>
+  )
 }
