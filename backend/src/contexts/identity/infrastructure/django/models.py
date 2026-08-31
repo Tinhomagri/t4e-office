@@ -248,3 +248,27 @@ class RoleAuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"[{self.action}] {self.actor_id} → {self.target_user_id} @ {self.workspace_id}"
+
+
+class PersonalAccessToken(models.Model):
+    """Token pessoal de API, usado por integrações externas (ex.: MCP do Claude).
+
+    Vale como a permissão normal do usuário dono — sem sistema de escopo
+    separado. Sem expiração automática: só revogação manual (`revoked_at`).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        UserModel, on_delete=models.CASCADE, related_name="personal_tokens"
+    )
+    name = models.CharField(max_length=100, blank=True)
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "identity_personal_access_token"
+
+    def __str__(self) -> str:
+        return self.name or str(self.id)
