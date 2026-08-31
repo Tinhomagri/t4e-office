@@ -57,6 +57,28 @@ def list_projects(workspace_id: str, ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
+def list_documents(workspace_id: str, project_id: str, ctx: Context) -> list[dict]:
+    """Lista os documentos brutos anexados a um projeto (sem análise de IA).
+
+    workspace_id: id do workspace (obtido via list_workspaces).
+    project_id: id do projeto (obtido via list_projects).
+    Usa o resultado pra escolher qual documento ler com read_document.
+    """
+    return _request(
+        ctx, "GET", "/api/copilot/documents/", params={"workspace_id": workspace_id, "project_id": project_id}
+    )
+
+
+@mcp.tool()
+def read_document(document_id: str, ctx: Context) -> dict:
+    """Lê o texto completo de um documento anexado a um projeto (obtido via list_documents).
+
+    Usa pra entender o conteúdo do documento e decidir quais cards criar com create_card.
+    """
+    return _request(ctx, "GET", f"/api/copilot/documents/{document_id}/")
+
+
+@mcp.tool()
 def create_card(
     project_id: str,
     title: str,
