@@ -29,7 +29,12 @@ def _request(ctx: Context, method: str, path: str, **kwargs) -> dict:
     headers = kwargs.pop("headers", {})
     headers["Authorization"] = _bearer_from(ctx)
     r = httpx.request(method, f"{BASE_URL}{path}", headers=headers, timeout=15, **kwargs)
-    r.raise_for_status()
+    try:
+        r.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise httpx.HTTPStatusError(
+            f"{exc}\nResposta do backend: {r.text}", request=exc.request, response=exc.response
+        ) from exc
     return r.json() if r.content else {}
 
 
@@ -50,12 +55,12 @@ def list_projects(workspace_id: str, ctx: Context) -> list[dict]:
 def create_card(
     project_id: str,
     title: str,
-    ctx: Context,
     description: str = "",
     status: str = "todo",
     type: str = "feature",
     priority: str = "medium",
     labels: list[str] | None = None,
+    ctx: Context = None,
 ) -> dict:
     """Cria um card em um projeto do t4e-office.
 
