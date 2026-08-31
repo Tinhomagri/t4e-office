@@ -28,6 +28,11 @@ def _bearer_from(ctx: Context) -> str:
 def _request(ctx: Context, method: str, path: str, **kwargs) -> dict:
     headers = kwargs.pop("headers", {})
     headers["Authorization"] = _bearer_from(ctx)
+    # A requisição que chega aqui já veio via HTTPS até o Traefik (mcp.t4egroup.com.br);
+    # daqui pro `web` é rede interna do Docker, sem TLS. Sem este header o Django
+    # (SECURE_SSL_REDIRECT + SECURE_PROXY_SSL_HEADER) acha que é HTTP inseguro e
+    # devolve 301 pra https://web:8000, que não existe (web não serve TLS interno).
+    headers["X-Forwarded-Proto"] = "https"
     r = httpx.request(method, f"{BASE_URL}{path}", headers=headers, timeout=15, **kwargs)
     try:
         r.raise_for_status()
