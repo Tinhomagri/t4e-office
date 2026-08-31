@@ -371,13 +371,16 @@ class CardListCreateView(APIView):
         # quadro por não bater com nenhuma coluna real. Quando o chamador não
         # mandou "status" explicitamente, resolve pra coluna default de verdade.
         if "status" not in request.data:
-            default_slug = (
-                WorkflowStatusModel.objects.filter(project_id=project_id, is_default=True)
-                .values_list("slug", flat=True)
-                .first()
+            statuses = list(
+                WorkflowStatusModel.objects.filter(project_id=project_id).order_by("order")
             )
-            if default_slug:
-                data["status"] = default_slug
+            # Nem todo projeto tem uma coluna marcada is_default=True (ex.: quando
+            # as colunas foram criadas manualmente) — nesse caso cai pra primeira
+            # coluna por ordem, mesmo critério já usado na migração 0047 que
+            # corrigiu cards órfãos existentes.
+            default_status = next((s for s in statuses if s.is_default), statuses[0] if statuses else None)
+            if default_status:
+                data["status"] = default_status.slug
         # Épico informado precisa existir, ser do tipo épico e do mesmo projeto.
         if data.get("epic_id"):
             from contexts.projects.interface.api.agile_views import assert_valid_epic
