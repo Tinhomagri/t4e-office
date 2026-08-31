@@ -26,6 +26,7 @@ export interface CopilotDocument {
   status: string
   text_preview: string
   analysis: Analysis | null
+  project_id: string | null
 }
 
 export type DocKind = "text" | "pdf" | "docx" | "audio"
@@ -45,18 +46,22 @@ export async function ingestText(
   return data
 }
 
-// Importa um arquivo (PDF/DOCX/áudio) via multipart.
+// Importa um arquivo (PDF/DOCX/áudio) via multipart. Se `projectId` for
+// informado, o documento fica associado ao projeto (validado no backend
+// pra pertencer ao mesmo workspace).
 export async function ingestFile(
   workspaceId: string,
   title: string,
   kind: DocKind,
   file: File,
+  projectId?: string,
 ): Promise<CopilotDocument> {
   const form = new FormData()
   form.append("workspace_id", workspaceId)
   form.append("title", title)
   form.append("kind", kind)
   form.append("file", file)
+  if (projectId) form.append("project_id", projectId)
   const { data } = await api.post<CopilotDocument>("/copilot/documents/", form, {
     headers: { "Content-Type": "multipart/form-data" },
   })
@@ -65,6 +70,19 @@ export async function ingestFile(
 
 export async function analyzeDocument(documentId: string): Promise<Analysis> {
   const { data } = await api.post<Analysis>(`/copilot/documents/${documentId}/analyze/`)
+  return data
+}
+
+// Lista documentos brutos importados (contratos/arquivos), opcionalmente
+// filtrados por projeto. Usado pra dar visibilidade a arquivos anexados
+// que a IA não processa mais automaticamente (ficam disponíveis via MCP).
+export async function listCopilotDocuments(
+  workspaceId: string,
+  projectId?: string,
+): Promise<CopilotDocument[]> {
+  const { data } = await api.get<CopilotDocument[]>("/copilot/documents/", {
+    params: { workspace_id: workspaceId, ...(projectId ? { project_id: projectId } : {}) },
+  })
   return data
 }
 

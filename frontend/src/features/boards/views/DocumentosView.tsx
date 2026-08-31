@@ -2,14 +2,15 @@
 // servidor e compartilhados com todo o time do projeto (não mais um
 // protótipo em localStorage). Sincroniza com um poll leve (estilo Planning
 // Poker) para refletir edições de outros membros sem precisar de WebSocket.
-import { Calendar, Check, Clock, FileText, Plus, Trash2, Upload, Users } from "lucide-react"
+import { Calendar, Check, Clock, FileText, Paperclip, Plus, Trash2, Upload, Users } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 import { DocumentEditor } from "../DocumentEditor"
 import { ColoredAvatar } from "../board.shared"
 import { useAuthStore } from "@/features/auth/auth.store"
-import { analyzeDocument, ingestFile, type DocKind } from "@/features/copilot/copilot.api"
+import { ingestFile, listCopilotDocuments, type CopilotDocument, type DocKind } from "@/features/copilot/copilot.api"
 import {
   useCreateDocument,
   useDeleteDocument,
@@ -60,6 +61,7 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
   const { data: project } = useProject(projectId)
   const updateProject = useUpdateProject(projectId)
   const { activeWorkspaceId } = useWorkspaces()
+  const qc = useQueryClient()
 
   const [editTitle, setEditTitle] = useState("")
   const [editContent, setEditContent] = useState("")
@@ -67,14 +69,17 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
   const pendingRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadedDocId = useRef<string | null>(null)
-  const contractFileRef = useRef<HTMLInputElement>(null)
-  const [uploadingContract, setUploadingContract] = useState(false)
-  // Prazo extraído pela IA do último contrato enviado, oferecido pra
-  // confirmação enquanto esse documento estiver aberto — não fica gravado
-  // em lugar nenhum até o usuário clicar em "Aplicar".
-  const [pendingDeadline, setPendingDeadline] = useState<{ docId: string; date: string } | null>(
-    null,
-  )
+  const rawFileRef = useRef<HTMLInputElement>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
+
+  // Arquivos brutos anexados ao projeto (sem análise de IA) — ficam
+  // disponíveis pra leitura via MCP fora desta UI.
+  const rawFilesKey = ["copilot-documents", activeWorkspaceId, projectId] as const
+  const { data: rawFiles } = useQuery({
+    queryKey: rawFilesKey,
+    queryFn: () => listCopilotDocuments(activeWorkspaceId!, projectId),
+    enabled: !!activeWorkspaceId,
+  })
 
   // Seleciona o primeiro documento automaticamente quando a lista carrega.
   useEffect(() => {
@@ -121,59 +126,20 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
     setSelectedId(doc.id)
   }
 
-  // Sobe um contrato (PDF/DOCX), manda pra IA ler e já cria o documento do
-  // time com o resultado — assim o contrato fica junto dos outros documentos,
-  // não num lugar à parte. Se a IA achar uma data de entrega, oferece aplicar
-  // como prazo do projeto (usado no cálculo de saúde do portfólio).
-  async function handleUploadContract(file: File | null) {
+  // Anexa um arquivo bruto (PDF/DOCX) ao projeto, sem passar pela IA — só
+  // armazena o texto extraído no servidor. Fica disponível pra leitura via
+  // MCP fora desta UI (ex: pra gerar cards a partir do conteúdo).
+  async function handleUploadRawDocument(file: File | null) {
     if (!file || !activeWorkspaceId) return
-    flushPending()
-    setUploadingContract(true)
+    setUploadingFile(true)
     try {
-      const uploaded = await ingestFile(
-        activeWorkspaceId,
-        `Contrato — ${file.name}`,
-        kindFromFile(file),
-        file,
-      )
-      const analysis = await analyzeDocument(uploaded.id)
-      const content = [
-        `<p><strong>Resumo:</strong> ${analysis.summary || "—"}</p>`,
-        analysis.risks.length
-          ? `<p><strong>Riscos:</strong></p><ul>${analysis.risks.map((r) => `<li>${r}</li>`).join("")}</ul>`
-          : "",
-        analysis.decisions.length
-          ? `<p><strong>Decisões:</strong></p><ul>${analysis.decisions.map((d) => `<li>${d}</li>`).join("")}</ul>`
-          : "",
-      ].join("")
-      const doc = await createDoc.mutateAsync({
-        title: `Contrato — ${file.name}`,
-        content,
-      })
-      loadedDocId.current = doc.id
-      setEditTitle(doc.title)
-      setEditContent(content)
-      setSelectedId(doc.id)
-      if (analysis.deadline) {
-        setPendingDeadline({ docId: doc.id, date: analysis.deadline })
-      } else {
-        toast.info("Documento criado. A IA não encontrou uma data de entrega no contrato.")
-      }
+      await ingestFile(activeWorkspaceId, file.name, kindFromFile(file), file, projectId)
+      toast.success("Documento anexado. Peça pro Claude ler pelo MCP pra gerar os cards.")
+      qc.invalidateQueries({ queryKey: rawFilesKey })
     } catch {
-      toast.error("Não foi possível ler o contrato.")
+      toast.error("Não foi possível anexar o documento.")
     } finally {
-      setUploadingContract(false)
-    }
-  }
-
-  async function applyPendingDeadline() {
-    if (!pendingDeadline) return
-    try {
-      await updateProject.mutateAsync({ deadline: pendingDeadline.date })
-      toast.success("Prazo do projeto atualizado.")
-      setPendingDeadline(null)
-    } catch {
-      toast.error("Não foi possível aplicar o prazo.")
+      setUploadingFile(false)
     }
   }
 
@@ -211,10 +177,10 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
           </span>
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => contractFileRef.current?.click()}
-              disabled={uploadingContract}
+              onClick={() => rawFileRef.current?.click()}
+              disabled={uploadingFile}
               className="grid size-6 place-items-center rounded-md text-paper-400 hover:bg-paper-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-paper transition-colors disabled:opacity-40"
-              title="Enviar contrato (PDF/DOCX) — a IA lê e cria o documento"
+              title="Anexar documento (PDF/DOCX) — sem IA, disponível via MCP"
             >
               <Upload className="size-4" />
             </button>
@@ -228,21 +194,21 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
             </button>
           </div>
           <input
-            ref={contractFileRef}
+            ref={rawFileRef}
             type="file"
             accept=".pdf,.docx"
             className="hidden"
             onChange={(e) => {
-              handleUploadContract(e.target.files?.[0] ?? null)
+              handleUploadRawDocument(e.target.files?.[0] ?? null)
               e.target.value = ""
             }}
           />
         </div>
         <DeadlineStrip project={project} update={updateProject} />
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 scrollbar-slim">
-          {uploadingContract && (
+          {uploadingFile && (
             <p className="px-2 py-2 text-center text-xs text-paper-400">
-              Lendo contrato com IA…
+              Anexando documento…
             </p>
           )}
           {listLoading && (
@@ -281,6 +247,7 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
             )
           })}
         </div>
+        <RawFilesSection files={rawFiles} />
       </div>
 
       {/* Editor */}
@@ -315,30 +282,6 @@ export function DocumentosView({ projectId, members }: { projectId: string; memb
               </button>
             </div>
           </div>
-
-          {pendingDeadline?.docId === selectedId && (
-            <div className="flex flex-wrap items-center gap-2 border-b border-paper-100 bg-brand-50 px-4 py-2 text-[13px] text-brand-700 dark:border-ink-800 dark:bg-brand-500/10 dark:text-brand-300">
-              <Calendar className="size-3.5 shrink-0" />
-              <span>
-                A IA encontrou o prazo de entrega{" "}
-                <strong>{new Date(`${pendingDeadline.date}T00:00:00`).toLocaleDateString("pt-BR")}</strong>{" "}
-                neste contrato.
-              </span>
-              <button
-                onClick={applyPendingDeadline}
-                disabled={updateProject.isPending}
-                className="ml-auto rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600 transition-colors disabled:opacity-50"
-              >
-                Definir como prazo do projeto
-              </button>
-              <button
-                onClick={() => setPendingDeadline(null)}
-                className="text-xs text-brand-600 hover:underline dark:text-brand-300"
-              >
-                Ignorar
-              </button>
-            </div>
-          )}
 
           {/* Editor rich-text completo: blocos, tabela, imagem, link, checklist, fonte, cor... */}
           {detailLoading && !detail ? (
@@ -422,6 +365,34 @@ function DeadlineStrip({
         >
           Salvar
         </button>
+      )}
+    </div>
+  )
+}
+
+// Lista passiva (sem clique) dos arquivos brutos anexados ao projeto — só
+// confirmação visual de que o upload funcionou. Leitura de verdade acontece
+// via MCP, fora desta UI.
+function RawFilesSection({ files }: { files: CopilotDocument[] | undefined }) {
+  return (
+    <div className="border-t border-paper-100 dark:border-ink-800 p-1.5">
+      <p className="flex items-center gap-1.5 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-paper-400">
+        <Paperclip className="size-3" /> Arquivos anexados
+      </p>
+      {!files || files.length === 0 ? (
+        <p className="px-2 py-1 text-[11px] text-paper-300">Nenhum arquivo anexado ainda</p>
+      ) : (
+        <div className="space-y-0.5">
+          {files.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+              <FileText className="size-3 shrink-0 text-paper-300" />
+              <p className="min-w-0 flex-1 truncate text-[11px] text-ink dark:text-paper">{f.title}</p>
+              <span className="shrink-0 rounded-md bg-paper-100 px-1.5 py-0.5 text-[9px] uppercase text-paper-400 dark:bg-ink-800">
+                {f.kind}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
