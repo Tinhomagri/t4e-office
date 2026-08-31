@@ -16,8 +16,10 @@ class DocumentRepository(ABC):
         """Busca um documento por id."""
 
     @abstractmethod
-    def list_by_workspace(self, *, workspace_id: str) -> list[Document]:
-        """Lista documentos de um workspace."""
+    def list_by_workspace(
+        self, *, workspace_id: str, project_id: str | None = None
+    ) -> list[Document]:
+        """Lista documentos de um workspace, opcionalmente filtrando por projeto."""
 
     @abstractmethod
     def save(self, *, document: Document) -> Document:

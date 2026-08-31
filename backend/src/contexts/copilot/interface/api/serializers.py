@@ -24,8 +24,21 @@ class DocumentSerializer(serializers.Serializer):
     title = serializers.CharField()
     kind = serializers.CharField()
     status = serializers.CharField()
+    project_id = serializers.CharField(allow_null=True)
     text_preview = serializers.CharField()
     analysis = AnalysisSerializer(allow_null=True)
+
+
+class DocumentDetailSerializer(serializers.Serializer):
+    """Detalhe completo de um documento — inclui o texto integral (sem truncar)."""
+
+    id = serializers.CharField()
+    title = serializers.CharField()
+    kind = serializers.CharField()
+    status = serializers.CharField()
+    project_id = serializers.CharField(allow_null=True)
+    text = serializers.CharField()
+    created_at = serializers.DateTimeField(allow_null=True)
 
 
 class CreateTasksSerializer(serializers.Serializer):

@@ -18,6 +18,7 @@ from contexts.copilot.interface.api.views import (
     CopilotMetricsView,
     DocumentAnalyzeView,
     DocumentCreateTasksView,
+    DocumentDetailView,
     DocumentListCreateView,
     WriteAssistView,
 )
@@ -41,6 +42,11 @@ urlpatterns = [
     path("metrics/", CopilotMetricsView.as_view(), name="copilot-metrics"),
     path("feedback/", CopilotFeedbackView.as_view(), name="copilot-feedback"),
     path("documents/", DocumentListCreateView.as_view(), name="document-list-create"),
+    path(
+        "documents/<uuid:document_id>/",
+        DocumentDetailView.as_view(),
+        name="document-detail",
+    ),
     path(
         "documents/<uuid:document_id>/analyze/",
         DocumentAnalyzeView.as_view(),

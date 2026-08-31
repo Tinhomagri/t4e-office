@@ -23,6 +23,13 @@ class DocumentModel(models.Model):
     workspace = models.ForeignKey(
         "identity.WorkspaceModel", on_delete=models.CASCADE, related_name="documents"
     )
+    project = models.ForeignKey(
+        "projects.ProjectModel",
+        on_delete=models.CASCADE,
+        related_name="copilot_documents",
+        null=True,
+        blank=True,
+    )
     title = models.CharField(max_length=200)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default="text")
     text = models.TextField(help_text="Texto extraído do documento")

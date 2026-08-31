@@ -21,6 +21,8 @@ def _to_entity(row: DocumentModel) -> Document:
         text=row.text,
         status=DocumentStatus(row.status),
         analysis=row.analysis,
+        project_id=str(row.project_id) if row.project_id else None,
+        created_at=row.created_at,
     )
 
 
@@ -30,6 +32,7 @@ class DjangoDocumentRepository(DocumentRepository):
     def create(self, *, document: Document) -> Document:
         row = DocumentModel.objects.create(
             workspace_id=document.workspace_id,
+            project_id=document.project_id,
             title=document.title,
             kind=document.kind.value,
             text=document.text,
@@ -42,8 +45,12 @@ class DjangoDocumentRepository(DocumentRepository):
         row = DocumentModel.objects.filter(id=document_id).first()
         return _to_entity(row) if row else None
 
-    def list_by_workspace(self, *, workspace_id: str) -> list[Document]:
+    def list_by_workspace(
+        self, *, workspace_id: str, project_id: str | None = None
+    ) -> list[Document]:
         rows = DocumentModel.objects.filter(workspace_id=workspace_id)
+        if project_id:
+            rows = rows.filter(project_id=project_id)
         return [_to_entity(r) for r in rows]
 
     def save(self, *, document: Document) -> Document:

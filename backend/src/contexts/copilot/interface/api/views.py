@@ -26,8 +26,12 @@ from contexts.copilot.interface.api.serializers import (
     AnalysisSerializer,
     ChatSerializer,
     CreateTasksSerializer,
+    DocumentDetailSerializer,
     DocumentSerializer,
     WriteAssistSerializer,
+)
+from contexts.projects.infrastructure.django.repositories_impl import (
+    DjangoProjectRepository,
 )
 from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
@@ -38,8 +42,21 @@ def _doc_dict(doc: Document) -> dict:
         "title": doc.title,
         "kind": doc.kind.value,
         "status": doc.status.value,
+        "project_id": doc.project_id,
         "text_preview": doc.text[:400],
         "analysis": doc.analysis,
+    }
+
+
+def _doc_detail_dict(doc: Document) -> dict:
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "kind": doc.kind.value,
+        "status": doc.status.value,
+        "project_id": doc.project_id,
+        "text": doc.text,
+        "created_at": doc.created_at,
     }
 
 
@@ -67,7 +84,8 @@ class DocumentListCreateView(APIView):
                 {"error": "Você não tem acesso a este workspace."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        docs = repo.list_by_workspace(workspace_id=workspace_id)
+        project_id = request.query_params.get("project_id")
+        docs = repo.list_by_workspace(workspace_id=workspace_id, project_id=project_id)
         return Response(DocumentSerializer([_doc_dict(d) for d in docs], many=True).data)
 
     def post(self, request: Request) -> Response:
@@ -76,6 +94,12 @@ class DocumentListCreateView(APIView):
             raise ValidationError("Informe workspace_id.")
         title = request.data.get("title", "")
         kind = request.data.get("kind", "text")
+
+        project_id = request.data.get("project_id") or None
+        if project_id:
+            project = DjangoProjectRepository().get(project_id=str(project_id))
+            if project is None or str(project.workspace_id) != str(workspace_id):
+                raise ValidationError("Projeto não encontrado neste workspace.")
 
         upload = request.FILES.get("file")
         content = upload.read() if upload else None
@@ -95,10 +119,27 @@ class DocumentListCreateView(APIView):
             text=text,
             content=content,
             filename=filename,
+            project_id=str(project_id) if project_id else None,
         )
         return Response(
             DocumentSerializer(_doc_dict(doc)).data, status=status.HTTP_201_CREATED
         )
+
+
+class DocumentDetailView(APIView):
+    """Detalhe completo de um documento (texto integral): GET .../documents/<id>/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, document_id: str) -> Response:
+        repo = DjangoDocumentRepository()
+        doc = repo.get(document_id=str(document_id))
+        if doc is None:
+            raise NotFoundError("Documento não encontrado.")
+        access = DjangoWorkspaceAccess()
+        if not access.is_member(workspace_id=doc.workspace_id, user_id=str(request.user.id)):
+            raise PermissionDeniedError("Você não tem acesso a este workspace.")
+        return Response(DocumentDetailSerializer(_doc_detail_dict(doc)).data)
 
 
 class DocumentAnalyzeView(APIView):

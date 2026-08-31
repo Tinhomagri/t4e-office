@@ -35,6 +35,7 @@ class IngestDocument:
         text: str | None = None,
         content: bytes | None = None,
         filename: str = "",
+        project_id: str | None = None,
     ) -> Document:
         if not self.workspace_access.is_member(
             workspace_id=workspace_id, user_id=actor_id
@@ -61,5 +62,6 @@ class IngestDocument:
             kind=doc_kind,
             text=extracted,
             status=DocumentStatus.UPLOADED,
+            project_id=project_id,
         )
         return self.document_repository.create(document=document)
