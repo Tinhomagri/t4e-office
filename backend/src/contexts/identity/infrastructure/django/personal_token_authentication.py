@@ -45,3 +45,6 @@ class PersonalTokenAuthentication(BaseAuthentication):
 
         PersonalAccessToken.objects.filter(pk=token.pk).update(last_used_at=timezone.now())
         return (token.user, None)
+
+    def authenticate_header(self, request):
+        return "Bearer"
