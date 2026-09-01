@@ -6,6 +6,8 @@ from django.views.decorators.cache import cache_control
 from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from contexts.identity.interface.api.urls import oauth_urlpatterns
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     # Schema OpenAPI (fonte dos tipos do frontend)
@@ -17,6 +19,10 @@ urlpatterns = [
     ),
     # Contextos
     path("api/auth/", include("contexts.identity.interface.api.urls")),
+    # Conector MCP (claude.ai Connectors): contrato exige "/api/oauth/...",
+    # sem o prefixo "auth/" do resto do contexto identity — ver
+    # contexts/identity/interface/api/urls.py (oauth_urlpatterns).
+    path("api/", include(oauth_urlpatterns)),
     path("api/", include("contexts.projects.interface.api.urls")),
     path("api/copilot/", include("contexts.copilot.interface.api.urls")),
     path("api/", include("contexts.estimation.interface.api.urls")),
