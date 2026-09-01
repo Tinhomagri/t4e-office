@@ -272,3 +272,29 @@ class PersonalAccessToken(models.Model):
 
     def __str__(self) -> str:
         return self.name or str(self.id)
+
+
+class OAuthClientModel(models.Model):
+    """Client registrado via RFC 7591 (registro dinâmico) pro conector
+    MCP do office — hoje só o claude.ai se registra aqui."""
+
+    client_id = models.CharField(max_length=64, primary_key=True)
+    client_name = models.CharField(max_length=200, blank=True)
+    redirect_uris = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class OAuthAuthorizationCodeModel(models.Model):
+    """Código de autorização de curta duração, emitido depois que o
+    usuário permite o conector na tela /oauth/consent. Trocado uma
+    única vez pelo mcp-server por um PersonalAccessToken."""
+
+    code = models.CharField(max_length=128, primary_key=True)
+    client_id = models.CharField(max_length=64)
+    user = models.ForeignKey(
+        "identity.UserModel", on_delete=models.CASCADE, related_name="oauth_codes"
+    )
+    redirect_uri = models.URLField(max_length=500)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
