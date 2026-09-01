@@ -8,13 +8,54 @@ PersonalTokenAuthentication e aplica as capabilities normais do usuário.
 """
 
 import os
+import secrets
+from urllib.parse import quote
 
 import httpx
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import Context, FastMCP
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+
+from oauth_provider import OFFICE_BASE_URL, T4EOAuthProvider
 
 BASE_URL = os.environ.get("T4E_API_URL", "http://web:8000")
+MCP_PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", "https://mcp.t4egroup.com.br")
 
-mcp = FastMCP("t4e-office", host="0.0.0.0", port=8000)
+_provider = T4EOAuthProvider()
+
+mcp = FastMCP(
+    "t4e-office",
+    host="0.0.0.0",
+    port=8000,
+    auth_server_provider=_provider,
+    auth=AuthSettings(
+        issuer_url=MCP_PUBLIC_URL,
+        resource_server_url=MCP_PUBLIC_URL,
+        client_registration_options=ClientRegistrationOptions(enabled=True),
+        revocation_options=RevocationOptions(enabled=True),
+    ),
+)
+
+
+@mcp.custom_route("/oauth/django-callback", methods=["GET"])
+async def django_callback(request: Request):
+    django_code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    pending = _provider.pop_pending(state) if state else None
+    if not django_code or pending is None:
+        return RedirectResponse(url=f"{OFFICE_BASE_URL}/oauth/consent?error=invalid_state", status_code=302)
+    mcp_code = secrets.token_urlsafe(32)
+    params = pending["params"]
+    _provider.store_mcp_code(mcp_code, django_code, pending["client_id"], params)
+    redirect = str(params.redirect_uri)
+    sep = "&" if "?" in redirect else "?"
+    dest = f"{redirect}{sep}code={mcp_code}"
+    if params.state:
+        # state é opaco e definido pelo client (Claude) — escapa antes de
+        # concatenar, mesmo sendo devolvido pro próprio client que o mandou.
+        dest += f"&state={quote(params.state, safe='')}"
+    return RedirectResponse(url=dest, status_code=302)
 
 
 def _bearer_from(ctx: Context) -> str:

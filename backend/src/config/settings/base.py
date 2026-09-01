@@ -306,3 +306,9 @@ PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="") or env(
 # Infra real-time/filas — configurada, ativada quando Presença/Poker entrarem
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = REDIS_URL
+
+# Segredo compartilhado com o mcp-server (serviço `mcp`) pros endpoints
+# server-to-server do conector OAuth (/api/oauth/token-exchange/,
+# /api/oauth/revoke-by-value/) — 403 sem ele batendo. Default vazio só pra
+# dev local: sem a env var, esses endpoints internos ficam sempre 403.
+OAUTH_INTERNAL_SECRET = env("OAUTH_INTERNAL_SECRET", default="")
