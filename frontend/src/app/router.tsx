@@ -23,6 +23,7 @@ import { TrafficPage } from "@/features/marketing/TrafficPage"
 import { AcceptInvitePage } from "@/features/workspace/AcceptInvitePage"
 import { MembersPage } from "@/features/workspace/members/MembersPage"
 import { MyDayPage } from "@/features/today/MyDayPage"
+import { OAuthConsentPage } from "@/features/oauth/OAuthConsentPage"
 import { DesksManagerPage } from "@/features/office/desks/DesksManagerPage"
 import { MyCardPage } from "@/features/office/mycard/MyCardPage"
 import { OfficePage } from "@/features/office/OfficePage"
@@ -178,6 +179,9 @@ export const router = createBrowserRouter([
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/invite", element: <AcceptInvitePage /> },
+  // Consentimento do conector MCP (claude.ai). Pública de propósito: precisa
+  // renderizar tanto sem sessão (manda pro login e volta) quanto com sessão.
+  { path: "/oauth/consent", element: <OAuthConsentPage /> },
   { path: "/reports", element: <AnonymousReportPage /> },
   // Board público: sem login, sem AppShell — link que a pessoa de fora recebe
   // pra acompanhar o board, nada mais do app.
