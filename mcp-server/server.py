@@ -9,6 +9,7 @@ PersonalTokenAuthentication e aplica as capabilities normais do usuário.
 
 import os
 import secrets
+from urllib.parse import quote
 
 import httpx
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
@@ -51,7 +52,9 @@ async def django_callback(request: Request):
     sep = "&" if "?" in redirect else "?"
     dest = f"{redirect}{sep}code={mcp_code}"
     if params.state:
-        dest += f"&state={params.state}"
+        # state é opaco e definido pelo client (Claude) — escapa antes de
+        # concatenar, mesmo sendo devolvido pro próprio client que o mandou.
+        dest += f"&state={quote(params.state, safe='')}"
     return RedirectResponse(url=dest, status_code=302)
 
 

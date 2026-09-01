@@ -9,6 +9,7 @@ desenho completo do fluxo (Claude -> mcp-server /authorize -> Django
 import os
 import secrets
 import time
+from urllib.parse import quote
 
 import httpx
 from mcp.server.auth.provider import (
@@ -64,13 +65,18 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
             raise RegistrationError(error="invalid_client_metadata", error_description=r.text)
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
+        # client_id vem de register_client() sem restrição de charset (RFC 7591
+        # não exige uma) — sem quote(), um client_id malicioso com "&" injetaria
+        # parâmetros extras nesta URL (ex.: um redirect_uri falso que a tela de
+        # consentimento leria em vez do nosso). state é sempre nosso (token_urlsafe),
+        # mas passa por quote() igual, por hábito de nunca interpolar sem escapar.
         state = secrets.token_urlsafe(24)
         self._pending[state] = {"client_id": client.client_id, "params": params}
         return (
             f"{OFFICE_BASE_URL}/oauth/consent"
-            f"?client_id={client.client_id}"
-            f"&redirect_uri={MCP_PUBLIC_URL}/oauth/django-callback"
-            f"&state={state}"
+            f"?client_id={quote(client.client_id, safe='')}"
+            f"&redirect_uri={quote(f'{MCP_PUBLIC_URL}/oauth/django-callback', safe='')}"
+            f"&state={quote(state, safe='')}"
         )
 
     def pop_pending(self, state: str) -> dict | None:
