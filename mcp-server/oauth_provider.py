@@ -48,6 +48,11 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         # entre /authorize e o callback do Django é de segundos.
         self._pending: dict[str, dict] = {}  # state interno -> {client_id, params}
         self._mcp_codes: dict[str, dict] = {}  # código mcp -> {django_code, client_id, params, created_at}
+        # access_token -> client_id que o recebeu — o RevocationHandler do SDK
+        # só chama revoke_token() se token.client_id == client_id de quem está
+        # pedindo a revogação (rfc7009); sem isso, load_access_token não tem
+        # como saber pra qual client aquele PersonalAccessToken foi emitido.
+        self._token_client: dict[str, str] = {}
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         async with _internal_client() as http:
@@ -144,6 +149,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         if r.status_code >= 400:
             raise TokenError(error="invalid_grant", error_description=r.text)
         data = r.json()
+        self._token_client[data["access_token"]] = client.client_id
         return OAuthToken(access_token=data["access_token"], token_type="bearer", scope="mcp")
 
     async def load_refresh_token(self, client: OAuthClientInformationFull, refresh_token: str) -> RefreshToken | None:
@@ -163,10 +169,12 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         if r.status_code != 200:
             return None
         me = r.json()
-        return AccessToken(token=token, client_id="office", scopes=["mcp"], subject=str(me["id"]))
+        owner_client_id = self._token_client.get(token, "office")
+        return AccessToken(token=token, client_id=owner_client_id, scopes=["mcp"], subject=str(me["id"]))
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         raw = token.token
+        self._token_client.pop(raw, None)
         async with _internal_client() as http:
             await http.post(
                 f"{INTERNAL_API_URL}/api/oauth/revoke-by-value/",
