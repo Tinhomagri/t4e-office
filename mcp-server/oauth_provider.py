@@ -30,6 +30,17 @@ MCP_PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", "https://mcp.t4egroup.com.br")
 
 _CODE_TTL_SECONDS = 120
 
+# A chamada daqui pro `web` é rede interna do Docker, sem TLS — sem este
+# header o Django (SECURE_SSL_REDIRECT) acha que é HTTP inseguro e devolve
+# 301 pra https://web:8000, que não existe (web não serve TLS interno).
+# Mesmo problema/fix já aplicado em server.py (_request) — aqui repetido
+# porque oauth_provider.py usa httpx diretamente, fora daquele helper.
+_INTERNAL_HEADERS = {"X-Forwarded-Proto": "https"}
+
+
+def _internal_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(headers=_INTERNAL_HEADERS)
+
 
 class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, RefreshToken, AccessToken]):
     def __init__(self) -> None:
@@ -39,7 +50,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         self._mcp_codes: dict[str, dict] = {}  # código mcp -> {django_code, client_id, params, created_at}
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        async with httpx.AsyncClient() as http:
+        async with _internal_client() as http:
             r = await http.get(f"{INTERNAL_API_URL}/api/oauth/clients/{client_id}/")
         if r.status_code == 404:
             return None
@@ -52,7 +63,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         )
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        async with httpx.AsyncClient() as http:
+        async with _internal_client() as http:
             r = await http.post(
                 f"{INTERNAL_API_URL}/api/oauth/clients/",
                 json={
@@ -116,7 +127,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         entry = self._mcp_codes.pop(authorization_code.code, None)
         if entry is None:
             raise TokenError(error="invalid_grant", error_description="Código inválido ou já usado.")
-        async with httpx.AsyncClient() as http:
+        async with _internal_client() as http:
             r = await http.post(
                 f"{INTERNAL_API_URL}/api/oauth/token-exchange/",
                 json={"code": entry["django_code"]},
@@ -139,7 +150,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
         raise TokenError(error="unsupported_grant_type", error_description="Sem refresh — o token não expira.")
 
     async def load_access_token(self, token: str) -> AccessToken | None:
-        async with httpx.AsyncClient() as http:
+        async with _internal_client() as http:
             r = await http.get(f"{INTERNAL_API_URL}/api/auth/me/", headers={"Authorization": f"Bearer {token}"})
         if r.status_code != 200:
             return None
@@ -148,7 +159,7 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         raw = token.token
-        async with httpx.AsyncClient() as http:
+        async with _internal_client() as http:
             await http.post(
                 f"{INTERNAL_API_URL}/api/oauth/revoke-by-value/",
                 json={"access_token": raw},
