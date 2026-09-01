@@ -281,6 +281,12 @@ class OAuthClientModel(models.Model):
     client_id = models.CharField(max_length=64, primary_key=True)
     client_name = models.CharField(max_length=200, blank=True)
     redirect_uris = models.JSONField(default=list)
+    # RFC 7591 devolve esses dois na resposta do registro dinâmico — sem
+    # guardar e devolver de volta em get_client(), o SDK do MCP reconstrói o
+    # client sem eles (viram None) e rejeita a troca de token com
+    # "Unsupported auth method: None".
+    token_endpoint_auth_method = models.CharField(max_length=32, default="client_secret_post")
+    client_secret = models.CharField(max_length=128, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
 

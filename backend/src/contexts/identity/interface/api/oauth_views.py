@@ -59,6 +59,8 @@ class OAuthClientRegisterView(APIView):
             defaults={
                 "client_name": data.get("client_name", ""),
                 "redirect_uris": data["redirect_uris"],
+                "token_endpoint_auth_method": data.get("token_endpoint_auth_method", "client_secret_post"),
+                "client_secret": data.get("client_secret", ""),
             },
         )
         response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK

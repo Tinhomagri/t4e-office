@@ -8,6 +8,10 @@ class OAuthClientRegisterSerializer(serializers.Serializer):
     client_id = serializers.CharField(max_length=64)
     client_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     redirect_uris = serializers.ListField(child=serializers.CharField())
+    token_endpoint_auth_method = serializers.CharField(
+        max_length=32, required=False, default="client_secret_post"
+    )
+    client_secret = serializers.CharField(max_length=128, required=False, allow_blank=True, default="")
 
 
 class OAuthClientSerializer(serializers.Serializer):
@@ -16,6 +20,8 @@ class OAuthClientSerializer(serializers.Serializer):
     client_id = serializers.CharField()
     client_name = serializers.CharField(allow_blank=True)
     redirect_uris = serializers.ListField(child=serializers.CharField())
+    token_endpoint_auth_method = serializers.CharField()
+    client_secret = serializers.CharField(allow_blank=True)
 
 
 class OAuthAuthorizeCodeSerializer(serializers.Serializer):

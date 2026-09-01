@@ -60,9 +60,15 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
             client_id=data["client_id"],
             client_name=data.get("client_name", ""),
             redirect_uris=data["redirect_uris"],
+            token_endpoint_auth_method=data.get("token_endpoint_auth_method", "client_secret_post"),
+            client_secret=data.get("client_secret") or None,
         )
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        # token_endpoint_auth_method/client_secret vêm preenchidos pelo
+        # RegistrationHandler do SDK antes de chegar aqui — sem persistir e
+        # devolver em get_client(), a reconstrução perde esses campos (viram
+        # None) e a troca de token falha com "Unsupported auth method: None".
         async with _internal_client() as http:
             r = await http.post(
                 f"{INTERNAL_API_URL}/api/oauth/clients/",
@@ -70,6 +76,8 @@ class T4EOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
                     "client_id": client_info.client_id,
                     "client_name": client_info.client_name or "",
                     "redirect_uris": [str(u) for u in client_info.redirect_uris],
+                    "token_endpoint_auth_method": client_info.token_endpoint_auth_method or "client_secret_post",
+                    "client_secret": client_info.client_secret or "",
                 },
             )
         if r.status_code >= 400:
