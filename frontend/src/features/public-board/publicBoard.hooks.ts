@@ -32,6 +32,15 @@ export function useCreatePublicCard(token: string | undefined, code?: string) {
   })
 }
 
+export function useCreatePublicComment(token: string | undefined, code?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { cardId: string; author_name: string; body: string }) =>
+      api.createPublicComment(token!, input.cardId, { author_name: input.author_name, body: input.body, code }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["public-board", token] }),
+  })
+}
+
 export function usePublicMessages(token: string | undefined, enabled: boolean, code?: string) {
   return useQuery({
     queryKey: ["public-board-messages", token, code],

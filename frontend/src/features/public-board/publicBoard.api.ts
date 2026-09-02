@@ -111,6 +111,18 @@ export async function createPublicCard(
   return data
 }
 
+export async function createPublicComment(
+  token: string,
+  cardId: string,
+  input: { author_name: string; body: string; code?: string },
+): Promise<PublicComment> {
+  const { data } = await publicApi.post<PublicComment>(
+    `/public/boards/${token}/cards/${cardId}/comments/`,
+    input,
+  )
+  return data
+}
+
 export async function getPublicMessages(token: string, code?: string): Promise<PublicBoardMessage[]> {
   const { data } = await publicApi.get<PublicBoardMessage[]>(`/public/boards/${token}/messages/`, {
     params: code ? { code } : undefined,

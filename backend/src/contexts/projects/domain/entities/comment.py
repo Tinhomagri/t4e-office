@@ -11,7 +11,7 @@ class CardComment:
 
     id: str | None
     card_id: str
-    author_id: str
+    author_id: str | None
     body: str
     created_at: datetime | None = None
     # Dados desnormalizados do autor para exibição (preenchidos na leitura).

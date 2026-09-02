@@ -82,7 +82,7 @@ def _code_ok(project: ProjectModel, request: Request) -> bool:
 def _ser_comment(c: CardCommentModel) -> dict:
     return {
         "id": str(c.id),
-        "author_name": c.author.full_name,
+        "author_name": c.author.full_name if c.author_id else c.author_name,
         "body": c.body,
         "created_at": c.created_at.isoformat(),
     }
@@ -287,6 +287,64 @@ class PublicCardCreateView(APIView):
                 mime_type=image.content_type, size=image.size,
             )
         return Response(_ser_public_card(card, request), status=201)
+
+
+class PublicCardCommentThrottle(AnonRateThrottle):
+    """Escopo próprio: comentário é bem mais barato que criar card (sem
+    upload), mas ainda merece um teto — sem login, um script poderia poluir
+    o card do time inteiro."""
+
+    scope = "public_card_comment_create"
+
+
+class PublicCardCommentCreateView(APIView):
+    """POST /api/public/boards/<token>/cards/<card_id>/comments/ — comenta
+    num card existente sem login. Nome de quem escreve é obrigatório, igual
+    ao mural: sem conta, é a única forma de saber quem comentou."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [PublicCardCommentThrottle]
+
+    def post(self, request: Request, token: str, card_id: str) -> Response:
+        try:
+            project = _get_public_project(token)
+        except NotFoundError:
+            return Response({"error": "Link não encontrado."}, status=404)
+        if not _code_ok(project, request):
+            return Response({"code_required": True}, status=401)
+
+        card = CardModel.objects.filter(id=card_id, project=project).first()
+        if card is None:
+            return Response({"error": "Card não encontrado."}, status=404)
+
+        body = str(request.data.get("body") or "").strip()
+        if not body:
+            raise ValidationError("Escreva um comentário.")
+        if len(body) > MAX_MESSAGE_LEN:
+            raise ValidationError(f"Comentário muito longo (máximo {MAX_MESSAGE_LEN} caracteres).")
+        author_name = str(request.data.get("author_name") or "").strip()[:80]
+        if not author_name:
+            raise ValidationError("Informe seu nome.")
+
+        comment = CardCommentModel.objects.create(
+            card=card, author=None, author_name=author_name, body=body,
+        )
+
+        # Mesmo alvo do comentário autenticado: relator/responsável, exceto
+        # quem não existir mais.
+        ref = f"{project.key}-{card.number}"
+        targets = {str(card.assignee_id), str(card.reporter_id)} - {"None"}
+        for user_id in targets:
+            notify(
+                user_id=user_id,
+                notif_type="card_commented",
+                title=f"{author_name} comentou em {ref}",
+                body=body[:140],
+                link=f"/boards?card={card.id}",
+            )
+
+        return Response(_ser_comment(comment), status=201)
 
 
 class PublicMessageListCreateView(APIView):

@@ -13,12 +13,13 @@ import { AlertTriangle, ChevronsRight, CornerUpLeft, Image as ImageIcon, Lock, M
 
 import {
   useCreatePublicCard,
+  useCreatePublicComment,
   useCreatePublicMessage,
   usePublicBoard,
   usePublicMessages,
   usePublicMessageStream,
 } from "./publicBoard.hooks"
-import type { PublicBoardMessage, PublicCard, PublicColumn } from "./publicBoard.api"
+import type { PublicBoardMessage, PublicCard, PublicColumn, PublicComment } from "./publicBoard.api"
 import { cx } from "@/shared/ui/primitives"
 import { beep } from "@/shared/ui/sound"
 import { useQueryClient } from "@tanstack/react-query"
@@ -114,7 +115,9 @@ function PublicBoardPageBody({
         <Mural token={token} code={code} />
       </div>
 
-      {openCard && <CardDetail card={openCard} onClose={() => setOpenCard(null)} />}
+      {openCard && (
+        <CardDetail token={token} code={code} card={openCard} onClose={() => setOpenCard(null)} />
+      )}
     </Shell>
   )
 }
@@ -582,7 +585,39 @@ function Column({
   )
 }
 
-function CardDetail({ card, onClose }: { card: PublicCard; onClose: () => void }) {
+function CardDetail({
+  token,
+  code,
+  card,
+  onClose,
+}: {
+  token: string
+  code: string | undefined
+  card: PublicCard
+  onClose: () => void
+}) {
+  const [comments, setComments] = useState<PublicComment[]>(card.comments)
+  const [authorName, setAuthorName] = useState(() => localStorage.getItem(nameStorageKey(token)) ?? "")
+  const [nameInput, setNameInput] = useState("")
+  const [body, setBody] = useState("")
+  const create = useCreatePublicComment(token, code)
+
+  const setName = () => {
+    const n = nameInput.trim()
+    if (!n) return
+    localStorage.setItem(nameStorageKey(token), n)
+    setAuthorName(n)
+    setNameInput("")
+  }
+
+  const send = async () => {
+    const t = body.trim()
+    if (!t || !authorName) return
+    const criado = await create.mutateAsync({ cardId: card.id, author_name: authorName, body: t })
+    setComments((prev) => [...prev, criado])
+    setBody("")
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -644,16 +679,58 @@ function CardDetail({ card, onClose }: { card: PublicCard; onClose: () => void }
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/40">
             Comentários
           </p>
-          {card.comments.length === 0 ? (
+          {comments.length === 0 ? (
             <p className="text-sm text-white/40">Nenhum comentário ainda.</p>
           ) : (
             <div className="space-y-3">
-              {card.comments.map((c) => (
+              {comments.map((c) => (
                 <div key={c.id} className="rounded-lg bg-white/5 p-2.5">
                   <p className="text-xs font-medium text-white/70">{c.author_name}</p>
                   <p className="mt-0.5 whitespace-pre-wrap text-sm text-white/80">{c.body}</p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {!authorName ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-[11px] text-white/40">Diga seu nome pra poder comentar</p>
+              <div className="flex gap-1.5">
+                <input
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && setName()}
+                  placeholder="Seu nome"
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-brand-400"
+                />
+                <button
+                  onClick={setName}
+                  disabled={!nameInput.trim()}
+                  className="rounded-lg bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+                >
+                  Entrar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-[11px] text-white/40">Comentando como <span className="text-white/70">{authorName}</span></p>
+              <div className="flex gap-1.5">
+                <input
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && send()}
+                  placeholder="Escrever comentário…"
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-brand-400"
+                />
+                <button
+                  onClick={send}
+                  disabled={!body.trim() || create.isPending}
+                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-white disabled:opacity-40"
+                >
+                  <Send className="size-3.5" />
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -146,6 +146,7 @@ REST_FRAMEWORK = {
     # porque o throttle de escopo do DRF exige a taxa no settings, não na view.
     "DEFAULT_THROTTLE_RATES": {
         "public_card_create": "20/hour",
+        "public_card_comment_create": "60/hour",
         "traffic_report": "90/min",
         "traffic_thumbnail": "400/min",
         "traffic_preview": "60/min",

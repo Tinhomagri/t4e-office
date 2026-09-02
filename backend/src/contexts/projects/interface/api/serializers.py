@@ -202,7 +202,7 @@ class CommentSerializer(serializers.Serializer):
 
     id = serializers.CharField()
     card_id = serializers.CharField()
-    author_id = serializers.CharField()
+    author_id = serializers.CharField(allow_null=True)
     author_name = serializers.CharField()
     body = serializers.CharField()
     created_at = serializers.DateTimeField()

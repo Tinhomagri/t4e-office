@@ -75,6 +75,7 @@ from contexts.projects.interface.api.permission_scheme_views import (
 from contexts.projects.interface.api.permission_views import MyProjectPermissionsView
 from contexts.projects.interface.api.public_views import (
     PublicBoardView,
+    PublicCardCommentCreateView,
     PublicCardCreateView,
     PublicMessageListCreateView,
     PublicMessageStreamView,
@@ -93,6 +94,11 @@ urlpatterns = [
         "public/boards/<str:token>/cards/",
         PublicCardCreateView.as_view(),
         name="public-board-create-card",
+    ),
+    path(
+        "public/boards/<str:token>/cards/<uuid:card_id>/comments/",
+        PublicCardCommentCreateView.as_view(),
+        name="public-board-card-comment-create",
     ),
     path(
         "public/boards/<str:token>/messages/",

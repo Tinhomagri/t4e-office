@@ -167,7 +167,9 @@ export type CardResolution =
 export interface Comment {
   id: string
   card_id: string
-  author_id: string
+  // Nulo quando o comentário veio do board público (visitante sem conta) —
+  // ver `author_name` pro nome digitado nesse caso.
+  author_id: string | null
   author_name: string
   body: string
   created_at: string

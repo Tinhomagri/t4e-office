@@ -270,10 +270,10 @@ def _comment_to_entity(row: CardCommentModel) -> CardComment:
     return CardComment(
         id=str(row.id),
         card_id=str(row.card_id),
-        author_id=str(row.author_id),
+        author_id=str(row.author_id) if row.author_id else None,
         body=row.body,
         created_at=row.created_at,
-        author_name=row.author.full_name if row.author_id else "",
+        author_name=row.author.full_name if row.author_id else row.author_name,
     )
 
 

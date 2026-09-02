@@ -387,8 +387,15 @@ class CardCommentModel(models.Model):
         CardModel, on_delete=models.CASCADE, related_name="comments"
     )
     author = models.ForeignKey(
-        "identity.UserModel", on_delete=models.CASCADE, related_name="card_comments"
+        "identity.UserModel",
+        on_delete=models.CASCADE,
+        related_name="card_comments",
+        null=True,
+        blank=True,
     )
+    # Preenchido só quando `author` é nulo — comentário vindo do board público
+    # (sem conta), onde o visitante digita o próprio nome (igual ao mural).
+    author_name = models.CharField(max_length=80, blank=True, default="")
     body = models.TextField()
     external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
