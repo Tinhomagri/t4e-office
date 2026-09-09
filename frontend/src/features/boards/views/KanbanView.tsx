@@ -53,11 +53,20 @@ import type { Ref } from "react"
 import { Link } from "react-router-dom"
 
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
-import { cardFade, dragLift, dropFlight, popCheck, settleSpring } from "@/shared/lib/motion"
+import { toast } from "@/shared/ui/toast"
+import { jiraDrop, popCheck, settleSpring } from "@/shared/lib/motion"
 import { formatDoingSince } from "@/shared/lib/businessTime"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
 import { useBoardPrefs, colKey } from "../board.prefs.store"
+import {
+  applyCardDrop,
+  applyCardDropToQueries,
+  calculateCardDrop,
+  getDropEdge,
+  restoreCardQuerySnapshots,
+  type DropEdge,
+} from "../kanban.drag"
 import type { SwimlaneMode } from "@/features/workspace/workspace.types"
 import {
   ColoredAvatar,
@@ -147,6 +156,8 @@ export function KanbanView({
 
   const [scope, setScope] = useState<Scope>({ kind: "backlog" })
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{ cardId: string; edge: DropEdge } | null>(null)
+  const [recentlyMovedId, setRecentlyMovedId] = useState<string | null>(null)
   const [newSprintOpen, setNewSprintOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTER)
@@ -190,10 +201,13 @@ export function KanbanView({
     [updateCard],
   )
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-  // O voo do clone é uma animação WAAPI de duração fixa, fora do alcance do
-  // framer: sem este guarda ele ignoraria `prefers-reduced-motion`.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const reduceMotion = useReducedMotion()
+  const movedFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (movedFlashTimer.current) clearTimeout(movedFlashTimer.current)
+  }, [])
 
   useEffect(() => {
     const active = sprints?.find((s) => s.status === "active")
@@ -238,94 +252,119 @@ export function KanbanView({
 
   const activeCard = scopeCards.find((c) => c.id === activeId) ?? null
 
-  const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
+  const clearDragState = () => {
+    setActiveId(null)
+    setDropIndicator(null)
+  }
 
-  /**
-   * Muda a coluna já durante o arrasto, assim que o card entra nela.
-   *
-   * Sem isto o card só trocaria de coluna ao soltar: enquanto sobrevoa, a
-   * coluna de destino não abre espaço e a origem não fecha o buraco — que é
-   * exatamente a sensação de "o card não está indo para lugar nenhum".
-   */
+  const onDragStart = (e: DragStartEvent) => {
+    setActiveId(String(e.active.id))
+    setDropIndicator(null)
+  }
+
   const onDragOver = (e: DragOverEvent) => {
-    const overId = e.over?.id ? String(e.over.id) : null
     const activeCardId = String(e.active.id)
-    if (!overId || overId === activeCardId) return
-    // Arrasto de coluna: o reposicionamento visual é do dnd-kit; a gravação
-    // acontece no fim, para não disparar um PATCH por pixel percorrido.
-    if (activeCardId.startsWith("col:")) return
+    const overId = e.over?.id ? String(e.over.id) : null
+    const translated = e.active.rect.current.translated
+    if (activeCardId.startsWith("col:") || !overId || !translated) {
+      setDropIndicator(null)
+      return
+    }
 
-    const card = scopeCards.find((c) => c.id === activeCardId)
-    if (!card) return
+    const overCard = scopeCards.find((card) => card.id === overId)
+    if (!overCard || overCard.id === activeCardId) {
+      setDropIndicator(null)
+      return
+    }
 
-    const overCard = scopeCards.find((c) => c.id === overId)
-    const destino = (overCard?.status ?? overId) as CardStatus
-    if (card.status === destino) return
-
-    // Só o cache: o PATCH sai uma vez, no fim do gesto.
-    qc.setQueryData<Card[]>(["cards", projectId], (old) =>
-      (old ?? []).map((c) => (c.id === card.id ? { ...c, status: destino } : c)),
+    const nextIndicator = {
+      cardId: overCard.id,
+      edge: getDropEdge(translated, e.over!.rect),
+    }
+    setDropIndicator((current) =>
+      current?.cardId === nextIndicator.cardId && current.edge === nextIndicator.edge
+        ? current
+        : nextIndicator,
     )
   }
 
   const onDragEnd = (e: DragEndEvent) => {
-    setActiveId(null)
     const overId = e.over?.id ? String(e.over.id) : null
     const activeId = String(e.active.id)
 
     if (activeId.startsWith("col:")) {
       if (overId?.startsWith("col:")) reorderColumns(activeId, overId)
+      clearDragState()
       return
     }
 
-    const card = scopeCards.find((c) => c.id === activeId)
-    if (!card || !overId) return
-
-    const overCard = scopeCards.find((c) => c.id === overId)
-    const destino = (overCard?.status ?? overId) as CardStatus
-
-    if (card.status !== destino) {
-      qc.setQueryData<Card[]>(["cards", projectId], (old) =>
-        (old ?? []).map((c) => (c.id === card.id ? { ...c, status: destino } : c)),
-      )
-      updateCard.mutate({ cardId: card.id, input: { status: destino } })
+    const card = scopeCards.find((item) => item.id === activeId)
+    if (!card || !overId) {
+      clearDragState()
+      return
     }
 
-    // Soltou no vazio da coluna: mudou de lista, mantém a posição relativa.
-    if (!overCard || overCard.id === card.id) return
+    // O header arrastável usa `col:<uuid>`; para um card, esse alvo representa
+    // o slug daquela coluna, não um status literal chamado "col:<uuid>".
+    const normalizedOverId = overId.startsWith("col:")
+      ? columns.find((column) => `col:${column.id}` === overId)?.slug
+      : overId
+    if (!normalizedOverId) {
+      clearDragState()
+      return
+    }
+    const overCard = scopeCards.find((item) => item.id === normalizedOverId)
+    const edge = overCard && dropIndicator?.cardId === overCard.id
+      ? dropIndicator.edge
+      : overCard && e.active.rect.current.translated
+        ? getDropEdge(e.active.rect.current.translated, e.over!.rect)
+        : "after"
+    const result = calculateCardDrop(scopeCards, activeId, normalizedOverId, edge)
 
-    // Reposiciona entre os vizinhos do destino; o backend converte o par
-    // before/after em Lexorank (mesmo caminho que o Backlog já usa).
-    const destinoCards = scopeCards.filter((c) => c.status === destino && c.id !== card.id)
-    const alvo = destinoCards.findIndex((c) => c.id === overCard.id)
-    if (alvo === -1) return
-    const ordenado = [...destinoCards.slice(0, alvo), card, ...destinoCards.slice(alvo)]
-    const beforeId = ordenado[alvo - 1]?.id ?? null
-    const afterId = ordenado[alvo + 1]?.id ?? null
+    if (!result?.moved) {
+      clearDragState()
+      return
+    }
 
-    // Encaixa o card na posição final já no cache: sem isto ele volta pro
-    // lugar antigo assim que solta e só pula pro novo quando o rank volta do
-    // servidor — o mesmo pisca-pisca da troca de coluna.
-    qc.setQueryData<Card[]>(["cards", projectId], (old) => {
-      if (!old) return old
-      const resto = old.filter((c) => c.id !== card.id)
-      let indice: number
-      if (beforeId) {
-        indice = resto.findIndex((c) => c.id === beforeId) + 1
-      } else if (afterId) {
-        indice = resto.findIndex((c) => c.id === afterId)
-      } else {
-        indice = resto.length
-      }
-      const novo = [...resto]
-      novo.splice(indice, 0, { ...card, status: destino })
-      return novo
-    })
-    rankCard.mutate({
-      cardId: card.id,
-      beforeId,
-      afterId,
-    })
+    // Atualiza todas as variantes da query antes de desmontar o overlay. A
+    // antiga chave exata de dois itens não alcançava a query de quatro itens
+    // consumida pelo board, criando um frame com o card de volta na origem.
+    const snapshots = applyCardDropToQueries(qc, projectId, result)
+    const jqlSnapshot = jqlResults
+    if (jqlResults) setJqlResults(applyCardDrop(jqlResults, result))
+
+    setRecentlyMovedId(activeId)
+    if (movedFlashTimer.current) clearTimeout(movedFlashTimer.current)
+    movedFlashTimer.current = setTimeout(
+      () => setRecentlyMovedId(null),
+      reduceMotion ? 180 : 600,
+    )
+    clearDragState()
+
+    let rolledBack = false
+    const rollback = () => {
+      if (rolledBack) return
+      rolledBack = true
+      restoreCardQuerySnapshots(qc, snapshots)
+      if (jqlSnapshot) setJqlResults(jqlSnapshot)
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      toast.error("Não foi possível mover o card. A posição anterior foi restaurada.")
+    }
+
+    if (card.status !== result.destination) {
+      updateCard.mutate(
+        { cardId: card.id, input: { status: result.destination } },
+        { onError: rollback },
+      )
+    }
+
+    // Uma coluna vazia não oferece vizinhos de rank; o PATCH de status basta.
+    if (result.beforeId || result.afterId || card.status === result.destination) {
+      rankCard.mutate(
+        { cardId: card.id, beforeId: result.beforeId, afterId: result.afterId },
+        { onError: rollback },
+      )
+    }
   }
 
   const currentSprintId = scope.kind === "sprint" ? scope.id : null
@@ -527,6 +566,7 @@ export function KanbanView({
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDragEnd={onDragEnd}
+              onDragCancel={clearDragState}
             >
               {swimlane !== "none" ? (
                 <SwimlaneBoard
@@ -541,6 +581,8 @@ export function KanbanView({
                   onOpen={onOpen}
                   onDone={onDoneCard}
                   onAssign={onAssignCard}
+                  dropIndicator={dropIndicator}
+                  recentlyMovedId={recentlyMovedId}
                 />
               ) : (
                 <div className="flex gap-3" style={{ minWidth: `${(columns.length + 1) * 296}px` }}>
@@ -582,6 +624,8 @@ export function KanbanView({
                       onOpen={onOpen}
                       onDone={onDoneCard}
                       onAssign={onAssignCard}
+                      dropIndicator={dropIndicator}
+                      recentlyMovedId={recentlyMovedId}
                       onRename={(name) => updateWorkflowStatus.mutate({ statusId: ws.id, input: { name } })}
                       onMoveLeft={i > 0 ? () => moveColumn(ws, -1) : undefined}
                       onMoveRight={i < columns.length - 1 ? () => moveColumn(ws, 1) : undefined}
@@ -608,21 +652,12 @@ export function KanbanView({
                   createPortal muda só o nó no DOM; o contexto do dnd-kit
                   continua valendo. */}
               {createPortal(
-              /* `key` e `id` são obrigatórios: o AnimationManager do dnd-kit só
-                 segura o clone durante o voo de drop se o filho tiver os dois —
-                 sem eles a animação era descartada e o card teleportava. */
-              <DragOverlay dropAnimation={reduceMotion ? null : dropFlight} zIndex={60}>
+              /* O Jira usa uma cópia fiel do card, sem a rotação do Trello. */
+              <DragOverlay dropAnimation={reduceMotion ? null : jiraDrop} zIndex={60}>
                 {activeCard ? (
-                  <motion.div
-                    key={activeCard.id}
-                    id={activeCard.id}
-                    initial={{ scale: 1 }}
-                    animate={{ scale: 1.02 }}
-                    transition={dragLift}
-                    className="cursor-grabbing"
-                  >
+                  <div className="cursor-grabbing">
                     <CardCell card={activeCard} members={members ?? []} dragging />
-                  </motion.div>
+                  </div>
                 ) : null}
               </DragOverlay>,
               document.body,
@@ -976,6 +1011,8 @@ function SwimlaneBoard({
   onOpen,
   onDone,
   onAssign,
+  dropIndicator,
+  recentlyMovedId,
 }: {
   mode: SwimlaneMode
   epics: Card[]
@@ -988,6 +1025,8 @@ function SwimlaneBoard({
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
   onAssign?: (cardId: string, assigneeId: string | null) => void
+  dropIndicator: { cardId: string; edge: DropEdge } | null
+  recentlyMovedId: string | null
 }) {
   const nonEpic = scopeCards.filter((c) => c.type !== "epic")
 
@@ -1064,6 +1103,8 @@ function SwimlaneBoard({
                   onOpen={onOpen}
                   onDone={onDone}
                   onAssign={onAssign}
+                  dropIndicator={dropIndicator}
+                  recentlyMovedId={recentlyMovedId}
                   compact
                 />
               ))}
@@ -1136,6 +1177,8 @@ function Column({
   onShowOldDone,
   sortableId,
   compact = false,
+  dropIndicator,
+  recentlyMovedId,
 }: {
   status: string
   label?: string
@@ -1167,6 +1210,8 @@ function Column({
   /** Sem id, a coluna não é arrastável (é o caso das swimlanes). */
   sortableId?: string
   compact?: boolean
+  dropIndicator: { cardId: string; edge: DropEdge } | null
+  recentlyMovedId: string | null
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
   // A coluna inteira é o alvo de drop dos cards; só o CABEÇALHO arrasta a
@@ -1241,7 +1286,7 @@ function Column({
       className={cx(
         // 284 = card de 272 + 4px de padding lateral da lista + 2px de borda em cada
         // lado. É o que faz o card bater exatamente com os 272px do Jira.
-        "flex w-[284px] shrink-0 flex-col rounded-xl border-2 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
+        "flex w-[284px] shrink-0 flex-col rounded-xl border-2 transition-[background-color,border-color,box-shadow] duration-[350ms] ease-[cubic-bezier(0.15,1,0.3,1)]",
         compact ? "max-h-[300px]" : "max-h-[calc(100vh-22rem)]",
         isOver
           ? "border-brand-400 bg-brand-50/80 dark:bg-brand-900/20 shadow-brand-glow"
@@ -1430,18 +1475,18 @@ function Column({
         {/* Um contexto por coluna: é ele que dá aos cards a noção de vizinho e
             produz o vão abrindo na posição de destino. */}
         <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          <AnimatePresence initial={false}>
-            {cards.map((card) => (
-              <DraggableCard
-                key={card.id}
-                card={card}
-                members={members}
-                onOpen={onOpen}
-                onDone={onDone}
-                onAssign={onAssign}
-              />
-            ))}
-          </AnimatePresence>
+          {cards.map((card) => (
+            <DraggableCard
+              key={card.id}
+              card={card}
+              members={members}
+              onOpen={onOpen}
+              onDone={onDone}
+              onAssign={onAssign}
+              dropEdge={dropIndicator?.cardId === card.id ? dropIndicator.edge : null}
+              justMoved={recentlyMovedId === card.id}
+            />
+          ))}
         </SortableContext>
         {cards.length === 0 && !isOver && (
           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
@@ -1783,7 +1828,9 @@ const DraggableCard = memo(forwardRef<HTMLDivElement, {
   onOpen: (c: Card) => void
   onDone?: (cardId: string) => void
   onAssign?: (cardId: string, assigneeId: string | null) => void
-}>(function DraggableCard({ card, members, onOpen, onDone, onAssign }, forwardedRef) {
+  dropEdge?: DropEdge | null
+  justMoved?: boolean
+}>(function DraggableCard({ card, members, onOpen, onDone, onAssign, dropEdge, justMoved }, forwardedRef) {
   // useSortable, não useDraggable: além de arrastar, registra o card como ALVO
   // de drop. É o que permite soltar ENTRE dois cards — e o que faz os vizinhos
   // abrirem espaço enquanto o card sobrevoa, em vez de a coluna ficar parada
@@ -1791,58 +1838,41 @@ const DraggableCard = memo(forwardRef<HTMLDivElement, {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
   })
-  // Criado nos últimos segundos = apareceu agora, merece entrada animada.
-  const recemCriado =
-    !!card.created_at && Date.now() - new Date(card.created_at).getTime() < 5000
   return (
-    // Duas camadas de propósito. A de fora é do dnd-kit: só ela escreve
-    // `transform`, que é o deslocamento abrindo espaço para o card em voo. A de
-    // dentro é do framer-motion, cuidando apenas de opacidade na entrada e
-    // saída. Já houve tremor neste arquivo por três donos disputarem o mesmo
-    // transform; manter um dono por elemento é o que evita a repetição.
+    // O card original NÃO some: fica no lugar com opacidade baixa enquanto o
+    // clone voa no cursor. Um dono só para o transform (o dnd-kit), sem camada
+    // de framer competindo — é o que tira o tremor e o pisca-pisca do gesto.
     <div
       ref={mergeRefs<HTMLDivElement>(setNodeRef, forwardedRef)}
       {...attributes}
       {...listeners}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      onClick={() => onOpen(card)}
-      className="cursor-grab touch-none active:cursor-grabbing"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      onClick={() => { if (!isDragging) onOpen(card) }}
+      className="relative cursor-grab touch-none active:cursor-grabbing"
     >
-    <motion.div
-      // Só card RECÉM-CRIADO entra com fade. Mudar de coluna desmonta o card
-      // de uma lista e monta na outra: com fade dos dois lados, o movimento
-      // aparecia como o texto piscando no destino. O deslocamento em si já é
-      // contado pelo clone que voa no DragOverlay.
-      initial={recemCriado ? { opacity: 0 } : false}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: { duration: 0 } }}
-      transition={cardFade}
-    >
-      {/* Slot fantasma: o card sai de cena e fica o buraco do tamanho exato,
-          então a coluna não reflui durante o arrasto. `visibility` (e não
-          `display`) preserva a altura, e o clone no cursor é o único conteúdo
-          visível — sem cópia pálida competindo com ele. */}
-      <div
-        className={cx(
-          // Transição nas cores: sem isto a moldura tracejada piscava de uma vez
-          // no primeiro frame do arrasto.
-          "rounded-lg border border-dashed transition-colors duration-150",
-          isDragging
-            ? "border-paper-300 dark:border-ink-600 bg-paper-100/50 dark:bg-ink-900/40"
-            : "border-transparent",
-        )}
-      >
-        <div className={cx(isDragging && "invisible")}>
-          <CardCell
-            card={card}
-            members={members}
-            onOpen={onOpen}
-            onDone={onDone}
-            onAssign={onAssign && ((assigneeId) => onAssign(card.id, assigneeId))}
-          />
-        </div>
-      </div>
-    </motion.div>
+      {dropEdge && (
+        <span
+          aria-hidden="true"
+          className={cx(
+            "pointer-events-none absolute inset-x-0 z-20 h-0.5 rounded-full bg-brand-500 shadow-[0_0_0_1px_rgba(255,255,255,0.7)]",
+            dropEdge === "before" ? "-top-[3px]" : "-bottom-[3px]",
+          )}
+        >
+          <span className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rounded-full bg-brand-500" />
+        </span>
+      )}
+      <CardCell
+        card={card}
+        members={members}
+        justMoved={justMoved}
+        onOpen={onOpen}
+        onDone={onDone}
+        onAssign={onAssign && ((assigneeId) => onAssign(card.id, assigneeId))}
+      />
     </div>
   )
 }))
@@ -2121,6 +2151,7 @@ export function CardCell({
   card,
   members,
   dragging = false,
+  justMoved = false,
   onDone,
   onAssign,
   onOpen,
@@ -2128,6 +2159,7 @@ export function CardCell({
   card: Card
   members: Member[]
   dragging?: boolean
+  justMoved?: boolean
   onDone?: (cardId: string) => void
   /** Ausente no clone do arrasto: o menu não deve abrir no card em voo. */
   onAssign?: (userId: string | null) => void
@@ -2144,6 +2176,7 @@ export function CardCell({
   const nComments = card.comments_count ?? 0
   const nFiles = card.attachments_count ?? 0
   const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null || !!card.doing_since
+  const reduceMotion = useReducedMotion()
 
   return (
     <div
@@ -2169,6 +2202,15 @@ export function CardCell({
           "border-orange-400/70 dark:border-orange-500/60 shadow-[0_0_0_1px_rgba(251,146,60,0.35),0_0_16px_-4px_rgba(249,115,22,0.5)]",
       )}
     >
+      {justMoved && (
+        <motion.span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 bg-brand-100 dark:bg-brand-500/20"
+          initial={{ opacity: 0.75 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.55, ease: [0.15, 1, 0.3, 1] }}
+        />
+      )}
       {card.flagged && (
         // O card pai é overflow-hidden (recorta os cantos arredondados) — um
         // badge protruso (-top/-right negativo) seria cortado. Fica encostado
