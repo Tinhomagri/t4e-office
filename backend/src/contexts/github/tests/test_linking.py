@@ -166,6 +166,49 @@ def test_repos_pede_reconexao_quando_github_recusa_token(scenario, monkeypatch):
     assert connection.status == "revoked"
 
 
+def test_owner_pode_vincular_repositorio_ao_projeto(scenario, monkeypatch):
+    """O vínculo não pode quebrar ao verificar a permissão administrativa."""
+    from rest_framework.test import APIClient
+
+    owner = scenario["project"].workspace.owner
+    key = Fernet.generate_key().decode()
+    encrypted_token = Fernet(key.encode()).encrypt(b"valid-token").decode()
+    GithubConnectionModel.objects.create(
+        user=owner,
+        github_login="octocat",
+        access_token=encrypted_token,
+        status="active",
+    )
+    monkeypatch.setattr(
+        "contexts.github.infrastructure.github_api.GithubClient.get_repo",
+        lambda _client, full_name: {
+            "full_name": full_name,
+            "default_branch": "main",
+        },
+    )
+
+    client = APIClient()
+    client.raise_request_exception = False
+    client.force_authenticate(user=owner)
+    with override_settings(
+        GITHUB_TOKEN_ENC_KEY=key,
+        GITHUB_WEBHOOK_CALLBACK_URL="",
+    ):
+        response = client.post(
+            f"/api/github/projects/{scenario['project'].id}/repos/",
+            {"full_name": "acme/new-app"},
+            format="json",
+        )
+
+    assert response.status_code == 201
+    assert response.json()["full_name"] == "acme/new-app"
+    assert GithubRepoLinkModel.objects.filter(
+        project_id=scenario["project"].id,
+        full_name="acme/new-app",
+        connected_by=owner,
+    ).exists()
+
+
 def test_verify_signature():
     import hashlib
     import hmac
