@@ -209,6 +209,63 @@ def test_owner_pode_vincular_repositorio_ao_projeto(scenario, monkeypatch):
     ).exists()
 
 
+def test_vinculo_usa_url_publica_do_app_quando_callback_nao_foi_configurado(
+    scenario, monkeypatch
+):
+    """Deploy sem env explícita ainda deve registrar o webhook no próprio backend."""
+    from rest_framework.test import APIClient
+
+    owner = scenario["project"].workspace.owner
+    key = Fernet.generate_key().decode()
+    encrypted_token = Fernet(key.encode()).encrypt(b"valid-token").decode()
+    GithubConnectionModel.objects.create(
+        user=owner,
+        github_login="octocat",
+        access_token=encrypted_token,
+        status="active",
+    )
+    monkeypatch.setattr(
+        "contexts.github.infrastructure.github_api.GithubClient.get_repo",
+        lambda _client, full_name: {
+            "full_name": full_name,
+            "default_branch": "main",
+        },
+    )
+    received = {}
+
+    def create_webhook(_client, full_name, *, callback_url, secret):
+        received.update(
+            full_name=full_name,
+            callback_url=callback_url,
+            secret=secret,
+        )
+        return {"id": 987}
+
+    monkeypatch.setattr(
+        "contexts.github.infrastructure.github_api.GithubClient.create_webhook",
+        create_webhook,
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    with override_settings(
+        GITHUB_TOKEN_ENC_KEY=key,
+        GITHUB_WEBHOOK_CALLBACK_URL="",
+        FRONTEND_URL="https://office.example/",
+    ):
+        response = client.post(
+            f"/api/github/projects/{scenario['project'].id}/repos/",
+            {"full_name": "acme/new-app"},
+            format="json",
+        )
+
+    assert response.status_code == 201
+    assert response.json()["webhook_active"] is True
+    assert received["full_name"] == "acme/new-app"
+    assert received["callback_url"] == "https://office.example/api/github/webhook/"
+    assert received["secret"]
+
+
 def test_verify_signature():
     import hashlib
     import hmac

@@ -1,4 +1,5 @@
 """Views do contexto github — OAuth, vínculo de repo, webhook e ações no card."""
+import logging
 import secrets
 from typing import NoReturn
 
@@ -27,6 +28,7 @@ from contexts.projects.infrastructure.django.repositories_impl import (
 from shared.domain.errors import NotFoundError, PermissionDeniedError, ValidationError
 
 _access = DjangoWorkspaceAccess()
+logger = logging.getLogger(__name__)
 
 
 def _connection(user_id: str) -> GithubConnectionModel | None:
@@ -215,15 +217,22 @@ class ProjectRepoLinkView(APIView):
 
         webhook_secret = secrets.token_hex(20)
         webhook_id = None
-        callback = getattr(settings, "GITHUB_WEBHOOK_CALLBACK_URL", "")
-        if callback:
-            try:
-                hook = client.create_webhook(
-                    full_name, callback_url=callback, secret=webhook_secret
-                )
-                webhook_id = hook.get("id")
-            except Exception:  # noqa: BLE001 — sem webhook ainda dá p/ criar branch
-                webhook_id = None
+        callback = getattr(settings, "GITHUB_WEBHOOK_CALLBACK_URL", "") or (
+            f"{settings.FRONTEND_URL.rstrip('/')}/api/github/webhook/"
+        )
+        try:
+            hook = client.create_webhook(
+                full_name, callback_url=callback, secret=webhook_secret
+            )
+            webhook_id = hook.get("id")
+        except Exception:  # noqa: BLE001 — sem webhook ainda dá p/ criar branch
+            logger.warning(
+                "Não foi possível registrar webhook para %s em %s.",
+                full_name,
+                callback,
+                exc_info=True,
+            )
+            webhook_id = None
 
         link, _ = GithubRepoLinkModel.objects.update_or_create(
             project_id=project.id,
