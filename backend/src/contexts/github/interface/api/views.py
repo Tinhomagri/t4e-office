@@ -1,6 +1,8 @@
 """Views do contexto github — OAuth, vínculo de repo, webhook e ações no card."""
 import secrets
+from typing import NoReturn
 
+from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.shortcuts import redirect
 from rest_framework import status
@@ -37,7 +39,30 @@ def _client_for(user_id: str) -> github_api.GithubClient:
     conn = _connection(user_id)
     if conn is None:
         raise ValidationError("Conecte sua conta do GitHub primeiro.")
-    return github_api.GithubClient(crypto.decrypt(conn.access_token))
+    try:
+        token = crypto.decrypt(conn.access_token)
+    except InvalidToken:
+        _reconnect_required(conn)
+    return github_api.GithubClient(token)
+
+
+def _revoke_connection(conn: GithubConnectionModel) -> None:
+    conn.status = "revoked"
+    conn.save(update_fields=["status", "updated_at"])
+
+
+def _reconnect_required(conn: GithubConnectionModel) -> NoReturn:
+    _revoke_connection(conn)
+    raise ValidationError(
+        "Sua conexão com o GitHub expirou. Conecte novamente."
+    )
+
+
+def _reconnect_user(user_id: str) -> NoReturn:
+    conn = _connection(user_id)
+    if conn is not None:
+        _reconnect_required(conn)
+    raise ValidationError("Conecte sua conta do GitHub primeiro.") from None
 
 
 def _project_or_403(project_id: str, user_id: str, *, admin: bool = False) -> ProjectModel:
@@ -115,6 +140,13 @@ class GithubStatusView(APIView):
         conn = _connection(str(request.user.id))
         if conn is None:
             return Response({"connected": False})
+        try:
+            crypto.decrypt(conn.access_token)
+        except InvalidToken:
+            _revoke_connection(conn)
+            return Response(
+                {"connected": False, "reason": "reconnect_required"}
+            )
         return Response(
             {"connected": True, "login": conn.github_login, "avatar": conn.github_avatar}
         )
@@ -136,7 +168,11 @@ class GithubReposView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        repos = _client_for(str(request.user.id)).list_repos()
+        user_id = str(request.user.id)
+        try:
+            repos = _client_for(user_id).list_repos()
+        except github_api.GithubAuthenticationError:
+            _reconnect_user(user_id)
         return Response({"repos": [r for r in repos if r["push"] or r["admin"]]})
 
 
@@ -170,6 +206,8 @@ class ProjectRepoLinkView(APIView):
         client = _client_for(str(request.user.id))
         try:
             repo = client.get_repo(full_name)
+        except github_api.GithubAuthenticationError:
+            _reconnect_user(str(request.user.id))
         except Exception as exc:  # noqa: BLE001 — 404/403: repo inexistente ou sem acesso
             raise ValidationError(
                 f"Repositório '{full_name}' não encontrado ou sem acesso com sua conta."
@@ -286,6 +324,8 @@ class CardCreateBranchView(APIView):
         )
         try:
             sha = client.branch_sha(repo.full_name, base)
+        except github_api.GithubAuthenticationError:
+            _reconnect_user(str(request.user.id))
         except Exception as exc:  # noqa: BLE001 — 404: branch-base não existe / repo vazio
             raise ValidationError(
                 f"Branch base '{base}' não encontrada no {repo.full_name} "
@@ -293,6 +333,8 @@ class CardCreateBranchView(APIView):
             ) from exc
         try:
             client.create_branch(repo.full_name, new_branch, sha)
+        except github_api.GithubAuthenticationError:
+            _reconnect_user(str(request.user.id))
         except Exception as exc:  # noqa: BLE001 — 422: branch já existe
             msg = "já existe" if "422" in str(exc) else str(exc)
             raise ValidationError(f"Não foi possível criar a branch '{new_branch}': {msg}") from exc

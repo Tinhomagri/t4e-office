@@ -1,9 +1,13 @@
 """Testes do vínculo GitHub↔card: parsing de refs, push e pull_request."""
+import httpx
 import pytest
+from cryptography.fernet import Fernet
+from django.test import override_settings
 
 from contexts.github.infrastructure import linking
 from contexts.github.infrastructure.django.models import (
     CardDevLinkModel,
+    GithubConnectionModel,
     GithubRepoLinkModel,
 )
 from contexts.identity.infrastructure.django.models import (
@@ -99,6 +103,67 @@ def test_project_dev_metrics_endpoint(scenario):
     assert data["prs"]["open"] == 1
     assert data["repos"][0]["full_name"] == "acme/app"
     assert len(data["recent_prs"]) == 1
+
+
+def test_status_revoga_conexao_quando_token_nao_pode_ser_decifrado(scenario):
+    """Uma troca da chave Fernet não pode deixar a UI presa em 'conectado'."""
+    from rest_framework.test import APIClient
+
+    owner = scenario["project"].workspace.owner
+    old_key = Fernet.generate_key().decode()
+    new_key = Fernet.generate_key().decode()
+    encrypted_token = Fernet(old_key.encode()).encrypt(b"github-token").decode()
+    connection = GithubConnectionModel.objects.create(
+        user=owner,
+        github_login="octocat",
+        access_token=encrypted_token,
+        status="active",
+    )
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    with override_settings(GITHUB_TOKEN_ENC_KEY=new_key):
+        response = client.get("/api/github/status/")
+
+    assert response.status_code == 200
+    assert response.json() == {"connected": False, "reason": "reconnect_required"}
+    connection.refresh_from_db()
+    assert connection.status == "revoked"
+
+
+def test_repos_pede_reconexao_quando_github_recusa_token(scenario, monkeypatch):
+    """Token revogado no GitHub deve virar recuperação, não erro 500."""
+    from rest_framework.test import APIClient
+
+    owner = scenario["project"].workspace.owner
+    key = Fernet.generate_key().decode()
+    encrypted_token = Fernet(key.encode()).encrypt(b"revoked-token").decode()
+    connection = GithubConnectionModel.objects.create(
+        user=owner,
+        github_login="octocat",
+        access_token=encrypted_token,
+        status="active",
+    )
+    github_request = httpx.Request("GET", "https://api.github.com/user/repos")
+    github_response = httpx.Response(
+        401,
+        request=github_request,
+        json={"message": "Bad credentials"},
+    )
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: github_response)
+
+    client = APIClient()
+    client.raise_request_exception = False
+    client.force_authenticate(user=owner)
+    with override_settings(GITHUB_TOKEN_ENC_KEY=key):
+        response = client.get("/api/github/repos/")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "Sua conexão com o GitHub expirou. Conecte novamente."
+    }
+    connection.refresh_from_db()
+    assert connection.status == "revoked"
 
 
 def test_verify_signature():

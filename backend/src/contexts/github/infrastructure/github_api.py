@@ -17,6 +17,19 @@ OAUTH_TOKEN = "https://github.com/login/oauth/access_token"
 SCOPES = "repo read:user"
 
 
+class GithubAuthenticationError(Exception):
+    """O GitHub recusou o token OAuth armazenado."""
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            raise GithubAuthenticationError("GitHub OAuth token rejected") from exc
+        raise
+
+
 def authorize_url(*, state: str) -> str:
     from urllib.parse import urlencode
 
@@ -42,7 +55,7 @@ def exchange_code(code: str) -> dict:
         },
         timeout=15,
     )
-    resp.raise_for_status()
+    _raise_for_status(resp)
     return resp.json()
 
 
@@ -58,12 +71,12 @@ class GithubClient:
 
     def _get(self, path: str, **params):
         r = httpx.get(f"{API}{path}", headers=self._headers, params=params, timeout=20)
-        r.raise_for_status()
+        _raise_for_status(r)
         return r.json()
 
     def _post(self, path: str, json: dict):
         r = httpx.post(f"{API}{path}", headers=self._headers, json=json, timeout=20)
-        r.raise_for_status()
+        _raise_for_status(r)
         return r.json()
 
     def me(self) -> dict:

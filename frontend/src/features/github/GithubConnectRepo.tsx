@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Github, Loader2 } from "lucide-react"
 import { useState } from "react"
 
+import { extractApiError } from "@/shared/api/client"
 import {
   getGithubAuthUrl,
   getGithubStatus,
@@ -23,7 +24,12 @@ export function GithubConnectRepo({ projectId }: { projectId: string }) {
   })
   const connected = !!statusData?.connected
 
-  const { data: repos, isLoading: loadingRepos } = useQuery({
+  const {
+    data: repos,
+    error: reposError,
+    isError: reposFailed,
+    isLoading: loadingRepos,
+  } = useQuery({
     queryKey: ["github-repos"],
     queryFn: listMyRepos,
     enabled: connected,
@@ -43,6 +49,7 @@ export function GithubConnectRepo({ projectId }: { projectId: string }) {
       setError(null)
       qc.invalidateQueries({ queryKey: ["card-dev-links"] })
       qc.invalidateQueries({ queryKey: ["project-repos", projectId] })
+      qc.invalidateQueries({ queryKey: ["project-dev", projectId] })
     },
     onError: (e) => {
       const anyE = e as { response?: { data?: { error?: string; detail?: string } } }
@@ -62,6 +69,21 @@ export function GithubConnectRepo({ projectId }: { projectId: string }) {
           Conectar GitHub
         </button>
         {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    )
+
+  if (reposFailed)
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-red-600">{extractApiError(reposError)}</p>
+        <button
+          onClick={() => connect.mutate()}
+          disabled={connect.isPending}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-paper transition-colors hover:opacity-90 disabled:opacity-50 dark:bg-paper dark:text-ink"
+        >
+          {connect.isPending ? <Loader2 className="size-4 animate-spin" /> : <Github className="size-4" />}
+          Reconectar GitHub
+        </button>
       </div>
     )
 
