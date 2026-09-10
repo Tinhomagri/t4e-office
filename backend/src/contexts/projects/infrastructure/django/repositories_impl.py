@@ -380,6 +380,13 @@ class DjangoWorkspaceAccess(WorkspaceAccess):
             workspace_id=workspace_id, user_id=user_id
         ).exists()
 
+    def is_admin(self, *, workspace_id: str, user_id: str) -> bool:
+        return MembershipModel.objects.filter(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role__in=("owner", "admin"),
+        ).exists()
+
 
 class DjangoStatusCategoryResolver:
     """Resolve a categoria da coluna consultando o workflow do projeto.

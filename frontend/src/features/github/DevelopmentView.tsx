@@ -5,12 +5,20 @@ import {
   GitPullRequest,
   Github,
   LayoutGrid,
+  Loader2,
+  RefreshCw,
   Trash2,
 } from "lucide-react"
 
+import { extractApiError } from "@/shared/api/client"
 import { cx } from "@/shared/ui/primitives"
 import { GithubConnectRepo } from "./GithubConnectRepo"
-import { getProjectDevMetrics, unlinkProjectRepo, type DevMetrics } from "./github.api"
+import {
+  getProjectDevMetrics,
+  linkProjectRepo,
+  unlinkProjectRepo,
+  type DevMetrics,
+} from "./github.api"
 
 const PR_TONE: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
@@ -19,17 +27,33 @@ const PR_TONE: Record<string, string> = {
 }
 
 export function DevelopmentView({ projectId }: { projectId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["project-dev", projectId],
     queryFn: () => getProjectDevMetrics(projectId),
   })
 
-  if (isLoading || !data)
+  if (isLoading)
     return (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-24 animate-pulse rounded-2xl bg-ink/5 dark:bg-ink-800" />
         ))}
+      </div>
+    )
+
+  if (isError || !data)
+    return (
+      <div className="mx-auto max-w-md rounded-2xl border border-red-200 bg-paper p-6 text-center dark:border-red-900/60 dark:bg-ink-900">
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {isError ? extractApiError(error) : "Não foi possível carregar o projeto."}
+        </p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-3 rounded-lg border border-ink/15 px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-paper-100 dark:border-ink-700 dark:text-paper dark:hover:bg-ink-800"
+        >
+          Tentar novamente
+        </button>
       </div>
     )
 
@@ -131,10 +155,17 @@ export function DevelopmentView({ projectId }: { projectId: string }) {
 
 function RepositoriesCard({ projectId, repos }: { projectId: string; repos: DevMetrics["repos"] }) {
   const qc = useQueryClient()
+  const refreshMetrics = () => qc.invalidateQueries({ queryKey: ["project-dev", projectId] })
   const unlink = useMutation({
     mutationFn: (linkId: string) => unlinkProjectRepo(projectId, linkId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-dev", projectId] }),
+    onSuccess: refreshMetrics,
   })
+  const activateSync = useMutation({
+    mutationFn: (fullName: string) => linkProjectRepo(projectId, fullName),
+    onSuccess: refreshMetrics,
+  })
+  const profileRepos = repos.filter(isProfileRepo)
+
   return (
     <div className="rounded-2xl border border-ink/10 bg-paper p-5 dark:border-ink-700 dark:bg-ink-900">
       <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink dark:text-paper">
@@ -144,7 +175,15 @@ function RepositoriesCard({ projectId, repos }: { projectId: string; repos: DevM
         {repos.map((r) => (
           <li key={r.id} className="flex items-center gap-2 rounded-lg border border-ink/10 px-3 py-2 text-xs dark:border-ink-700">
             <Github className="size-3.5 shrink-0 text-paper-400" />
-            <span className="min-w-0 flex-1 truncate font-medium text-ink dark:text-paper">{r.full_name}</span>
+            <a
+              href={`https://github.com/${r.full_name}`}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 flex-1 truncate font-medium text-ink underline-offset-2 hover:text-brand-600 hover:underline dark:text-paper"
+              title="Abrir repositório no GitHub"
+            >
+              {r.full_name}
+            </a>
             <span
               className={cx(
                 "shrink-0 rounded-full px-1.5 py-0.5 text-[10px]",
@@ -156,7 +195,24 @@ function RepositoriesCard({ projectId, repos }: { projectId: string; repos: DevM
             >
               {r.webhook_active ? "sync" : "sem webhook"}
             </span>
+            {!r.webhook_active && (
+              <button
+                type="button"
+                onClick={() => activateSync.mutate(r.full_name)}
+                disabled={activateSync.isPending}
+                className="shrink-0 rounded p-1 text-amber-600 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-40 dark:hover:bg-amber-900/30"
+                title="Ativar sincronização"
+                aria-label={`Ativar sincronização de ${r.full_name}`}
+              >
+                {activateSync.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+              </button>
+            )}
             <button
+              type="button"
               onClick={() => unlink.mutate(r.id)}
               disabled={unlink.isPending}
               className="shrink-0 rounded p-1 text-paper-400 transition-colors hover:text-red-600 disabled:opacity-40"
@@ -167,11 +223,39 @@ function RepositoriesCard({ projectId, repos }: { projectId: string; repos: DevM
           </li>
         ))}
       </ul>
+      {profileRepos.length > 0 && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          <strong>{profileRepos[0].full_name}</strong> é um repositório de perfil.
+          Para acompanhar o projeto, vincule o repositório que contém o código.
+        </p>
+      )}
+      {repos.some((r) => !r.webhook_active) && (
+        <p className="mt-2 text-[11px] leading-relaxed text-paper-500">
+          Sem sincronização, commits e PRs novos não aparecem aqui. Use o botão de
+          atualizar para tentar ativá-la.
+        </p>
+      )}
+      {activateSync.data && !activateSync.data.webhook_active && (
+        <p className="mt-2 text-[11px] leading-relaxed text-red-600 dark:text-red-400">
+          Não foi possível ativar a sincronização. Confirme se sua conta pode
+          administrar webhooks neste repositório e tente novamente.
+        </p>
+      )}
+      {activateSync.isError && (
+        <p className="mt-2 text-[11px] leading-relaxed text-red-600 dark:text-red-400">
+          {extractApiError(activateSync.error)}
+        </p>
+      )}
       <div className="mt-3 border-t border-ink/10 pt-3 dark:border-ink-700">
-        <GithubConnectRepo projectId={projectId} />
+        <GithubConnectRepo projectId={projectId} linkedRepos={repos.map((repo) => repo.full_name)} />
       </div>
     </div>
   )
+}
+
+function isProfileRepo(repo: DevMetrics["repos"][number]): boolean {
+  const [owner, name, ...rest] = repo.full_name.split("/")
+  return rest.length === 0 && !!owner && owner.toLocaleLowerCase() === name?.toLocaleLowerCase()
 }
 
 const ACCENTS: Record<string, string> = {
