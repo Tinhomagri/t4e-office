@@ -109,6 +109,7 @@ def _ser_public_card(card: CardModel, request: Request) -> dict:
         "priority": card.priority,
         "points": card.points,
         "assignee_name": assignee.full_name if assignee else None,
+        "reporter_name": card.reporter_name,
         "labels": card.labels,
         "due_date": card.due_date.isoformat() if card.due_date else None,
         "comments": [
@@ -239,6 +240,11 @@ class PublicCardCreateView(APIView):
         # Vem como bool (JSON) ou string (multipart, quando tem imagem junto) —
         # normaliza os dois formatos pro mesmo teste.
         flagged = str(request.data.get("flagged") or "").strip().lower() in ("true", "1", "on")
+        # Igual ao comentário público: sem conta, o nome é a única forma de
+        # saber quem pediu o card — vira o relator (reporter_name).
+        reporter_name = str(request.data.get("author_name") or "").strip()[:120]
+        if not reporter_name:
+            raise ValidationError("Informe seu nome.")
 
         image = request.FILES.get("image")
         if image is not None:
@@ -279,6 +285,7 @@ class PublicCardCreateView(APIView):
             # o próprio time criou — útil pra saber de onde veio a sugestão.
             source="public_link",
             flagged=flagged,
+            reporter_name=reporter_name,
         )
         if image is not None:
             # author=None: veio de fora, sem conta — ver comentário no model.

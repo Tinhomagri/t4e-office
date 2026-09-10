@@ -57,6 +57,7 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "points": card.points,
         "assignee_id": card.assignee_id,
         "reporter_id": card.reporter_id,
+        "reporter_name": card.reporter_name,
         "sprint_id": card.sprint_id,
         "start_date": card.start_date,
         "due_date": card.due_date,

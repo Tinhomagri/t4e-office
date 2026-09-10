@@ -696,6 +696,15 @@ function CardRow({
         >
           {assignee.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
         </span>
+      ) : card.reporter_name ? (
+        // Sem responsável ainda, mas o card veio do link público — mostra
+        // quem relatou em vez do "?" genérico.
+        <span
+          title={`Relatado por ${card.reporter_name} pelo link público`}
+          className="shrink-0 grid size-6 place-items-center rounded-full bg-paper-200 text-[9px] font-semibold text-paper-600 dark:bg-ink-700 dark:text-paper-300"
+        >
+          {card.reporter_name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+        </span>
       ) : (
         <span className="shrink-0 grid size-6 place-items-center rounded-full border border-dashed border-paper-200 dark:border-ink-700 text-[9px] text-paper-300">?</span>
       )}

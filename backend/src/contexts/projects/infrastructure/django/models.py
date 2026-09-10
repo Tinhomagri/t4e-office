@@ -234,6 +234,10 @@ class CardModel(models.Model):
         blank=True,
         related_name="reported_cards",
     )
+    # Nome de quem relatou pelo link público (sem conta aqui). Preenchido só
+    # quando o card vem de fora (source="public_link"); reporter FK fica null
+    # porque não existe usuário pra apontar.
+    reporter_name = models.CharField(max_length=120, blank=True, default="")
     # Sprint do card; null = card no backlog do projeto
     sprint = models.ForeignKey(
         SprintModel,

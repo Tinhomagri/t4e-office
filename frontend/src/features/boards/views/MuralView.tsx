@@ -3,7 +3,7 @@
 // opostos, igual chat. A configuração do link/código do cliente mora bem
 // aqui em cima — é o lugar natural pra achar, não escondido na aba Geral.
 import { useEffect, useRef, useState } from "react"
-import { Copy, CornerUpLeft, Globe2, Link2, Lock, MessageSquare, Send, X } from "lucide-react"
+import { Copy, CornerUpLeft, Globe2, Link2, Lock, MessageSquare, Send, Trash2, X } from "lucide-react"
 
 import {
   useBoardMessages,
@@ -27,6 +27,9 @@ export function MuralView({ projectId }: { projectId: string }) {
   // com o app aberto fora desta aba. Aqui dentro seria bipe duplicado.
   const { data: messages, isLoading } = useBoardMessages(projectId)
   const create = useCreateBoardMessage(projectId)
+  const update = useUpdateProject(projectId)
+  const { can } = useProjectPermissions(projectId)
+  const canEdit = can("administer_project")
   const [body, setBody] = useState("")
   // Mais de uma pessoa fala no mesmo mural (vários clientes + time) — sem
   // citação não dava pra saber a quem uma mensagem respondia.
@@ -53,14 +56,33 @@ export function MuralView({ projectId }: { projectId: string }) {
       <ClientConfigCard projectId={projectId} />
 
       <div className="flex h-[calc(100vh-30rem)] min-h-[360px] flex-col rounded-2xl border border-paper-200 bg-paper dark:border-ink-700 dark:bg-ink-900">
-        <div className="border-b border-paper-200 px-4 py-3 dark:border-ink-700">
-          <p className="flex items-center gap-2 text-sm font-medium text-ink dark:text-paper">
-            <MessageSquare className="size-4 text-paper-400" />
-            Conversa
-          </p>
-          <p className="mt-0.5 text-xs text-paper-500">
-            Lembrete e recado trocado com quem acompanha pelo link público.
-          </p>
+        <div className="flex items-start justify-between gap-2 border-b border-paper-200 px-4 py-3 dark:border-ink-700">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-medium text-ink dark:text-paper">
+              <MessageSquare className="size-4 text-paper-400" />
+              Conversa
+            </p>
+            <p className="mt-0.5 text-xs text-paper-500">
+              Lembrete e recado trocado com quem acompanha pelo link público.
+            </p>
+          </div>
+          {canEdit && lista.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Trash2 className="size-3.5" />}
+              loading={update.isPending}
+              onClick={() => {
+                if (!window.confirm("Limpar a conversa? Apaga todas as mensagens do mural — não dá pra desfazer.")) return
+                update.mutate(
+                  { clear_messages: true },
+                  { onError: () => toast.error("Não foi possível limpar a conversa.") },
+                )
+              }}
+            >
+              Limpar conversa
+            </Button>
+          )}
         </div>
 
         {isLoading ? (

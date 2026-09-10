@@ -90,6 +90,9 @@ class Card:
     points: int | None = None
     assignee_id: str | None = None
     reporter_id: str | None = None  # relator (quem pediu/abriu)
+    # Nome de quem relatou pelo link público, sem conta aqui. reporter_id fica
+    # None nesse caso — não existe usuário pra apontar.
+    reporter_name: str = ""
     sprint_id: str | None = None  # None = card no backlog do projeto
     start_date: date | None = None
     due_date: date | None = None

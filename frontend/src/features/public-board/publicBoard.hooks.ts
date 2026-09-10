@@ -27,6 +27,7 @@ export function useCreatePublicCard(token: string | undefined, code?: string) {
       status?: string
       image?: File
       flagged?: boolean
+      author_name: string
     }) => api.createPublicCard(token!, { ...input, code }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["public-board", token] }),
   })

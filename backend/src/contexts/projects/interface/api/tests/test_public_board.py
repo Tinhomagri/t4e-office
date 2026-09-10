@@ -135,7 +135,11 @@ def test_criar_card_publico_funciona_quando_liberado(cenario):
 
     r = APIClient().post(
         "/api/public/boards/tok-123/cards/",
-        {"title": "Sugestão do cliente", "description": "Seria bom ter isso"},
+        {
+            "title": "Sugestão do cliente",
+            "description": "Seria bom ter isso",
+            "author_name": "Fulano",
+        },
         format="json",
     )
     assert r.status_code == 201
@@ -143,6 +147,19 @@ def test_criar_card_publico_funciona_quando_liberado(cenario):
     assert novo.title == "Sugestão do cliente"
     assert novo.source == "public_link"
     assert novo.status == "todo"
+    assert novo.reporter_name == "Fulano"
+
+
+@pytest.mark.django_db
+def test_criar_card_publico_exige_nome(cenario):
+    cenario["projeto"].public_allow_create = True
+    cenario["projeto"].save(update_fields=["public_allow_create"])
+
+    r = APIClient().post(
+        "/api/public/boards/tok-123/cards/", {"title": "Sem nome"}, format="json"
+    )
+    assert r.status_code == 400
+    assert not CardModel.objects.filter(title="Sem nome").exists()
 
 
 @pytest.mark.django_db
@@ -155,7 +172,7 @@ def test_criar_card_publico_com_flag_de_atencao(cenario):
 
     r = APIClient().post(
         "/api/public/boards/tok-123/cards/",
-        {"title": "Urgente", "flagged": True},
+        {"title": "Urgente", "flagged": True, "author_name": "Fulano"},
         format="json",
     )
     assert r.status_code == 201
@@ -170,7 +187,9 @@ def test_criar_card_publico_sem_flag_fica_false(cenario):
     cenario["projeto"].save(update_fields=["public_allow_create"])
 
     r = APIClient().post(
-        "/api/public/boards/tok-123/cards/", {"title": "Normal"}, format="json"
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Normal", "author_name": "Fulano"},
+        format="json",
     )
     assert r.status_code == 201
     assert r.data["flagged"] is False
@@ -186,7 +205,7 @@ def test_criar_card_publico_com_imagem_anexa_sem_autor(cenario):
     imagem = SimpleUploadedFile("print.png", PNG_1X1, content_type="image/png")
     r = APIClient().post(
         "/api/public/boards/tok-123/cards/",
-        {"title": "Com imagem", "image": imagem},
+        {"title": "Com imagem", "image": imagem, "author_name": "Fulano"},
         format="multipart",
     )
     assert r.status_code == 201
@@ -239,7 +258,9 @@ def test_card_criado_pelo_link_publico_entra_no_topo(cenario):
     cenario["card"].save(update_fields=["rank"])
 
     r = APIClient().post(
-        "/api/public/boards/tok-123/cards/", {"title": "Card do cliente"}, format="json"
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Card do cliente", "author_name": "Fulano"},
+        format="json",
     )
     assert r.status_code == 201
     novo = CardModel.objects.get(id=r.data["id"])
@@ -303,6 +324,27 @@ def test_revogar_o_link_apaga_o_mural(cenario):
 
 
 @pytest.mark.django_db
+def test_admin_limpa_o_mural_sem_mexer_no_link(cenario):
+    """Botão 'Limpar conversa' apaga as mensagens mas mantém o link ativo —
+    diferente de revogar, que também derruba o token."""
+    projeto = cenario["projeto"]
+    projeto.public_token = "tok-123"
+    projeto.save(update_fields=["public_token"])
+    BoardMessageModel.objects.create(
+        project=projeto, author_name="Cliente", body="Mensagem antiga", from_team=False,
+    )
+    assert BoardMessageModel.objects.filter(project=projeto).count() == 1
+
+    r = _admin(cenario["dono"]).patch(
+        f"/api/projects/{projeto.id}/", {"clear_messages": True}, format="json"
+    )
+    assert r.status_code == 200
+    assert not BoardMessageModel.objects.filter(project=projeto).exists()
+    projeto.refresh_from_db()
+    assert projeto.public_token == "tok-123"
+
+
+@pytest.mark.django_db
 def test_criar_card_publico_entra_na_sprint_ativa(cenario):
     """Card criado pelo cliente tinha nascido sem sprint (backlog), então
     desaparecia tanto do board do cliente quanto do Kanban do time quando
@@ -313,7 +355,9 @@ def test_criar_card_publico_entra_na_sprint_ativa(cenario):
     projeto.save(update_fields=["public_allow_create"])
 
     r = APIClient().post(
-        "/api/public/boards/tok-123/cards/", {"title": "Sugestão do cliente"}, format="json"
+        "/api/public/boards/tok-123/cards/",
+        {"title": "Sugestão do cliente", "author_name": "Fulano"},
+        format="json",
     )
     assert r.status_code == 201
     novo = CardModel.objects.get(id=r.data["id"])
@@ -498,7 +542,7 @@ def test_board_com_codigo_configurado_tambem_bloqueia_criar_card_e_mural(cenario
 
     r = APIClient().post(
         "/api/public/boards/tok-123/cards/",
-        {"title": "Sugestão", "code": "ABC234"},
+        {"title": "Sugestão", "code": "ABC234", "author_name": "Fulano"},
         format="json",
     )
     assert r.status_code == 201

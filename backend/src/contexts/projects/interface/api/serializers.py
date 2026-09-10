@@ -146,6 +146,9 @@ class CardSerializer(serializers.Serializer):
     points = serializers.IntegerField(allow_null=True)
     assignee_id = serializers.CharField(allow_null=True)
     reporter_id = serializers.CharField(allow_null=True)
+    # Nome de quem relatou pelo link público, sem conta aqui — preenchido só
+    # quando reporter_id é null (source="public_link").
+    reporter_name = serializers.CharField(allow_blank=True, default="")
     sprint_id = serializers.CharField(allow_null=True)
     start_date = serializers.DateField(allow_null=True)
     due_date = serializers.DateField(allow_null=True)

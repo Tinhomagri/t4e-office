@@ -1938,11 +1938,26 @@ function AssigneePicker({
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={assignee ? `Responsável: ${assignee.name}. Trocar` : "Definir responsável"}
+        aria-label={
+          assignee
+            ? `Responsável: ${assignee.name}. Trocar`
+            : card.reporter_name
+              ? `Sem responsável — relatado por ${card.reporter_name} pelo link público. Definir responsável`
+              : "Definir responsável"
+        }
         className="rounded-full transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
       >
         {assignee ? (
           <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
+        ) : card.reporter_name ? (
+          // Sem responsável ainda, mas o card veio do link público — mostra
+          // quem relatou em vez do "?" genérico, mesmo fallback do drawer.
+          <span
+            title={`Relatado por ${card.reporter_name} pelo link público`}
+            className="grid size-5 place-items-center rounded-full bg-paper-200 text-[9px] font-semibold text-paper-600 transition-colors hover:opacity-80 dark:bg-ink-700 dark:text-paper-300"
+          >
+            {card.reporter_name.slice(0, 2).toUpperCase()}
+          </span>
         ) : (
           <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 transition-colors hover:border-brand-500 hover:text-brand-500">
             ?

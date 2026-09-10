@@ -94,6 +94,13 @@ function PublicBoardPageBody({
   board: NonNullable<ReturnType<typeof usePublicBoard>["data"]>
 }) {
   const [openCard, setOpenCard] = useState<PublicCard | null>(null)
+  // Mesmo nome usado no mural e nos comentários — uma vez identificado neste
+  // board, a pessoa não precisa se apresentar de novo em cada ação.
+  const [authorName, setAuthorName] = useState(() => localStorage.getItem(nameStorageKey(token)) ?? "")
+  const identify = (name: string) => {
+    localStorage.setItem(nameStorageKey(token), name)
+    setAuthorName(name)
+  }
 
   return (
     <Shell title={board.project.name} subtitle={board.project.key}>
@@ -107,12 +114,14 @@ function PublicBoardPageBody({
               allowCreate={board.allow_create}
               token={token}
               code={code}
+              authorName={authorName}
+              onIdentify={identify}
               onOpenCard={setOpenCard}
             />
           ))}
         </div>
 
-        <Mural token={token} code={code} />
+        <Mural token={token} code={code} authorName={authorName} onIdentify={identify} />
       </div>
 
       {openCard && (
@@ -167,9 +176,18 @@ function nameStorageKey(token: string) {
   return `public-board-mural-name-${token}`
 }
 
-function Mural({ token, code }: { token: string; code: string | undefined }) {
+function Mural({
+  token,
+  code,
+  authorName,
+  onIdentify,
+}: {
+  token: string
+  code: string | undefined
+  authorName: string
+  onIdentify: (name: string) => void
+}) {
   const [collapsed, setCollapsed] = useState(false)
-  const [authorName, setAuthorName] = useState(() => localStorage.getItem(nameStorageKey(token)) ?? "")
   const [nameInput, setNameInput] = useState("")
   const [body, setBody] = useState("")
   // Mais de um cliente pode escrever no mesmo mural — citação (igual
@@ -210,8 +228,7 @@ function Mural({ token, code }: { token: string; code: string | undefined }) {
   const setName = () => {
     const n = nameInput.trim()
     if (!n) return
-    localStorage.setItem(nameStorageKey(token), n)
-    setAuthorName(n)
+    onIdentify(n)
     setNameInput("")
   }
 
@@ -388,6 +405,8 @@ function Column({
   allowCreate,
   token,
   code,
+  authorName,
+  onIdentify,
   onOpenCard,
 }: {
   column: PublicColumn
@@ -395,6 +414,8 @@ function Column({
   allowCreate: boolean
   token: string
   code: string | undefined
+  authorName: string
+  onIdentify: (name: string) => void
   onOpenCard: (c: PublicCard) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -403,6 +424,7 @@ function Column({
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [flagged, setFlagged] = useState(false)
+  const [nameInput, setNameInput] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
   const create = useCreatePublicCard(token, code)
 
@@ -429,15 +451,23 @@ function Column({
 
   const submit = async () => {
     const t = title.trim()
-    if (!t) return
+    if (!t || !authorName) return
     await create.mutateAsync({
       title: t,
       description: description.trim() || undefined,
       status: column.slug,
       image: image ?? undefined,
       flagged,
+      author_name: authorName,
     })
     reset()
+  }
+
+  const setName = () => {
+    const n = nameInput.trim()
+    if (!n) return
+    onIdentify(n)
+    setNameInput("")
   }
 
   return (
@@ -493,8 +523,34 @@ function Column({
         <div className="border-t border-white/[0.06] p-2">
           {adding ? (
             <div className="space-y-1.5">
+              {!authorName ? (
+                <div className="space-y-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+                  <p className="text-[11px] text-white/40">Diga seu nome pra poder criar um card</p>
+                  <div className="flex gap-1.5">
+                    <input
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && setName()}
+                      placeholder="Seu nome"
+                      className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-brand-400"
+                    />
+                    <button
+                      onClick={setName}
+                      disabled={!nameInput.trim()}
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+                    >
+                      Entrar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-white/40">
+                  Relatando como <span className="text-white/70">{authorName}</span>
+                </p>
+              )}
               <input
-                autoFocus
+                autoFocus={!!authorName}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => {
@@ -558,7 +614,7 @@ function Column({
               <div className="flex gap-1.5">
                 <button
                   onClick={submit}
-                  disabled={!title.trim() || create.isPending}
+                  disabled={!title.trim() || !authorName || create.isPending}
                   className="flex-1 rounded-lg bg-brand-600 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-brand-500 disabled:opacity-40"
                 >
                   {create.isPending ? "Enviando…" : "Criar"}
@@ -637,6 +693,7 @@ function CardDetail({
         <h2 className="mt-1 text-lg font-semibold leading-snug">{card.title}</h2>
 
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-white/50">
+          {card.reporter_name && <span>Relator: {card.reporter_name}</span>}
           {card.assignee_name && <span>Responsável: {card.assignee_name}</span>}
           {card.points != null && <span>{card.points} pts</span>}
           {card.due_date && <span>Prazo: {card.due_date}</span>}

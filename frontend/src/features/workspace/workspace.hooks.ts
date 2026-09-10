@@ -638,6 +638,9 @@ export function useUpdateProject(projectId: string | null) {
       qc.setQueryData(["project", projectId], project)
       // Nome/chave/avatar aparecem na sidebar e no seletor de projeto.
       qc.invalidateQueries({ queryKey: ["projects"] })
+      // Cobre o "Limpar conversa": mural precisa refletir a lista vazia sem
+      // esperar o próximo poll.
+      qc.invalidateQueries({ queryKey: ["board-messages", projectId] })
     },
   })
 }

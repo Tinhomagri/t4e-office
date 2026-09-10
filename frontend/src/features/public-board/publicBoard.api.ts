@@ -33,6 +33,7 @@ export interface PublicCard {
   priority: string
   points: number | null
   assignee_name: string | null
+  reporter_name: string
   labels: string[]
   due_date: string | null
   comments: PublicComment[]
@@ -92,6 +93,7 @@ export async function createPublicCard(
     code?: string
     image?: File
     flagged?: boolean
+    author_name: string
   },
 ): Promise<PublicCard> {
   if (input.image) {
@@ -101,6 +103,7 @@ export async function createPublicCard(
     if (input.status) form.append("status", input.status)
     if (input.code) form.append("code", input.code)
     if (input.flagged) form.append("flagged", "true")
+    form.append("author_name", input.author_name)
     form.append("image", input.image)
     const { data } = await publicApi.post<PublicCard>(`/public/boards/${token}/cards/`, form, {
       headers: { "Content-Type": "multipart/form-data" },

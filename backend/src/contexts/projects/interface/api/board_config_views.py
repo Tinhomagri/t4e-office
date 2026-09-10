@@ -259,6 +259,13 @@ class ProjectDetailView(APIView):
         elif code_action == "revoke":
             project.public_access_code = None
 
+        # Limpar o mural sem mexer no link — ação explícita (botão "Limpar
+        # conversa"), diferente do reset automático que já acontece ao revogar.
+        if request.data.get("clear_messages"):
+            from contexts.projects.infrastructure.django.models import BoardMessageModel
+
+            BoardMessageModel.objects.filter(project=project).delete()
+
         project.save()
         return Response(_ser_project(project))
 

@@ -87,6 +87,9 @@ export interface UpdateProjectInput {
   public_access_code_action?: "generate" | "revoke"
   deadline?: string | null
   mural_notification_excluded_user_ids?: string[]
+  // Apaga as mensagens do mural sem mexer no link — ação explícita, separada
+  // do reset automático que já acontece ao revogar.
+  clear_messages?: boolean
 }
 
 export interface BoardMessageReplyTo {
@@ -117,6 +120,9 @@ export interface Card {
   points: number | null
   assignee_id: string | null
   reporter_id: string | null
+  // Nome de quem relatou pelo link público, sem conta aqui — preenchido só
+  // quando reporter_id é null e o card veio de fora (source="public_link").
+  reporter_name?: string
   sprint_id: string | null
   start_date: string | null
   due_date: string | null
