@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import DatePicker, { registerLocale } from "react-datepicker"
 import { ptBR } from "date-fns/locale"
 
@@ -236,6 +237,11 @@ export function CardDrawer({
   const assignee = members.find((m) => m.user_id === draft.assignee_id)
   const reporter = members.find((m) => m.user_id === draft.reporter_id)
   const parent = draft.parent_id ? (allCards ?? []).find((c) => c.id === draft.parent_id) : undefined
+  // Todas as labels já usadas em algum card do projeto, pra sugerir em vez de
+  // obrigar a pessoa a redigitar uma label que já existe.
+  const labelSuggestions = Array.from(
+    new Set((allCards ?? []).flatMap((c) => c.labels ?? [])),
+  ).sort()
   const createdAgo = timeAgo(card.created_at)
   const updatedAgo = timeAgo(card.updated_at)
 
@@ -460,6 +466,7 @@ export function CardDrawer({
                 value={draft.reporter_id}
                 members={members}
                 person={reporter}
+                externalName={draft.reporter_name}
                 onChange={(v) => {
                   set("reporter_id", v)
                   persist({ reporter_id: v })
@@ -572,6 +579,7 @@ export function CardDrawer({
 
             <Labels
               value={draft.labels ?? []}
+              suggestions={labelSuggestions}
               onChange={(next) => {
                 set("labels", next)
                 persist({ labels: next })
@@ -1605,20 +1613,66 @@ function WorklogSection({ cardId }: { cardId: string }) {
 // ---------------------------------------------------------------------------
 // Labels (chips editáveis no card)
 // ---------------------------------------------------------------------------
-function Labels({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+function Labels({
+  value,
+  suggestions,
+  onChange,
+}: {
+  value: string[]
+  // Labels já usadas em outros cards do projeto — sem isto, a única forma de
+  // reaplicar uma label era lembrar e digitar de novo, letra por letra.
+  suggestions: string[]
+  onChange: (next: string[]) => void
+}) {
   const [input, setInput] = useState("")
+  const [open, setOpen] = useState(false)
+  const [at, setAt] = useState<{ top: number; left: number; width: number } | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  const add = () => {
-    const t = input.trim().toLowerCase()
+  const add = (raw: string) => {
+    const t = raw.trim().toLowerCase()
     if (!t || value.includes(t)) { setInput(""); return }
     onChange([...value, t])
     setInput("")
   }
   const remove = (l: string) => onChange(value.filter((x) => x !== l))
 
+  const query = input.trim().toLowerCase()
+  const options = suggestions
+    .filter((s) => !value.includes(s))
+    .filter((s) => !query || s.includes(query))
+    .slice(0, 8)
+
+  // O card vive num drawer com scroll (`overflow-y-auto`) — um dropdown
+  // posicionado ali dentro nasce cortado pela borda do painel. Mesma solução
+  // do AssigneePicker: portal pro body, posição medida a partir da caixa.
+  const place = () => {
+    const rect = boxRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setAt({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 160) })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      const alvo = event.target as Node
+      if (!boxRef.current?.contains(alvo) && !menuRef.current?.contains(alvo)) setOpen(false)
+    }
+    const reposition = () => setOpen(false)
+    document.addEventListener("mousedown", close)
+    window.addEventListener("scroll", reposition, true)
+    window.addEventListener("resize", reposition)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      window.removeEventListener("scroll", reposition, true)
+      window.removeEventListener("resize", reposition)
+    }
+  }, [open])
+
   return (
     <DetailRow label="Labels">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div ref={boxRef} className="flex flex-wrap items-center gap-1.5">
         {value.map((l) => (
           <span key={l} className="flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
             <Tag className="size-2.5" />
@@ -1631,12 +1685,43 @@ function Labels({ value, onChange }: { value: string[]; onChange: (next: string[
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add() } }}
-          onBlur={add}
+          onFocus={() => { place(); setOpen(true) }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(input) } }}
+          onBlur={() => { add(input); setOpen(false) }}
           placeholder="+ label"
           className="w-20 bg-transparent text-xs text-ink dark:text-paper outline-none placeholder-paper-400"
         />
       </div>
+
+      {createPortal(
+        <AnimatePresence>
+          {open && at && options.length > 0 && (
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: -4, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.97 }}
+              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+              style={{ top: at.top, left: at.left, width: at.width }}
+              className="fixed z-[70] overflow-hidden rounded-lg border border-paper-200 bg-paper py-1 shadow-lg dark:border-ink-700 dark:bg-ink-800"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {options.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => add(s)}
+                  className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-paper-600 hover:bg-paper-100 dark:text-paper-300 dark:hover:bg-ink-700"
+                >
+                  <Tag className="size-2.5 shrink-0 text-brand-500" />
+                  <span className="truncate">{s}</span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </DetailRow>
   )
 }
@@ -2317,17 +2402,29 @@ function PersonSelect({
   value,
   members,
   person,
+  // Nome de quem relatou pelo link público, sem conta aqui — não é um
+  // Member, não dá pra selecionar, só mostrar. `value` continua null nesse
+  // caso; escolher alguém na lista substitui esse nome por um membro real.
+  externalName,
   onChange,
 }: {
   value: string | null
   members: Member[]
   person?: Member
+  externalName?: string | null
   onChange: (v: string | null) => void
 }) {
   return (
     <div className="relative flex items-center gap-2">
       {person ? (
         <ColoredAvatar name={person.name} userId={person.user_id} size="sm" />
+      ) : externalName ? (
+        <span
+          title="Relatado pelo link público, sem conta"
+          className="grid size-6 place-items-center rounded-full bg-paper-200 text-[9px] font-semibold text-paper-600 shrink-0 dark:bg-ink-700 dark:text-paper-300"
+        >
+          {externalName.slice(0, 2).toUpperCase()}
+        </span>
       ) : (
         <span className="grid size-6 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400 shrink-0">
           ?
@@ -2338,7 +2435,7 @@ function PersonSelect({
         onChange={(e) => onChange(e.target.value || null)}
         className={cx(FIELD_INLINE, "h-8")}
       >
-        <option value="">Ninguém</option>
+        <option value="">{externalName || "Ninguém"}</option>
         {members.map((m) => (
           <option key={m.user_id} value={m.user_id}>
             {m.name}
