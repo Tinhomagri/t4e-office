@@ -409,3 +409,15 @@ class DjangoStatusCategoryResolver:
         if not WorkflowStatusModel.objects.filter(project_id=project_id).exists():
             return "done" if status in self._FALLBACK_DONE else "todo"
         return None
+
+    def is_default_status(self, *, project_id: str, status: str) -> bool:
+        return WorkflowStatusModel.objects.filter(
+            project_id=project_id, slug=status, is_default=True
+        ).exists()
+
+    def sprint_entry_status(self, *, project_id: str) -> str | None:
+        return (
+            WorkflowStatusModel.objects.filter(project_id=project_id, is_sprint_entry=True)
+            .values_list("slug", flat=True)
+            .first()
+        )

@@ -591,6 +591,10 @@ class WorkflowStatusModel(models.Model):
     # "Cancelado"/"Não vai fazer" também cai nela — sem uma flag própria, o
     # atalho de concluir card podia cair na coluna errada.
     is_done = models.BooleanField(default=False)
+    # "Card aqui é onde a sprint recebe o que sai do Backlog." Quando um card no
+    # status is_default entra numa sprint, ele pula para esta coluna em vez de
+    # ficar preso no Backlog mesmo já fazendo parte do trabalho planejado.
+    is_sprint_entry = models.BooleanField(default=False)
 
     class Meta:
         db_table = "projects_workflow_status"

@@ -15,3 +15,11 @@ class StatusCategoryResolver(Protocol):
     def category_of(self, *, project_id: str, status: str) -> str | None:
         """Categoria da coluna, ou `None` se o status não existir no projeto."""
         ...
+
+    def is_default_status(self, *, project_id: str, status: str) -> bool:
+        """`True` se `status` é a coluna marcada `is_default` do projeto (Backlog)."""
+        ...
+
+    def sprint_entry_status(self, *, project_id: str) -> str | None:
+        """Slug da coluna `is_sprint_entry` do projeto, ou `None` se nenhuma."""
+        ...

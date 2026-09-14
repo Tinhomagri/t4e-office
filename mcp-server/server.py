@@ -124,7 +124,7 @@ def create_card(
     project_id: str,
     title: str,
     description: str = "",
-    status: str = "todo",
+    status: str | None = None,
     type: str = "feature",
     priority: str = "medium",
     labels: list[str] | None = None,
@@ -133,18 +133,22 @@ def create_card(
     """Cria um card em um projeto do t4e-office.
 
     project_id: id do projeto (obtido via list_projects).
-    status: slug livre, ex. "todo", "in_progress", "done".
+    status: slug da coluna, ex. "todo", "in_progress", "done". Se omitido, o
+        backend usa a coluna default do projeto (Backlog) — não force "todo"
+        aqui, projetos com colunas customizadas não têm esse slug e o card
+        fica órfão, sumindo do quadro.
     type: "feature", "bug", "task", etc conforme choices do sistema.
     priority: "low", "medium", "high", etc.
     """
     payload = {
         "title": title,
         "description": description,
-        "status": status,
         "type": type,
         "priority": priority,
         "labels": labels or [],
     }
+    if status is not None:
+        payload["status"] = status
     return _request(ctx, "POST", f"/api/projects/{project_id}/cards/", json=payload)
 
 

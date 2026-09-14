@@ -140,6 +140,7 @@ class UpdateCard:
             raise PermissionDeniedError("Você não tem acesso a este card.")
 
         before = _repr(card)
+        previous_sprint_id = card.sprint_id
 
         if title is not _UNSET:
             card.title = title
@@ -191,13 +192,34 @@ class UpdateCard:
         if flagged is not _UNSET:
             card.flagged = flagged
 
+        # Entrada na sprint. Card ainda no Backlog (coluna is_default) que ganha
+        # sprint_id pula pra coluna "Pendente" (is_sprint_entry) — sem isso fica
+        # preso no Backlog mesmo já fazendo parte do trabalho planejado. Só
+        # dispara quando o cliente não escolheu status explicitamente e o card
+        # não tinha sprint antes (evita repuxar card que já estava na sprint).
+        if (
+            status is _UNSET
+            and sprint_id is not _UNSET
+            and sprint_id
+            and previous_sprint_id is None
+            and self.status_category_resolver is not None
+            and self.status_category_resolver.is_default_status(
+                project_id=card.project_id, status=card.status
+            )
+        ):
+            entry_status = self.status_category_resolver.sprint_entry_status(
+                project_id=card.project_id
+            )
+            if entry_status:
+                card.status = entry_status
+
         # Desfecho. O explícito do cliente vence; na ausência dele, mover para uma
         # coluna `done` resolve como entregue e sair dela reabre. `resolved_at`
         # anda sempre junto — o domínio recusa um sem o outro.
         if resolution is not _UNSET:
             card.resolution = CardResolution(resolution) if resolution else None
             card.resolved_at = datetime.now(UTC) if card.resolution else None
-        elif status is not _UNSET:
+        elif status is not _UNSET or card.status != before["status"]:
             self._sync_resolution_with_status(card)
 
         # Revalida invariantes do domínio após a mutação.
