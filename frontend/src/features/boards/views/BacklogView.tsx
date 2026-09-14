@@ -44,6 +44,7 @@ import type {
   Sprint,
 } from "@/features/workspace/workspace.types"
 import { cx } from "@/shared/ui/primitives"
+import { toast } from "@/shared/ui/toast"
 
 const PRIORITY_DOT: Record<CardPriority, string> = {
   low: "bg-paper-300",
@@ -116,6 +117,17 @@ export function BacklogView({
   const [newGoal, setNewGoal] = useState("")
   const [completingSprint, setCompletingSprint] = useState<Sprint | null>(null)
   const [epicFilter, setEpicFilter] = useState<string | null>(null)
+  // Seleção múltipla vive só na tela — só as linhas do Backlog viram
+  // selecionáveis, cards já numa sprint saem daqui de outro jeito (drag).
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkTargetSprint, setBulkTargetSprint] = useState("")
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -195,6 +207,24 @@ export function BacklogView({
     })
   }
 
+  // Reaproveita as chamadas de mover um card já existentes (mesmo PATCH do
+  // drag-and-drop) em vez de um endpoint bulk novo — igual ao padrão do
+  // PublishQueuePage pra ações em lote.
+  async function moveSelected() {
+    if (!bulkTargetSprint || selected.size === 0) return
+    const ids = Array.from(selected)
+    const results = await Promise.allSettled(
+      ids.map((cardId) =>
+        updateCard.mutateAsync({ cardId, input: { sprint_id: bulkTargetSprint } }),
+      ),
+    )
+    const failures = results.filter((r) => r.status === "rejected").length
+    if (failures === 0) toast.success(`${ids.length} card${ids.length > 1 ? "s" : ""} movido${ids.length > 1 ? "s" : ""}.`)
+    else if (failures === ids.length) toast.error("Falha ao mover os cards.")
+    else toast.error(`Movidos, mas ${failures} falharam.`)
+    setSelected(new Set())
+  }
+
   function submitSprint() {
     if (!newName.trim()) return
     createSprint.mutate({ name: newName.trim(), goal: newGoal.trim() }, {
@@ -225,6 +255,42 @@ export function BacklogView({
               <Plus className="size-4" /> Nova sprint
             </button>
           </div>
+
+          {/* Barra de ação em lote — entra só quando há cards do backlog selecionados. */}
+          {selected.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-brand-300 bg-brand-50 px-3 py-2 dark:border-brand-500/50 dark:bg-brand-900/30">
+              <span className="text-xs font-medium text-brand-700 dark:text-brand-200">
+                {selected.size} selecionado{selected.size > 1 ? "s" : ""}
+              </span>
+              <label htmlFor="bulk-move-sprint" className="text-xs text-paper-500">
+                Mover selecionados para
+              </label>
+              <select
+                id="bulk-move-sprint"
+                value={bulkTargetSprint}
+                onChange={(e) => setBulkTargetSprint(e.target.value)}
+                className="rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-2 py-1 text-xs text-ink dark:text-paper outline-none focus:border-brand-400"
+              >
+                <option value="">Selecione a sprint</option>
+                {openSprints.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={moveSelected}
+                disabled={!bulkTargetSprint || updateCard.isPending}
+                className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                Mover
+              </button>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="rounded-lg border border-paper-200 dark:border-ink-700 px-3 py-1.5 text-xs font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
 
           {/* Create form */}
           {creating && (
@@ -279,7 +345,13 @@ export function BacklogView({
           ))}
 
           {/* Backlog */}
-          <BacklogSection cards={backlogCards} members={members} onOpen={onOpen} />
+          <BacklogSection
+            cards={backlogCards}
+            members={members}
+            onOpen={onOpen}
+            selected={selected}
+            onToggleSelect={toggleSelect}
+          />
         </div>
 
         {/* Painel de épicos */}
@@ -557,10 +629,14 @@ function BacklogSection({
   cards,
   members,
   onOpen,
+  selected,
+  onToggleSelect,
 }: {
   cards: Card[]
   members: Member[]
   onOpen: (c: Card) => void
+  selected: Set<string>
+  onToggleSelect: (id: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: BACKLOG_DROP })
   const [open, setOpen] = useState(true)
@@ -594,7 +670,14 @@ function BacklogSection({
             <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
               <div className="space-y-1">
                 {cards.map((c) => (
-                  <CardRow key={c.id} card={c} members={members} onOpen={onOpen} />
+                  <CardRow
+                    key={c.id}
+                    card={c}
+                    members={members}
+                    onOpen={onOpen}
+                    selected={selected.has(c.id)}
+                    onToggleSelect={() => onToggleSelect(c.id)}
+                  />
                 ))}
               </div>
             </SortableContext>
@@ -612,11 +695,15 @@ function CardRow({
   members,
   onOpen,
   overlay = false,
+  selected,
+  onToggleSelect,
 }: {
   card: Card
   members: Member[]
   onOpen?: (c: Card) => void
   overlay?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }) {
   // useSortable (e não useDraggable): além de arrastar, registra a linha como
   // alvo de drop — é isso que permite soltar um card ENTRE outros e reordenar.
@@ -636,6 +723,16 @@ function CardRow({
         isDragging && "opacity-30",
       )}
     >
+      {onToggleSelect && (
+        <input
+          type="checkbox"
+          checked={selected ?? false}
+          onChange={onToggleSelect}
+          aria-label={`Selecionar ${card.title}`}
+          className="size-4 shrink-0 cursor-pointer accent-brand-500"
+        />
+      )}
+
       <button
         {...(overlay ? {} : { ...listeners, ...attributes })}
         className="shrink-0 cursor-grab text-paper-200 hover:text-paper-400 active:cursor-grabbing transition-colors"
