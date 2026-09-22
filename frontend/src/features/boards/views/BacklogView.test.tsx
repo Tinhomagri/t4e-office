@@ -12,9 +12,13 @@ vi.mock("@/features/workspace/workspace.api", () => ({
   startSprint: vi.fn(),
   completeSprint: vi.fn(),
   rankCard: vi.fn(),
+  deleteCard: vi.fn(async () => undefined),
+  getMyPermissions: vi.fn(async () => ({ role: "admin", capabilities: ["delete_issue"] })),
 }))
 
-const { updateCard } = await import("@/features/workspace/workspace.api")
+const { updateCard, deleteCard, getMyPermissions } = await import(
+  "@/features/workspace/workspace.api"
+)
 const { BacklogView } = await import("./BacklogView")
 
 function makeCard(over: Partial<Card>): Card {
@@ -71,6 +75,11 @@ function Wrapper({ children }: { children: ReactNode }) {
 describe("<BacklogView /> seleção múltipla", () => {
   beforeEach(() => {
     vi.mocked(updateCard).mockClear()
+    vi.mocked(deleteCard).mockClear()
+    vi.mocked(getMyPermissions).mockResolvedValue({
+      role: "admin",
+      capabilities: ["delete_issue"],
+    } as Awaited<ReturnType<typeof getMyPermissions>>)
   })
 
   it("mostra a barra de ação só depois de selecionar algum card do backlog", async () => {
@@ -131,5 +140,54 @@ describe("<BacklogView /> seleção múltipla", () => {
 
     expect(screen.queryByText(/selecionado/)).not.toBeInTheDocument()
     expect(updateCard).not.toHaveBeenCalled()
+  })
+
+  it("deletar em massa exige confirmação e chama deleteCard por card selecionado", async () => {
+    const cards = [makeCard({ id: "c1", title: "Card um" }), makeCard({ id: "c2", title: "Card dois" })]
+    render(
+      <Wrapper>
+        <BacklogView projectId="p1" cards={cards} sprints={SPRINTS} members={[]} onOpen={() => {}} />
+      </Wrapper>,
+    )
+
+    await screen.findByText("Card um")
+    fireEvent.click(screen.getByRole("checkbox", { name: /selecionar card um/i }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /selecionar card dois/i }))
+
+    fireEvent.click(await screen.findByRole("button", { name: /^deletar$/i }))
+    // Modal aberto, mas nada apagado antes de digitar a confirmação.
+    expect(screen.getByText(/Deletar 2 cards\?/)).toBeInTheDocument()
+    expect(deleteCard).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByPlaceholderText("deletar"), { target: { value: "deletar" } })
+    fireEvent.click(screen.getByRole("button", { name: /deletar cards/i }))
+
+    await vi.waitFor(() => {
+      expect(deleteCard).toHaveBeenCalledTimes(2)
+    })
+    expect(deleteCard).toHaveBeenCalledWith("c1")
+    expect(deleteCard).toHaveBeenCalledWith("c2")
+    await vi.waitFor(() => {
+      expect(screen.queryByText(/selecionado/)).not.toBeInTheDocument()
+    })
+  })
+
+  it("sem a capacidade delete_issue o botão de deletar nem aparece", async () => {
+    vi.mocked(getMyPermissions).mockResolvedValue({
+      role: "developer",
+      capabilities: ["edit_issue"],
+    } as Awaited<ReturnType<typeof getMyPermissions>>)
+    const cards = [makeCard({ id: "c1", title: "Card um" })]
+    render(
+      <Wrapper>
+        <BacklogView projectId="p1" cards={cards} sprints={SPRINTS} members={[]} onOpen={() => {}} />
+      </Wrapper>,
+    )
+
+    await screen.findByText("Card um")
+    fireEvent.click(screen.getByRole("checkbox", { name: /selecionar card um/i }))
+
+    expect(screen.getByText(/1 selecionado/)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^deletar$/i })).not.toBeInTheDocument()
   })
 })

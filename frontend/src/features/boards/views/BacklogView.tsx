@@ -25,6 +25,7 @@ import {
   Plus,
   Square,
   Target,
+  Trash2,
   Zap,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -32,7 +33,9 @@ import { useEffect, useMemo, useState } from "react"
 import {
   useCompleteSprint,
   useCreateSprint,
+  useDeleteCard,
   useEpics,
+  useProjectPermissions,
   useRankCard,
   useStartSprint,
   useUpdateCard,
@@ -43,7 +46,7 @@ import type {
   Member,
   Sprint,
 } from "@/features/workspace/workspace.types"
-import { cx } from "@/shared/ui/primitives"
+import { Button, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 
 const PRIORITY_DOT: Record<CardPriority, string> = {
@@ -102,6 +105,8 @@ export function BacklogView({
   const completeSprint = useCompleteSprint(projectId)
   const createSprint = useCreateSprint(projectId)
   const rankCard = useRankCard(projectId)
+  const deleteCard = useDeleteCard(projectId)
+  const { can } = useProjectPermissions(projectId)
   const { data: epics } = useEpics(projectId)
 
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -121,6 +126,7 @@ export function BacklogView({
   // selecionáveis, cards já numa sprint saem daqui de outro jeito (drag).
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkTargetSprint, setBulkTargetSprint] = useState("")
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -225,6 +231,24 @@ export function BacklogView({
     setSelected(new Set())
   }
 
+  // Mesmo fan-out do moveSelected, só que com DELETE. Card que já sumiu
+  // (alguém deletou em outra aba) não conta como falha: o 404 significa que o
+  // estado desejado já vale.
+  async function deleteSelected() {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    const results = await Promise.allSettled(ids.map((cardId) => deleteCard.mutateAsync(cardId)))
+    const failures = results.filter(
+      (r) => r.status === "rejected" && (r.reason as { response?: { status?: number } })?.response?.status !== 404,
+    ).length
+    const ok = ids.length - failures
+    if (failures === 0) toast.success(`${ids.length} card${ids.length > 1 ? "s" : ""} deletado${ids.length > 1 ? "s" : ""}.`)
+    else if (ok === 0) toast.error("Falha ao deletar os cards.")
+    else toast.error(`${ok} deletados, ${failures} falharam.`)
+    setSelected(new Set())
+    setConfirmingBulkDelete(false)
+  }
+
   function submitSprint() {
     if (!newName.trim()) return
     createSprint.mutate({ name: newName.trim(), goal: newGoal.trim() }, {
@@ -283,6 +307,16 @@ export function BacklogView({
               >
                 Mover
               </button>
+              {can("delete_issue") && (
+                <button
+                  onClick={() => setConfirmingBulkDelete(true)}
+                  disabled={deleteCard.isPending}
+                  className="flex items-center gap-1 rounded-lg border border-danger-300 px-3 py-1.5 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-50 dark:border-danger-500/50 dark:text-danger-400 dark:hover:bg-danger-500/10"
+                >
+                  <Trash2 className="size-3.5" />
+                  Deletar
+                </button>
+              )}
               <button
                 onClick={() => setSelected(new Set())}
                 className="rounded-lg border border-paper-200 dark:border-ink-700 px-3 py-1.5 text-xs font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800"
@@ -380,7 +414,73 @@ export function BacklogView({
           }}
         />
       )}
+
+      {confirmingBulkDelete && (
+        <BulkDeleteModal
+          count={selected.size}
+          isDeleting={deleteCard.isPending}
+          onCancel={() => setConfirmingBulkDelete(false)}
+          onConfirm={deleteSelected}
+        />
+      )}
     </DndContext>
+  )
+}
+
+// Confirmação em lote: mesma exigência de digitar "deletar" do drawer, porque
+// aqui some mais de um card de uma vez e não tem lixeira pra desfazer.
+function BulkDeleteModal({
+  count,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  count: number
+  isDeleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const [confirmText, setConfirmText] = useState("")
+  const canConfirm = confirmText.trim().toLowerCase() === "deletar"
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div
+        className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm"
+        onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+      />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-paper-200 bg-white p-5 shadow-xl dark:border-ink-700 dark:bg-ink-800">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink dark:text-paper">
+          <Trash2 className="size-4 text-danger-500" />
+          Deletar {count} card{count > 1 ? "s" : ""}?
+        </h3>
+        <p className="mt-2 text-sm text-paper-500">
+          Essa ação é definitiva e não pode ser desfeita. Pra confirmar,
+          digite <span className="font-semibold text-ink dark:text-paper">deletar</span>.
+        </p>
+        <input
+          autoFocus
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder="deletar"
+          className="mt-3 w-full rounded-lg border border-paper-300 bg-paper px-3 py-2 text-sm outline-none focus:border-danger-400 dark:border-ink-700 dark:bg-ink-900"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={isDeleting}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={onConfirm}
+            disabled={!canConfirm || isDeleting}
+            loading={isDeleting}
+          >
+            Deletar {count > 1 ? "cards" : "card"}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
