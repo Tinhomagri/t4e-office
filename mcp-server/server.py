@@ -152,5 +152,71 @@ def create_card(
     return _request(ctx, "POST", f"/api/projects/{project_id}/cards/", json=payload)
 
 
+@mcp.tool()
+def list_cards(project_id: str, ctx: Context) -> list[dict]:
+    """Lista os cards de um projeto (id, ref, title, status, priority, labels...).
+
+    project_id: id do projeto (obtido via list_projects).
+    Usa pra descobrir o `id` do card que vai ser alterado com update_card ou
+    removido com delete_card — as duas tools pedem o id (uuid), não o ref.
+    """
+    return _request(ctx, "GET", f"/api/projects/{project_id}/cards/")
+
+
+@mcp.tool()
+def update_card(
+    card_id: str,
+    title: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    type: str | None = None,
+    priority: str | None = None,
+    labels: list[str] | None = None,
+    assignee_id: str | None = None,
+    sprint_id: str | None = None,
+    points: int | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Altera campos de um card existente (PATCH parcial).
+
+    card_id: id (uuid) do card, obtido via list_cards — não é o ref "PRJ-12".
+    Campo omitido fica como está; só o que for informado é enviado.
+    status: slug de uma coluna que exista no workflow do projeto.
+    Quem não tem a capacidade edit_issue no projeto só consegue alterar card em
+    que é o relator, e apenas title/description/labels/priority — mandar
+    qualquer outro campo nesse caso devolve 403 e nada é salvo.
+    """
+    payload = {
+        key: value
+        for key, value in (
+            ("title", title),
+            ("description", description),
+            ("status", status),
+            ("type", type),
+            ("priority", priority),
+            ("labels", labels),
+            ("assignee_id", assignee_id),
+            ("sprint_id", sprint_id),
+            ("points", points),
+        )
+        if value is not None
+    }
+    if not payload:
+        raise ValueError("Informe ao menos um campo para alterar.")
+    return _request(ctx, "PATCH", f"/api/cards/{card_id}/", json=payload)
+
+
+@mcp.tool()
+def delete_card(card_id: str, ctx: Context) -> dict:
+    """Apaga um card em definitivo (não tem lixeira — não dá pra desfazer).
+
+    card_id: id (uuid) do card, obtido via list_cards.
+    Exige a capacidade delete_issue no projeto (admin ou concessão explícita);
+    sem ela a API devolve 403. Confirme com a pessoa antes de chamar.
+    """
+    _request(ctx, "DELETE", f"/api/cards/{card_id}/")
+    return {"deleted": card_id}
+
+
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")

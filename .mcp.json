@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "t4e-office": {
+      "command": "mcp-server/.venv/bin/python3",
+      "args": ["mcp-server/server.py"]
+    }
+  }
+}

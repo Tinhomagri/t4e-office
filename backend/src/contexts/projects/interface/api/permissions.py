@@ -21,7 +21,12 @@ from contexts.projects.infrastructure.django.models import (
     CardModel,
     ProjectModel,
 )
-from contexts.projects.interface.api.capabilities import can_browse, capabilities_for
+from contexts.projects.interface.api.capabilities import (
+    BROWSE,
+    EDIT_ISSUE,
+    can_browse,
+    capabilities_for,
+)
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 # Hierarquia de papéis (maior número = mais poder). Reservado para granularidade.
@@ -102,3 +107,40 @@ def assert_card_capability(
     if capability not in capabilities_for(card.project, user_id):
         raise PermissionDeniedError("Você não tem permissão para esta ação.")
     return card
+
+
+# Campos que o relator do card pode mexer mesmo sem EDIT_ISSUE. De propósito
+# não inclui status/assignee/sprint/points: quem abriu o chamado corrige o que
+# pediu, não mexe no fluxo de trabalho do time.
+REPORTER_EDITABLE_FIELDS = frozenset({"title", "description", "labels", "priority"})
+
+
+def assert_card_edit(
+    *, card_id: str, user_id: str, fields: set[str] | None = None
+) -> CardModel:
+    """Garante permissão de editar o card. Retorna o card.
+
+    Dois caminhos: a capacidade EDIT_ISSUE (time do projeto) ou ser o relator
+    do próprio card — o cliente que registrou o chamado consegue corrigir o
+    que escreveu, limitado a ``REPORTER_EDITABLE_FIELDS``.
+    """
+    card = (
+        CardModel.objects.filter(id=card_id).select_related("project").first()
+    )
+    if card is None:
+        raise NotFoundError("Card não encontrado.")
+    granted = capabilities_for(card.project, user_id)
+    if EDIT_ISSUE in granted:
+        return card
+    # BROWSE garante que a pessoa ainda enxerga o board; relator de um projeto
+    # que ela perdeu o acesso não edita nada.
+    if BROWSE in granted and str(card.reporter_id) == str(user_id):
+        blocked = set(fields or ()) - REPORTER_EDITABLE_FIELDS
+        if not blocked:
+            return card
+        raise PermissionDeniedError(
+            "Como relator do card você pode alterar apenas: "
+            + ", ".join(sorted(REPORTER_EDITABLE_FIELDS))
+            + "."
+        )
+    raise PermissionDeniedError("Você não tem permissão para esta ação.")

@@ -29,6 +29,7 @@ from contexts.projects.interface.api.jql import parse_jql
 from contexts.projects.interface.api.notification_views import notify
 from contexts.projects.interface.api.permissions import (
     assert_card_capability,
+    assert_card_edit,
     assert_project_capability,
     assert_project_member,
 )
@@ -409,8 +410,10 @@ class CardDetailView(APIView):
     def patch(self, request: Request, card_id: str) -> Response:
         serializer = UpdateCardSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        assert_card_capability(
-            card_id=str(card_id), user_id=str(request.user.id), capability=caps.EDIT_ISSUE
+        assert_card_edit(
+            card_id=str(card_id),
+            user_id=str(request.user.id),
+            fields=set(serializer.validated_data),
         )
         projects, cards, access = _deps()
 
