@@ -28,7 +28,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   useCompleteSprint,
@@ -132,6 +132,17 @@ export function BacklogView({
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  // Tudo já marcado: desmarca. Senão (nenhum ou parte): marca todos.
+  const toggleSelectAll = (ids: string[]) =>
+    setSelected((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id))
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (allSelected) next.delete(id)
+        else next.add(id)
+      }
       return next
     })
 
@@ -385,6 +396,7 @@ export function BacklogView({
             onOpen={onOpen}
             selected={selected}
             onToggleSelect={toggleSelect}
+            onToggleSelectAll={() => toggleSelectAll(backlogCards.map((c) => c.id))}
           />
         </div>
 
@@ -731,16 +743,27 @@ function BacklogSection({
   onOpen,
   selected,
   onToggleSelect,
+  onToggleSelectAll,
 }: {
   cards: Card[]
   members: Member[]
   onOpen: (c: Card) => void
   selected: Set<string>
   onToggleSelect: (id: string) => void
+  onToggleSelectAll: () => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: BACKLOG_DROP })
   const [open, setOpen] = useState(true)
   const total = sumPoints(cards)
+  const selectedCount = cards.filter((c) => selected.has(c.id)).length
+  const allSelected = cards.length > 0 && selectedCount === cards.length
+  // `indeterminate` não existe como atributo HTML — só via propriedade do DOM.
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedCount > 0 && !allSelected
+    }
+  }, [selectedCount, allSelected])
 
   return (
     <section
@@ -754,6 +777,16 @@ function BacklogSection({
         <button onClick={() => setOpen((o) => !o)} className="text-paper-400 hover:text-ink dark:hover:text-paper transition-colors">
           {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
         </button>
+        <input
+          ref={selectAllRef}
+          type="checkbox"
+          checked={allSelected}
+          onChange={onToggleSelectAll}
+          disabled={cards.length === 0}
+          aria-label="Selecionar todos os cards do backlog"
+          title={allSelected ? "Desmarcar todos" : "Selecionar todos"}
+          className="size-4 shrink-0 cursor-pointer accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+        />
         <span className="font-bold text-ink dark:text-paper">Backlog</span>
         <span className="text-xs text-paper-400">{cards.length} cards</span>
         {total > 0 && (

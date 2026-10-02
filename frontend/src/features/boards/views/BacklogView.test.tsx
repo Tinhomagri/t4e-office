@@ -190,4 +190,46 @@ describe("<BacklogView /> seleção múltipla", () => {
     expect(screen.getByText(/1 selecionado/)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^deletar$/i })).not.toBeInTheDocument()
   })
+
+  it("checkbox do cabeçalho seleciona e desmarca todos os cards do backlog", async () => {
+    const cards = [
+      makeCard({ id: "c1", title: "Card um" }),
+      makeCard({ id: "c2", title: "Card dois" }),
+      makeCard({ id: "c3", title: "Card na sprint", sprint_id: "s1" }),
+    ]
+    render(
+      <Wrapper>
+        <BacklogView projectId="p1" cards={cards} sprints={SPRINTS} members={[]} onOpen={() => {}} />
+      </Wrapper>,
+    )
+
+    await screen.findByText("Card um")
+    const todos = screen.getByRole("checkbox", { name: /selecionar todos/i })
+
+    fireEvent.click(todos)
+    // Só os do backlog — card que já está numa sprint não entra na seleção.
+    expect(screen.getByText(/2 selecionados/)).toBeInTheDocument()
+    expect(screen.getByRole("checkbox", { name: /selecionar card um/i })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: /selecionar card dois/i })).toBeChecked()
+
+    fireEvent.click(todos)
+    expect(screen.queryByText(/selecionado/)).not.toBeInTheDocument()
+  })
+
+  it("com seleção parcial o checkbox do cabeçalho fica indeterminado e completa a seleção", async () => {
+    const cards = [makeCard({ id: "c1", title: "Card um" }), makeCard({ id: "c2", title: "Card dois" })]
+    render(
+      <Wrapper>
+        <BacklogView projectId="p1" cards={cards} sprints={SPRINTS} members={[]} onOpen={() => {}} />
+      </Wrapper>,
+    )
+
+    await screen.findByText("Card um")
+    fireEvent.click(screen.getByRole("checkbox", { name: /selecionar card um/i }))
+    const todos = screen.getByRole("checkbox", { name: /selecionar todos/i }) as HTMLInputElement
+    expect(todos.indeterminate).toBe(true)
+
+    fireEvent.click(todos)
+    expect(screen.getByText(/2 selecionados/)).toBeInTheDocument()
+  })
 })
