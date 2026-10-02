@@ -13,7 +13,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contexts.projects.infrastructure.django.models import CardModel, SprintModel
-from contexts.projects.infrastructure.lexorank import rank_between
+from contexts.projects.infrastructure.lexorank import (
+    REBALANCE_AT_LENGTH,
+    rank_between,
+    rebalance_ranks,
+)
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.notification_views import notify
 from contexts.projects.interface.api.permissions import (
@@ -233,12 +237,21 @@ class CardRankView(APIView):
                 raise ValidationError("Card vizinho inválido.")
             return neighbor.rank
 
-        prev_rank = _rank_of(request.data.get("before_id"))
-        next_rank = _rank_of(request.data.get("after_id"))
-        try:
-            card.rank = rank_between(prev_rank, next_rank)
-        except ValueError as exc:
-            raise ValidationError("Posição inválida: vizinhos fora de ordem.") from exc
+        def _rank_for_position() -> str:
+            prev_rank = _rank_of(request.data.get("before_id"))
+            next_rank = _rank_of(request.data.get("after_id"))
+            try:
+                return rank_between(prev_rank, next_rank)
+            except ValueError as exc:
+                raise ValidationError("Posição inválida: vizinhos fora de ordem.") from exc
+
+        rank = _rank_for_position()
+        # Arrastar várias vezes pro mesmo vão alonga o rank até estourar a
+        # coluna — rebalanceia o projeto e recalcula com os vizinhos novos.
+        if len(rank) > REBALANCE_AT_LENGTH:
+            rebalance_ranks(str(card.project_id))
+            rank = _rank_for_position()
+        card.rank = rank
         card.save(update_fields=["rank"])
         return Response({"id": str(card.id), "rank": card.rank})
 

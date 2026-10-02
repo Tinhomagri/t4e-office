@@ -246,6 +246,72 @@ def test_rerank_entre_vizinhos(scenario):
     assert a.rank < c.rank < b.rank
 
 
+def test_criar_card_com_topo_no_limite_do_rank_rebalanceia(scenario):
+    """Reprodução do 500 no board Grupo Querino: card novo sempre entra no
+    topo (`rank_between("", topo)`), o que aproxima o rank de "0" e alonga a
+    string ~1 caractere a cada 5 criações. Depois de ~320 cards o topo chegou
+    a 64 chars ("000…01") e o próximo rank teria 65 — maior que o
+    `max_length=64` da coluna, o Postgres recusava o INSERT. (SQLite não
+    valida tamanho, por isso o teste confere o comprimento na mão.)"""
+    from contexts.projects.infrastructure.lexorank import MAX_RANK_LENGTH
+
+    p = scenario["project"]
+    client = scenario["client"]
+    topo = _card(p, 1, status="todo", rank="0" * 63 + "1")
+    meio = _card(p, 2, status="todo", rank="0" * 63 + "2")
+    fim = _card(p, 3, status="todo", rank="i")
+
+    resp = client.post(
+        f"/api/projects/{p.id}/cards/", {"title": "Novo", "status": "todo"}, format="json"
+    )
+    assert resp.status_code == 201
+    novo = CardModel.objects.get(id=resp.json()["id"])
+    for c in (topo, meio, fim):
+        c.refresh_from_db()
+    ranks = [novo.rank, topo.rank, meio.rank, fim.rank]
+    assert ranks == sorted(ranks)  # novo no topo, ordem antiga preservada
+    assert len(set(ranks)) == 4
+    assert all(len(r) <= MAX_RANK_LENGTH for r in ranks)
+
+
+def test_muitos_cards_no_topo_nunca_estouram_o_rank(scenario):
+    """Sem rebalanceamento, ~320 criações seguidas no topo bastam pra passar
+    de 64 chars — a trava não pode depender de quantos cards o projeto já
+    criou."""
+    from contexts.projects.infrastructure.lexorank import MAX_RANK_LENGTH, rank_at_top
+
+    p = scenario["project"]
+    for n in range(1, 401):
+        _card(p, n, rank=rank_at_top(str(p.id)))
+    ranks = list(CardModel.objects.filter(project=p).order_by("number").values_list("rank", flat=True))
+    assert max(len(r) for r in ranks) <= MAX_RANK_LENGTH
+    # Cada card novo continua entrando acima do anterior.
+    assert ranks == sorted(ranks, reverse=True)
+    assert len(set(ranks)) == len(ranks)
+
+
+def test_rerank_entre_vizinhos_colados_rebalanceia(scenario):
+    """Arrastar card repetidamente pro mesmo vão também alonga o rank; no
+    limite tem que rebalancear em vez de gravar rank grande demais."""
+    from contexts.projects.infrastructure.lexorank import MAX_RANK_LENGTH
+
+    p = scenario["project"]
+    client = scenario["client"]
+    a = _card(p, 1, rank="0" * 63 + "1")
+    b = _card(p, 2, rank="0" * 63 + "2")
+    c = _card(p, 3, rank="z")
+    resp = client.post(
+        f"/api/cards/{c.id}/rank/",
+        {"before_id": str(a.id), "after_id": str(b.id)},
+        format="json",
+    )
+    assert resp.status_code == 200
+    for x in (a, b, c):
+        x.refresh_from_db()
+    assert a.rank < c.rank < b.rank
+    assert all(len(x.rank) <= MAX_RANK_LENGTH for x in (a, b, c))
+
+
 def test_children_de_epico_e_subtarefas(scenario):
     p = scenario["project"]
     client = scenario["client"]

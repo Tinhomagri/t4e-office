@@ -8,6 +8,13 @@ entre `a` e `b` na ordem lexicográfica.
 ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
 _BASE = len(ALPHABET)
 
+# Tamanho da coluna `CardModel.rank` — rank maior que isto o Postgres recusa.
+MAX_RANK_LENGTH = 64
+# Inserir sempre no mesmo vão (ex.: topo da lista) alonga o rank ~1 char a
+# cada 5 inserções. Passou disto, redistribui os ranks do projeto antes de
+# chegar perto do limite da coluna.
+REBALANCE_AT_LENGTH = 32
+
 
 def rank_between(prev: str = "", nxt: str = "") -> str:
     """Rank estritamente entre `prev` e `nxt` (strings vazias = extremos).
@@ -40,6 +47,14 @@ def rank_at_top(project_id: str) -> str:
     precisam do mesmo comportamento; ver `repositories_impl.py` e
     `public_views.py`).
     """
+    rank = rank_between("", _top_rank(project_id))
+    if len(rank) > REBALANCE_AT_LENGTH:
+        rebalance_ranks(project_id)
+        rank = rank_between("", _top_rank(project_id))
+    return rank
+
+
+def _top_rank(project_id: str) -> str:
     from contexts.projects.infrastructure.django.models import CardModel
 
     first = (
@@ -49,7 +64,33 @@ def rank_at_top(project_id: str) -> str:
         .values_list("rank", flat=True)
         .first()
     )
-    return rank_between("", first or "")
+    return first or ""
+
+
+def rebalance_ranks(project_id: str) -> int:
+    """Redistribui os ranks do projeto igualmente espaçados, mantendo a ordem.
+
+    Existe porque card novo entra sempre no topo: cada criação pega o meio
+    entre "" e o rank do topo, que converge pra "0…" e cresce sem parar —
+    no board Grupo Querino o topo chegou a 64 chars e toda criação passou a
+    dar 500 (rank maior que a coluna). Rebalancear zera esse crescimento.
+    Card com `rank=""` fica de fora (é papel do `backfill_missing_ranks`).
+    """
+    from django.db import transaction
+
+    from contexts.projects.infrastructure.django.models import CardModel
+
+    with transaction.atomic():
+        cards = list(
+            CardModel.objects.select_for_update()
+            .filter(project_id=project_id)
+            .exclude(rank="")
+            .order_by("rank", "number")
+        )
+        for card, rank in zip(cards, initial_rank_sequence(len(cards)), strict=True):
+            card.rank = rank
+        CardModel.objects.bulk_update(cards, ["rank"], batch_size=500)
+    return len(cards)
 
 
 def backfill_missing_ranks(card_model, project_id: str) -> int:
