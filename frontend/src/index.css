@@ -28,9 +28,16 @@
 
 /* Câmera desligada mostra a foto de perfil da pessoa (ver CameraTile), não o
    bonequinho genérico da lib — que some aqui. A faixa com nome e mudo sobe
-   acima dessa camada pra continuar legível por cima do avatar. */
+   acima dessa camada pra continuar legível por cima do avatar.
+
+   `display` e não `opacity`: a lib acende o bonequinho com
+   `.lk-participant-tile[data-video-muted='true'][data-source='camera']
+   .lk-participant-placeholder { opacity: 1 }`, que tem especificidade maior
+   que qualquer seletor razoável daqui. Zerar a opacidade perdia a disputa e o
+   boneco aparecia atrás do avatar; `display: none` não é sobrescrito porque a
+   regra da lib só mexe em opacidade. */
 .meet-video-stage .lk-participant-placeholder {
-  opacity: 0;
+  display: none;
 }
 
 .meet-video-stage .lk-participant-metadata {

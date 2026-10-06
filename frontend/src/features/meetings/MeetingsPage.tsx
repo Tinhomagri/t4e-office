@@ -1513,10 +1513,10 @@ function CameraTile({
             <img
               src={avatar}
               alt={name}
-              className="aspect-square h-[36%] max-h-24 min-h-10 rounded-full object-cover shadow-lg ring-2 ring-white/10"
+              className="aspect-square h-[30%] max-h-40 min-h-10 rounded-full object-cover shadow-lg ring-2 ring-white/10"
             />
           ) : (
-            <span className="grid aspect-square h-[36%] max-h-24 min-h-10 place-items-center rounded-full bg-brand-500/25 text-base font-semibold text-brand-200 ring-2 ring-white/10">
+            <span className="grid aspect-square h-[30%] max-h-40 min-h-10 place-items-center rounded-full bg-brand-500/25 text-lg font-semibold text-brand-200 ring-2 ring-white/10">
               {initialsOf(name)}
             </span>
           )}
