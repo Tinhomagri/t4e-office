@@ -695,6 +695,17 @@ export async function uploadAttachmentVersion(
   return data
 }
 
+/**
+ * Um card pelo id, sem saber de que projeto ele é.
+ *
+ * Serve para resolver um deep-link `?card=` que chegou sem `?project=` —
+ * notificação antiga, link colado à mão — e descobrir qual board abrir.
+ */
+export async function getCard(cardId: string): Promise<Card> {
+  const { data } = await api.get<Card>(`/cards/${cardId}/`)
+  return data
+}
+
 // ---- Marketing Hub: métricas de desempenho por peça ----
 export async function getCardMetrics(cardId: string): Promise<CardMetrics> {
   const { data } = await api.get<CardMetrics>(`/cards/${cardId}/metrics/`)
