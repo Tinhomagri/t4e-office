@@ -247,6 +247,136 @@ export const RADIUS_TOKENS: TextToken[] = [
   { key: "3xl", cssVar: "--wl-radius-3xl", label: "Modais", value: "0.75rem" },
 ]
 
+/**
+ * O que a pessoa realmente escolhe.
+ *
+ * `COLOR_GROUPS` acima é a lista completa de tokens — útil para quem quer
+ * mexer num detalhe, inútil para quem só quer trocar a cor dos botões. Aqui
+ * cada entrada é um ELEMENTO da tela ("Botões e links", "Fundo da página") e
+ * sabe quais tokens pintar. É esta lista que a tela de Marca mostra primeiro.
+ */
+export type ElementControl = {
+  id: string
+  label: string
+  hint: string
+  /** Tokens pintados chapados com a cor escolhida. */
+  tokens: string[]
+  /**
+   * Família cuja régua 50..900 é DERIVADA da cor escolhida (ver
+   * `deriveScale`). Escolher o azul da marca não deveria obrigar ninguém a
+   * inventar mais dez tons dele à mão.
+   */
+  scale?: string
+}
+
+export type ElementGroup = {
+  id: string
+  label: string
+  hint: string
+  controls: ElementControl[]
+}
+
+export const ELEMENT_GROUPS: ElementGroup[] = [
+  {
+    id: "marca",
+    label: "Marca",
+    hint: "A cor de ação do produto: botões, links, abas ativas e destaques.",
+    controls: [
+      {
+        id: "brand",
+        label: "Cor principal",
+        hint: "Os tons mais claros e mais escuros saem desta cor.",
+        tokens: [],
+        scale: "brand",
+      },
+    ],
+  },
+  {
+    id: "claro",
+    label: "Tema claro",
+    hint: "Como o produto aparece de dia.",
+    controls: [
+      { id: "canvas", label: "Fundo da página", hint: "Atrás de tudo.", tokens: ["canvas", "paper-50", "neutral-50"] },
+      { id: "surface", label: "Cartões e painéis", hint: "Caixas que ficam sobre o fundo.", tokens: ["paper-DEFAULT", "neutral-0"] },
+      { id: "divider", label: "Divisórias", hint: "Linhas finas entre seções.", tokens: ["paper-100", "neutral-100"] },
+      { id: "border", label: "Bordas", hint: "Contorno de cartões e campos.", tokens: ["paper-200", "paper-300", "neutral-200"] },
+      { id: "text", label: "Texto principal", hint: "Títulos e corpo.", tokens: ["ink-DEFAULT", "neutral-900"] },
+      { id: "muted", label: "Texto secundário", hint: "Legendas e rótulos.", tokens: ["paper-500", "paper-600", "neutral-500"] },
+      { id: "faint", label: "Texto discreto", hint: "Dicas e contagens.", tokens: ["paper-400", "neutral-400"] },
+    ],
+  },
+  {
+    id: "escuro",
+    label: "Tema escuro",
+    hint: "Também usado nas telas de chamada, que são sempre escuras.",
+    controls: [
+      { id: "dark-canvas", label: "Fundo da página", hint: "Atrás de tudo.", tokens: ["ink-950"] },
+      { id: "dark-surface", label: "Painéis e colunas", hint: "Sidebar, colunas do quadro.", tokens: ["ink-900"] },
+      { id: "dark-raised", label: "Cartões e campos", hint: "Caixas sobre o painel.", tokens: ["ink-800"] },
+      { id: "dark-overlay", label: "Menus e modais", hint: "O que abre por cima.", tokens: ["ink-750"] },
+      { id: "dark-border", label: "Bordas", hint: "Contorno no escuro.", tokens: ["ink-700", "ink-600", "ink-500"] },
+      { id: "dark-text", label: "Texto", hint: "Corpo no escuro.", tokens: ["ink-200"] },
+      { id: "dark-muted", label: "Texto discreto", hint: "Legendas no escuro.", tokens: ["ink-300", "ink-400"] },
+    ],
+  },
+  {
+    id: "status",
+    label: "Avisos",
+    hint: "As três cores que o produto usa para dar notícia.",
+    controls: [
+      { id: "success", label: "Sucesso", hint: "Concluído, salvo, no prazo.", tokens: ["success", "green-500"] },
+      { id: "warning", label: "Atenção", hint: "Prazo chegando, limite estourando.", tokens: ["warning", "orange-500"] },
+      { id: "danger", label: "Erro", hint: "Falha, atraso, exclusão.", tokens: ["danger", "red-500"] },
+    ],
+  },
+]
+
+/** Tom mais claro (`#FFFFFF`) ou mais escuro (`#000000`) da mesma cor. */
+export function mixHex(hex: string, target: "#FFFFFF" | "#000000", amount: number): string {
+  const from = hexToChannels(hex)
+  const to = hexToChannels(target)
+  if (!from || !to) return hex
+  const a = from.split(" ").map(Number)
+  const b = to.split(" ").map(Number)
+  const mixed = a.map((channel, i) => Math.round(channel + (b[i] - channel) * amount))
+  return `#${mixed.map((n) => n.toString(16).padStart(2, "0")).join("")}`.toUpperCase()
+}
+
+/**
+ * Régua 50..900 a partir de uma cor só.
+ *
+ * As proporções seguem a distância entre os tons da paleta original, então uma
+ * marca nova cai na mesma cadência de contraste que o produto já usava — 500 é
+ * a cor escolhida, abaixo clareia para fundos, acima escurece para hover e
+ * texto sobre claro.
+ */
+const SCALE_STEPS: [suffix: string, target: "#FFFFFF" | "#000000", amount: number][] = [
+  ["50", "#FFFFFF", 0.92],
+  ["100", "#FFFFFF", 0.8],
+  ["200", "#FFFFFF", 0.55],
+  ["300", "#FFFFFF", 0.38],
+  ["400", "#FFFFFF", 0.18],
+  ["500", "#FFFFFF", 0],
+  ["600", "#000000", 0.18],
+  ["700", "#000000", 0.45],
+  ["800", "#000000", 0.5],
+  ["900", "#000000", 0.58],
+]
+
+export function deriveScale(prefix: string, base: string): Record<string, string> {
+  const out: Record<string, string> = { [`${prefix}-DEFAULT`]: base.toUpperCase() }
+  for (const [suffix, target, amount] of SCALE_STEPS) {
+    out[`${prefix}-${suffix}`] = mixHex(base, target, amount)
+  }
+  return out
+}
+
+/** Valor atual de um controle: o que foi escolhido, ou a cor de fábrica. */
+export function elementDefault(control: ElementControl): string {
+  const key = control.scale ? `${control.scale}-500` : control.tokens[0]
+  return COLOR_TOKENS.find((t) => t.key === key)?.value ?? "#000000"
+}
+
 export function colorCssVar(key: string): string {
   return `--c-${key}`
 }

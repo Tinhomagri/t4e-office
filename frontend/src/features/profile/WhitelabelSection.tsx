@@ -1,11 +1,14 @@
-import { Download, Paintbrush, RotateCcw, Save, Search, Type, Upload } from "lucide-react"
+import { ChevronDown, Download, Paintbrush, RotateCcw, Save, Search, Type, Upload } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   COLOR_GROUPS,
+  ELEMENT_GROUPS,
   FONT_TOKENS,
-  RADIUS_TOKENS,
+  deriveScale,
+  elementDefault,
   type ColorToken,
+  type ElementControl,
 } from "@/shared/whitelabel.tokens"
 import {
   EMPTY_WHITELABEL,
@@ -48,6 +51,35 @@ export function WhitelabelSection({ onPersist }: { onPersist: (wl: Whitelabel) =
       else delete colors[key]
       return { ...v, colors }
     })
+
+  /** Cor atual de um elemento: a escolhida, ou a de fábrica. */
+  const elementValue = (control: ElementControl) => {
+    const key = control.scale ? `${control.scale}-500` : control.tokens[0]
+    return draft.colors[key] ?? elementDefault(control)
+  }
+
+  /**
+   * Pinta todos os tokens de um elemento de uma vez.
+   *
+   * É o ponto da tela: quem escolhe "Bordas" não precisa saber que isso são
+   * três tokens, nem que a marca tem uma régua de dez tons.
+   */
+  const setElement = (control: ElementControl, value: string | null) => {
+    setDraft((v) => {
+      const colors = { ...v.colors }
+      const keys = control.scale
+        ? Object.keys(deriveScale(control.scale, elementDefault(control)))
+        : control.tokens
+      for (const key of keys) delete colors[key]
+      if (value) {
+        const painted = control.scale
+          ? deriveScale(control.scale, value)
+          : Object.fromEntries(control.tokens.map((key) => [key, value]))
+        Object.assign(colors, painted)
+      }
+      return { ...v, colors }
+    })
+  }
 
   const groups = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -150,11 +182,15 @@ export function WhitelabelSection({ onPersist }: { onPersist: (wl: Whitelabel) =
       <Panel
         icon={Type}
         title="Tipografia e formas"
-        description="Qualquer pilha de fontes válida em CSS — inclusive uma fonte da empresa já carregada na página."
+        description="A fonte do produto e o quanto os cantos são arredondados."
       >
         <div className="grid gap-4">
           {FONT_TOKENS.map((token) => (
-            <Field key={token.key} label={token.label} hint={`Padrão: ${token.value}`}>
+            <Field
+              key={token.key}
+              label={token.label}
+              hint="Vazio usa a fonte padrão. Qualquer pilha CSS válida serve."
+            >
               <Input
                 value={draft.fonts[token.key] ?? ""}
                 placeholder={token.value}
@@ -167,29 +203,70 @@ export function WhitelabelSection({ onPersist }: { onPersist: (wl: Whitelabel) =
               />
             </Field>
           ))}
-          <div className="grid gap-3 sm:grid-cols-3">
-            {RADIUS_TOKENS.map((token) => (
-              <Field key={token.key} label={`Raio · ${token.label}`} hint={token.value}>
-                <Input
-                  value={draft.radius[token.key] ?? ""}
-                  placeholder={token.value}
-                  onChange={(e) => {
-                    const radius = { ...draft.radius }
-                    if (e.target.value.trim()) radius[token.key] = e.target.value
-                    else delete radius[token.key]
-                    patch({ radius })
-                  }}
-                />
-              </Field>
-            ))}
-          </div>
+          <Field label="Cantos" hint="Vale para botões, campos, cartões e modais.">
+            <div className="flex flex-wrap gap-2">
+              {CORNER_PRESETS.map((preset) => {
+                const active = cornerPreset(draft.radius) === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => patch({ radius: preset.radius })}
+                    className={cx(
+                      "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                      active
+                        ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                        : "border-paper-200 text-paper-500 hover:border-brand-300 dark:border-ink-700",
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
         </div>
       </Panel>
 
       <Panel
         icon={Paintbrush}
         title="Cores"
-        description="Cada token do design system. Um campo em branco volta para a cor original."
+        description="Escolha a cor de cada parte da tela. O botão ao lado devolve a original."
+      >
+        <div className="space-y-6">
+          {ELEMENT_GROUPS.map((group) => (
+            <div key={group.id}>
+              <h3 className="text-[13px] font-semibold text-ink dark:text-paper">{group.label}</h3>
+              <p className="mb-3 text-xs text-paper-500">{group.hint}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {group.controls.map((control) => (
+                  <ElementRow
+                    key={control.id}
+                    control={control}
+                    value={elementValue(control)}
+                    customized={
+                      control.scale
+                        ? draft.colors[`${control.scale}-500`] !== undefined
+                        : control.tokens.some((t) => draft.colors[t] !== undefined)
+                    }
+                    onChange={(value) => setElement(control, value)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      {/* Lista crua de tokens: fechada por padrão, porque nomes como
+          `ink-750` ou `cw-bubble` só fazem sentido para quem já conhece o
+          design system — e deixá-los à mostra é o que tornava esta tela
+          ilegível. */}
+      <Panel
+        icon={Paintbrush}
+        title="Todos os tokens"
+        description="Para ajustar um detalhe específico do design system."
+        collapsible
         aside={
           <label className="relative block w-48">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-paper-400" />
@@ -269,6 +346,87 @@ export function WhitelabelSection({ onPersist }: { onPersist: (wl: Whitelabel) =
   )
 }
 
+/** Uma linha de elemento: o que a pessoa enxerga na tela, não o nome do token. */
+function ElementRow({
+  control,
+  value,
+  customized,
+  onChange,
+}: {
+  control: ElementControl
+  value: string
+  customized: boolean
+  onChange: (value: string | null) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-paper-200 p-2 dark:border-ink-700">
+      <label className="relative size-7 shrink-0 overflow-hidden rounded-md ring-1 ring-black/10">
+        <span className="block size-full" style={{ backgroundColor: value }} />
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label={control.label}
+        />
+      </label>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] text-ink dark:text-paper">{control.label}</span>
+        <span className="block truncate text-[10px] text-paper-400">{control.hint}</span>
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        spellCheck={false}
+        className="w-[78px] shrink-0 rounded border border-paper-200 bg-transparent px-1.5 py-1 text-right font-mono text-[11px] uppercase outline-none focus:border-brand-400 dark:border-ink-700 dark:text-paper-200"
+      />
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        disabled={!customized}
+        title="Voltar ao padrão"
+        className={cx(
+          "shrink-0 rounded p-1 text-paper-400 transition-opacity hover:bg-paper-100 dark:hover:bg-ink-800",
+          !customized && "pointer-events-none opacity-0",
+        )}
+      >
+        <RotateCcw className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Três formatos de canto em vez de seis medidas em `rem`.
+ *
+ * Pedir "0.1875rem" a quem está escolhendo uma identidade visual é devolver o
+ * problema; o conjunto inteiro anda junto de qualquer jeito.
+ */
+const CORNER_PRESETS: { id: string; label: string; radius: Record<string, string> }[] = [
+  {
+    id: "reto",
+    label: "Retos",
+    radius: { DEFAULT: "0", md: "0", lg: "0", xl: "0", "2xl": "0", "3xl": "0" },
+  },
+  // Vazio = sem variável nenhuma, então o fallback do Tailwind manda.
+  { id: "padrao", label: "Padrão", radius: {} },
+  {
+    id: "arredondado",
+    label: "Arredondados",
+    radius: {
+      DEFAULT: "0.5rem", md: "0.625rem", lg: "0.875rem",
+      xl: "0.875rem", "2xl": "1rem", "3xl": "1.25rem",
+    },
+  },
+]
+
+function cornerPreset(radius: Record<string, string>): string {
+  const match = CORNER_PRESETS.find(
+    (preset) => JSON.stringify(preset.radius) === JSON.stringify(radius),
+  )
+  return match?.id ?? ""
+}
+
 /** Uma linha de cor: amostra clicável, hex editável e botão de voltar ao padrão. */
 function ColorRow({
   token,
@@ -323,17 +481,27 @@ function Panel({
   title,
   description,
   aside,
+  collapsible = false,
   children,
 }: {
   icon: typeof Paintbrush
   title: string
   description: string
   aside?: React.ReactNode
+  /** Nasce fechado e só abre no clique — para o que é exceção, não regra. */
+  collapsible?: boolean
   children: React.ReactNode
 }) {
+  const [open, setOpen] = useState(!collapsible)
   return (
     <section className="overflow-hidden rounded-2xl border border-paper-200 bg-paper shadow-card dark:border-ink-700 dark:bg-ink-900">
-      <div className="flex items-start gap-3 border-b border-paper-100 px-5 py-4 dark:border-ink-800">
+      <div
+        onClick={collapsible ? () => setOpen((v) => !v) : undefined}
+        className={cx(
+          "flex items-start gap-3 border-b border-paper-100 px-5 py-4 dark:border-ink-800",
+          collapsible && "cursor-pointer select-none",
+        )}
+      >
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
           <Icon className="size-4" />
         </span>
@@ -341,9 +509,12 @@ function Panel({
           <h2 className="text-[15px] font-semibold text-ink dark:text-paper">{title}</h2>
           <p className="mt-0.5 text-xs text-paper-500">{description}</p>
         </div>
+        {collapsible && (
+          <ChevronDown className={cx("size-4 shrink-0 text-paper-400 transition-transform", open && "rotate-180")} />
+        )}
         {aside}
       </div>
-      <div className="p-5">{children}</div>
+      {open && <div className="p-5">{children}</div>}
     </section>
   )
 }
