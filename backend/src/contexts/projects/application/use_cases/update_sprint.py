@@ -41,6 +41,7 @@ class UpdateSprint:
         goal=_UNSET,
         start_date=_UNSET,
         end_date=_UNSET,
+        duration_days=_UNSET,
         status=_UNSET,
     ) -> Sprint:
         sprint = self.sprint_repository.get(sprint_id=sprint_id)
@@ -62,8 +63,21 @@ class UpdateSprint:
             sprint.start_date = start_date
         if end_date is not _UNSET:
             sprint.end_date = end_date
+        if duration_days is not _UNSET:
+            sprint.duration_days = duration_days
         if status is not _UNSET:
             sprint.status = SprintStatus(status)
+
+        # Mudar a duração reposiciona o término, mas só quando quem chamou não
+        # mandou uma data de término junto: aí a data explícita é a intenção, e
+        # recalcular por cima dela ignoraria o que foi pedido.
+        if (
+            duration_days is not _UNSET
+            and sprint.duration_days
+            and sprint.start_date
+            and end_date is _UNSET
+        ):
+            sprint.start_date, sprint.end_date = sprint.window_from(sprint.start_date)
 
         # Revalida invariantes do domínio após a mutação.
         sprint.__post_init__()

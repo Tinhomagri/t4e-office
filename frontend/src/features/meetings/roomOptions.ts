@@ -12,6 +12,8 @@ import {
   type RoomOptions,
 } from "livekit-client"
 
+import { preferredConstraint } from "./mediaDevices"
+
 /**
  * Quanto o vídeo publicado pode gastar, no máximo.
  *
@@ -83,4 +85,27 @@ export const ROOM_OPTIONS: RoomOptions = {
    * aceso) mesmo mudo — desconfortável, e mantém a captura ativa à toa.
    */
   stopLocalTrackOnUnpublish: true,
+}
+
+/**
+ * As mesmas opções acima, já apontando para os dispositivos que a pessoa
+ * escolheu da última vez.
+ *
+ * É função e não constante porque a escolha muda em tempo de execução (na tela
+ * de preview ou na setinha do microfone) e precisa valer já na próxima
+ * conexão. Quem chama deve memoizar: o `LiveKitRoom` recria a `Room` quando a
+ * identidade do objeto de opções muda.
+ */
+export function buildRoomOptions(): RoomOptions {
+  return {
+    ...ROOM_OPTIONS,
+    audioCaptureDefaults: {
+      ...ROOM_OPTIONS.audioCaptureDefaults,
+      ...preferredConstraint("audioinput"),
+    },
+    videoCaptureDefaults: {
+      ...ROOM_OPTIONS.videoCaptureDefaults,
+      ...preferredConstraint("videoinput"),
+    },
+  }
 }

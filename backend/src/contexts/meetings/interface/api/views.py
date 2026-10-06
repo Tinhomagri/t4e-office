@@ -25,7 +25,12 @@ from contexts.meetings.infrastructure.django.models import (
     MeetingParticipantModel,
     MeetingRoomModel,
 )
-from contexts.meetings.infrastructure.livekit_token import end_live_session, issue_token, remove_participant
+from contexts.meetings.infrastructure.livekit_token import (
+    end_live_session,
+    issue_token,
+    live_room_counts,
+    remove_participant,
+)
 from contexts.meetings.interface.api.serializers import (
     CreateRoomSerializer,
     JoinRoomSerializer,
@@ -185,14 +190,34 @@ class RoomListCreateView(APIView):
         )
         rooms = [r for r in rooms if can_see_room(r, uid, role=role, squad_ids=squad_ids)]
 
-        # Presentes = participação aberta. Uma query só para todas as salas,
-        # senão a listagem viraria N+1 com uma sala por linha.
-        live: dict[str, int] = {}
-        rows = MeetingParticipantModel.objects.filter(
-            room__workspace_id=workspace_id, left_at__isnull=True
+        # Quem está na sala AGORA, perguntado ao SFU.
+        #
+        # A contagem saía da nossa tabela (participação sem `left_at`), que só
+        # fecha quando o cliente chama `leave/`. Fechar a aba, cair a rede ou o
+        # navegador travar nunca chama — e a sala ficava marcada com gente para
+        # sempre, que é o "1 na sala" numa sala vazia.
+        db_live: dict[str, int] = {}
+        open_rows = MeetingParticipantModel.objects.filter(
+            room__in=rooms, left_at__isnull=True
         ).values_list("room_id", flat=True)
-        for room_id in rows:
-            live[str(room_id)] = live.get(str(room_id), 0) + 1
+        for room_id in open_rows:
+            db_live[str(room_id)] = db_live.get(str(room_id), 0) + 1
+
+        sfu = live_room_counts(rooms=[r.slug for r in rooms])
+        if sfu is None:
+            # SFU fora do ar: o número antigo é melhor que zerar a tela toda.
+            live = db_live
+        else:
+            # Sala vazia no SFU não pode ter participação aberta aqui. Fechar
+            # só o caso "vazia" é deliberado: com 2 no SFU e 3 na tabela não dá
+            # para saber QUAL linha é a fantasma, e o número exibido já vem do
+            # SFU de qualquer jeito.
+            ghosts = [r.id for r in rooms if not sfu.get(r.slug) and db_live.get(str(r.id))]
+            if ghosts:
+                MeetingParticipantModel.objects.filter(
+                    room_id__in=ghosts, left_at__isnull=True
+                ).update(left_at=timezone.now())
+            live = {str(r.id): sfu.get(r.slug, 0) for r in rooms}
 
         return Response(
             [_room_dict(r, live=live.get(str(r.id), 0)) for r in rooms]
@@ -414,7 +439,14 @@ class RoomRemoveParticipantView(APIView):
         if room is None:
             raise NotFoundError("Sala não encontrada.")
         uid = _uid(request)
-        _assert_admin(str(room.workspace_id), uid)
+        # Só quem criou a reunião tira alguém da chamada — nem owner nem admin
+        # do workspace. Dentro da sala, moderação é do organizador: é a regra
+        # que o painel de participantes mostra, e ela precisa valer aqui
+        # também, porque esconder o botão no front não impede a requisição.
+        if str(room.created_by) != str(uid):
+            raise PermissionDeniedError(
+                "Só quem criou a reunião pode remover participantes."
+            )
         identity = str(request.data.get("identity", ""))
         if not identity or identity == uid:
             return Response({"detail": "Participante inválido."}, status=status.HTTP_400_BAD_REQUEST)

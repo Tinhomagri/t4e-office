@@ -26,7 +26,7 @@ from contexts.projects.infrastructure.django.repositories_impl import (
 )
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.jql import parse_jql
-from contexts.projects.interface.api.notification_views import notify
+from contexts.projects.interface.api.notification_views import card_link, notify
 from contexts.projects.interface.api.permissions import (
     assert_card_capability,
     assert_card_edit,
@@ -57,6 +57,7 @@ def _card_dict(card: Card, project_key: str) -> dict:
         "priority": card.priority.value,
         "points": card.points,
         "assignee_id": card.assignee_id,
+        "collaborator_ids": card.collaborator_ids,
         "reporter_id": card.reporter_id,
         "reporter_name": card.reporter_name,
         "sprint_id": card.sprint_id,
@@ -420,6 +421,7 @@ class CardDetailView(APIView):
         # Snapshot assignee before update for notification
         old_card = cards.get(card_id=str(card_id))
         old_assignee = str(old_card.assignee_id) if old_card and old_card.assignee_id else None
+        old_collaborators = set(old_card.collaborator_ids) if old_card else set()
 
         # Épico informado precisa existir, ser do tipo épico e do mesmo projeto.
         if serializer.validated_data.get("epic_id") and old_card is not None:
@@ -456,7 +458,19 @@ class CardDetailView(APIView):
                 notif_type="card_assigned",
                 title=f"Card atribuído a você: {project.key}-{card.number}",
                 body=card.title,
-                link=f"/boards?card={card.id}",
+                link=card_link(str(project.id), str(card.id)),
+            )
+
+        # Quem entrou como participante também precisa saber. Só os novos: um
+        # PATCH que mexe no título manda a lista inteira de volta, e notificar
+        # por lista recebida encheria o sino a cada edição do card.
+        for uid in set(card.collaborator_ids) - old_collaborators - {actor}:
+            notify(
+                user_id=uid,
+                notif_type="card_assigned",
+                title=f"Você entrou em: {project.key}-{card.number}",
+                body=card.title,
+                link=card_link(str(project.id), str(card.id)),
             )
 
         return Response(CardSerializer(_card_dict(card, project.key)).data)
@@ -530,7 +544,7 @@ class CardCommentView(APIView):
                     notif_type="card_commented",
                     title=f"Você foi mencionado em {ref}",
                     body=body_preview,
-                    link=f"/boards?card={card_id}",
+                    link=card_link(str(cm.project_id), str(card_id)),
                 )
 
             # Relator/responsável (que não foram mencionados nem são o autor).
@@ -541,7 +555,7 @@ class CardCommentView(APIView):
                     notif_type="card_commented",
                     title=f"Novo comentário em {ref}",
                     body=body_preview,
-                    link=f"/boards?card={card_id}",
+                    link=card_link(str(cm.project_id), str(card_id)),
                 )
         except CardModel.DoesNotExist:
             pass

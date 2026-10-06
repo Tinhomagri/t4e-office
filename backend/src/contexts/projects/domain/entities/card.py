@@ -89,6 +89,8 @@ class Card:
     priority: CardPriority = CardPriority.MEDIUM
     points: int | None = None
     assignee_id: str | None = None
+    # Participantes além do responsável. Lista de user_id, sem ordem relevante.
+    collaborator_ids: list[str] = field(default_factory=list)
     reporter_id: str | None = None  # relator (quem pediu/abriu)
     # Nome de quem relatou pelo link público, sem conta aqui. reporter_id fica
     # None nesse caso — não existe usuário pra apontar.

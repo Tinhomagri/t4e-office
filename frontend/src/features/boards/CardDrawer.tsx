@@ -461,6 +461,20 @@ export function CardDrawer({
               />
             </DetailRow>
 
+            <DetailRow label="Participantes">
+              <CollaboratorSelect
+                value={draft.collaborator_ids ?? []}
+                members={members}
+                // O responsável já aparece na linha acima; repeti-lo aqui só
+                // confundiria quem é dono do card.
+                excludeId={draft.assignee_id}
+                onChange={(ids) => {
+                  set("collaborator_ids", ids)
+                  persist({ collaborator_ids: ids })
+                }}
+              />
+            </DetailRow>
+
             <DetailRow label="Relator">
               <PersonSelect
                 value={draft.reporter_id}
@@ -1736,6 +1750,7 @@ const FIELD_LABEL: Record<string, string> = {
   priority: "Prioridade",
   points: "Peso",
   assignee_id: "Responsável",
+  collaborator_ids: "Participantes",
   reporter_id: "Relator",
   sprint_id: "Sprint",
   start_date: "Início",
@@ -1747,6 +1762,7 @@ const FIELD_LABEL: Record<string, string> = {
 // Campos cujo valor é um id/uuid — não mostrar o valor cru.
 const OPAQUE_FIELDS = new Set([
   "assignee_id",
+  "collaborator_ids",
   "reporter_id",
   "sprint_id",
   "parent_id",
@@ -2395,6 +2411,83 @@ function DetailSelect({
         )}
       </div>
     </DetailRow>
+  )
+}
+
+/**
+ * Participantes do card: várias pessoas, nenhuma delas responsável.
+ *
+ * É a lista `collaborators` do backend. O responsável continua sendo um só —
+ * quem presta contas, e por quem carga e relatórios contam. Aqui entram os que
+ * trabalham junto, para o card aparecer no filtro de pessoas deles.
+ */
+function CollaboratorSelect({
+  value,
+  members,
+  excludeId,
+  onChange,
+}: {
+  value: string[]
+  members: Member[]
+  excludeId?: string | null
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const options = members.filter((m) => m.user_id !== excludeId)
+  const chosen = value
+    .map((id) => members.find((m) => m.user_id === id))
+    .filter((m): m is Member => !!m)
+
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-sm hover:bg-paper-100 dark:hover:bg-ink-800"
+      >
+        {chosen.length === 0 ? (
+          <span className="text-paper-400">Adicionar pessoas</span>
+        ) : (
+          <>
+            <span className="flex -space-x-1.5">
+              {chosen.slice(0, 4).map((m) => (
+                <ColoredAvatar key={m.user_id} name={m.name} userId={m.user_id} size="xs" />
+              ))}
+            </span>
+            {chosen.length > 4 && (
+              <span className="text-xs text-paper-500">+{chosen.length - 4}</span>
+            )}
+          </>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="scrollbar-slim absolute left-0 top-full z-30 mt-1 max-h-60 w-56 overflow-y-auto rounded-lg border border-paper-200 bg-paper p-1 shadow-pop dark:border-ink-700 dark:bg-ink-800">
+            {options.length === 0 && (
+              <p className="px-2 py-1.5 text-xs text-paper-400">Ninguém mais no workspace.</p>
+            )}
+            {options.map((m) => (
+              <button
+                key={m.user_id}
+                type="button"
+                onClick={() => toggle(m.user_id)}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] hover:bg-paper-100 dark:hover:bg-ink-700"
+              >
+                <span className={cx("grid size-4 shrink-0 place-items-center rounded border", value.includes(m.user_id) ? "border-brand-500 bg-brand-500 text-white" : "border-paper-300 dark:border-ink-600")}>
+                  {value.includes(m.user_id) && <Check className="size-3" />}
+                </span>
+                <ColoredAvatar name={m.name} userId={m.user_id} size="xs" />
+                <span className="min-w-0 truncate">{m.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 

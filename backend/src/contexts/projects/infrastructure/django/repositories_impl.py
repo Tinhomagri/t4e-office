@@ -61,6 +61,10 @@ def _card_to_entity(row: CardModel) -> Card:
         priority=CardPriority(row.priority),
         points=row.points,
         assignee_id=str(row.assignee_id) if row.assignee_id else None,
+        # `.all()` e não `values_list`: com `prefetch_related("collaborators")`
+        # na listagem, isto lê do cache do prefetch; um `values_list` dispararia
+        # uma query por card e devolveria o N+1 que o prefetch evita.
+        collaborator_ids=[str(u.id) for u in row.collaborators.all()],
         reporter_id=str(row.reporter_id) if row.reporter_id else None,
         reporter_name=row.reporter_name,
         sprint_id=str(row.sprint_id) if row.sprint_id else None,
@@ -97,6 +101,7 @@ def _sprint_to_entity(row: SprintModel) -> Sprint:
         goal=row.goal,
         start_date=row.start_date,
         end_date=row.end_date,
+        duration_days=row.duration_days,
         status=SprintStatus(row.status),
         started_at=row.started_at,
         completed_at=row.completed_at,
@@ -172,12 +177,17 @@ class DjangoCardRepository(CardRepository):
             flagged=card.flagged,
             archived_at=card.archived_at,
         )
+        # M2M exige a linha já gravada: só dá para ligar depois do INSERT.
+        if card.collaborator_ids:
+            row.collaborators.set(card.collaborator_ids)
         return _card_to_entity(row)
 
     def list_by_project(
         self, *, project_id: str, include_archived: bool = False
     ) -> list[Card]:
-        rows = CardModel.objects.filter(project_id=project_id)
+        rows = CardModel.objects.filter(project_id=project_id).prefetch_related(
+            "collaborators"
+        )
         if not include_archived:
             rows = rows.filter(archived_at__isnull=True)
         return [_card_to_entity(r) for r in rows]
@@ -220,6 +230,8 @@ class DjangoCardRepository(CardRepository):
             archived_at=card.archived_at,
         )
         row = CardModel.objects.get(id=card.id)
+        # `QuerySet.update()` acima não alcança M2M — a ligação é feita à parte.
+        row.collaborators.set(card.collaborator_ids)
         return _card_to_entity(row)
 
     def delete(self, *, card_id: str) -> None:
@@ -236,6 +248,7 @@ class DjangoSprintRepository(SprintRepository):
             goal=sprint.goal,
             start_date=sprint.start_date,
             end_date=sprint.end_date,
+            duration_days=sprint.duration_days,
             status=sprint.status.value,
         )
         return _sprint_to_entity(row)
@@ -254,6 +267,7 @@ class DjangoSprintRepository(SprintRepository):
             goal=sprint.goal,
             start_date=sprint.start_date,
             end_date=sprint.end_date,
+            duration_days=sprint.duration_days,
             status=sprint.status.value,
             started_at=sprint.started_at,
             completed_at=sprint.completed_at,

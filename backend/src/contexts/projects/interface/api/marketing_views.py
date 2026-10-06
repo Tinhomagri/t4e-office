@@ -33,7 +33,7 @@ from contexts.projects.infrastructure.django.models import (
 )
 from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.extra_views import _ser_attachment
-from contexts.projects.interface.api.notification_views import notify
+from contexts.projects.interface.api.notification_views import card_link, notify
 from contexts.projects.interface.api.permissions import (
     assert_card_capability,
     assert_card_member,
@@ -134,7 +134,7 @@ class CardApprovalView(APIView):
                 notif_type="card_approval",
                 title=f"{label}: {ref} — {card.title}",
                 body=comment,
-                link=f"/boards?card={card.id}",
+                link=card_link(str(card.project_id), str(card.id)),
             )
 
         return Response(
@@ -210,6 +210,7 @@ def _ser_queue_card(c: CardModel) -> dict:
         "channel": c.channel,
         "publish_date": c.publish_date.isoformat() if c.publish_date else None,
         "assignee_id": str(c.assignee_id) if c.assignee_id else None,
+        "collaborator_ids": [str(u.id) for u in c.collaborators.all()],
     }
 
 
@@ -224,6 +225,9 @@ class MarketingReportView(APIView):
             CardModel.objects.filter(project_id=project_id)
             .exclude(type="epic")
             .select_related("project")
+            # Os participantes entram no payload de cada card — sem prefetch,
+            # uma query por card.
+            .prefetch_related("collaborators")
         )
         done = _done_slugs(str(project_id))
         today = date.today()

@@ -312,7 +312,12 @@ export async function updateSprint(
 
 export async function startSprint(
   sprintId: string,
-  payload: { start_date?: string; end_date?: string; goal?: string } = {},
+  payload: {
+    start_date?: string
+    end_date?: string
+    goal?: string
+    duration_days?: number | null
+  } = {},
 ): Promise<Sprint> {
   const { data } = await api.post<Sprint>(`/sprints/${sprintId}/start/`, payload)
   return data

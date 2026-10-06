@@ -333,6 +333,12 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   useEffect(() => {
     const cardParam = searchParams.get("card")
     if (!cardParam || !cards) return
+    // O link traz `project` junto (notificação de card atribuído, por
+    // exemplo). Enquanto a lista carregada ainda for a do projeto ANTERIOR, o
+    // card não está nela — sair aqui evita apagar o parâmetro antes de o
+    // projeto certo chegar, que era o que fazia o card nunca abrir.
+    const projectParam = searchParams.get("project")
+    if (projectParam && projectParam !== projectId) return
     const found = cards.find((c) => c.id === cardParam)
     if (found) setOpenCard(found)
     setSearchParams(

@@ -5,13 +5,16 @@ import {
   useParticipants,
   useDisconnectButton,
   useConnectionState,
+  useIsMuted,
   useMediaDeviceSelect,
   useTrackToggle,
   useTracks,
 } from "@livekit/components-react"
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-core"
 import "@livekit/components-styles"
-import { ROOM_OPTIONS } from "./roomOptions"
+import { buildRoomOptions } from "./roomOptions"
+import { MeetingPreJoin, type PreJoinChoice } from "./MeetingPreJoin"
+import { getPreferredDevice, setPreferredDevice } from "./mediaDevices"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ConnectionState, Track } from "livekit-client"
 import { AnimatePresence, motion } from "framer-motion"
@@ -48,7 +51,7 @@ import {
   VideoOff,
   X,
 } from "lucide-react"
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { useSquads } from "@/features/poker/poker.hooks"
@@ -57,7 +60,8 @@ import { useMembers, useWorkspaces } from "@/features/workspace/workspace.hooks"
 import type { Member } from "@/features/workspace/workspace.types"
 import { extractApiError } from "@/shared/api/client"
 import { Button, Field, Input, Modal, Select, Spinner, cx } from "@/shared/ui/primitives"
-import { handRaiseChime } from "@/shared/ui/sound"
+import { beep, handRaiseChime } from "@/shared/ui/sound"
+import { toast } from "@/shared/ui/toast"
 import * as meetApi from "./meetings.api"
 import { useMeetingSessionStore } from "./meeting.session.store"
 
@@ -99,6 +103,11 @@ export function MeetingsPage() {
     // Sala nova de um colega precisa aparecer sem F5; o custo é uma query leve.
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
+    // O intervalo para enquanto a aba está escondida (acima), então voltar
+    // para ela mostrava a lista de até 15s atrás. O padrão global do app é
+    // não revalidar no foco; aqui a presença muda a cada minuto e a tela
+    // existe justamente para responder "tem alguém na sala agora?".
+    refetchOnWindowFocus: true,
   })
 
   const create = useMutation({
@@ -627,8 +636,17 @@ export function MeetingCallOverlay() {
   const { activeWorkspaceId } = useWorkspaces()
   const me = useAuthStore((s) => s.user)
   const { data: members } = useMembers(activeWorkspaceId)
-  const role = (members ?? []).find((m) => m.user_id === me?.id)?.role
-  const canModerate = role === "owner" || role === "admin" || session?.room.created_by === me?.id
+  // Só quem criou a reunião modera: tirar da chamada, cortar o microfone ou a
+  // câmera de alguém. Ser owner/admin do workspace não dá esse poder dentro da
+  // sala de outra pessoa — é a mesma regra do organizador no Meet.
+  const canModerate = !!me?.id && session?.room.created_by === me.id
+  // identity do LiveKit é o user_id, então dá pra achar a foto de perfil de
+  // quem está com a câmera desligada.
+  const avatars = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const m of members ?? []) map.set(m.user_id, m.avatar_url ?? null)
+    return map
+  }, [members])
   // Igual ao Meet, a entrada na sala sempre começa ocupando a tela inteira.
   // A janela flutuante é uma ação explícita de minimizar, nunca o padrão.
   const [layout, setLayout] = useState<"floating" | "fullscreen">("fullscreen")
@@ -640,7 +658,18 @@ export function MeetingCallOverlay() {
     host.dataset.meetingPortal = "true"
     return host
   })
+  // Escolhas da tela de preview. `null` = ainda não entrou de fato na sala.
+  const [choice, setChoice] = useState<PreJoinChoice | null>(null)
+  // Recalculado por sala: a tela de preview pode ter trocado o microfone, e a
+  // troca precisa valer já nesta conexão. Memoizado porque o `LiveKitRoom`
+  // recria a `Room` toda vez que a identidade deste objeto muda.
+  const roomOptions = useMemo(() => buildRoomOptions(), [session?.room.id, choice])
+  useEffect(() => { if (!session) setChoice(null) }, [session])
   const previousPathRef = useRef(location.pathname)
+  // Em qual documento o nó do portal está agora — a janela principal ou a do
+  // picture-in-picture. Serve para detectar a troca e remontar a grade.
+  const hostDocumentRef = useRef<Document | null>(null)
+  const [stageEpoch, setStageEpoch] = useState(0)
   const leave = async () => { if (session) await meetApi.leaveRoom(session.room.id).catch(() => {}); setSession(null) }
   useEffect(() => {
     if (!pipWindow) return
@@ -652,10 +681,27 @@ export function MeetingCallOverlay() {
   useEffect(() => {
     if (!session) {
       portalHost.remove()
+      hostDocumentRef.current = null
       return
     }
     const target = pipWindow?.document.body ?? document.body
     target.appendChild(portalHost)
+    // Trocou de documento (entrou ou saiu do PiP): remonta a grade de vídeo.
+    //
+    // É o que destrava a imagem congelada no pop-up. Mover o nó do portal
+    // adota a subárvore inteira no outro documento, e os <video> adotados
+    // chegam pausados; pior, o adaptiveStream do LiveKit observa cada
+    // elemento com um IntersectionObserver criado no documento ANTIGO — de
+    // lá o vídeo nunca mais aparece como visível, então o servidor para de
+    // enviar a camada e o último quadro fica parado na tela.
+    //
+    // Remontar só a grade força o LiveKit a refazer attach e observadores já
+    // no documento certo. O chat, as mãos levantadas e a conexão com a sala
+    // ficam intactos, porque moram acima deste ponto.
+    if (hostDocumentRef.current && hostDocumentRef.current !== target.ownerDocument) {
+      setStageEpoch((n) => n + 1)
+    }
+    hostDocumentRef.current = target.ownerDocument
     return () => {
       if (portalHost.parentNode === target) portalHost.remove()
     }
@@ -729,12 +775,65 @@ export function MeetingCallOverlay() {
     }
   }, [openPip, session])
   if (!session) return null
-  const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", pipWindow || layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
+  // Tela de preparação (câmera, microfone, nível de voz) antes de publicar
+  // qualquer faixa — a sala só é criada depois de "Entrar agora".
+  if (!choice) {
+    return createPortal(
+      <MeetingPreJoin
+        roomName={session.room.name}
+        onCancel={() => void leave()}
+        onJoin={setChoice}
+      />,
+      document.body,
+    )
+  }
+  const content = <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} data-lk-theme="default" className={cx("fixed z-[100] flex flex-col overflow-hidden border border-ink-700 bg-ink-950 shadow-2xl", pipWindow || layout === "fullscreen" ? "inset-0 rounded-none" : "bottom-4 right-4 h-[min(78vh,720px)] w-[min(92vw,1080px)] rounded-2xl")}>
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-700 bg-ink-900 px-3"><p className="truncate text-sm font-semibold text-paper-200">{session.room.name}</p><span className="ml-auto hidden text-[11px] text-paper-400 sm:block">A chamada continua enquanto você navega</span>{!pipWindow && <button onClick={() => setLayout((v) => v === "fullscreen" ? "floating" : "fullscreen")} title={layout === "fullscreen" ? "Janela flutuante" : "Tela cheia"} className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200">{layout === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button>}<button onClick={() => void openPip()} title="Abrir pop-up persistente" className="rounded-lg p-2 text-paper-400 hover:bg-ink-800 hover:text-paper-200"><PictureInPicture2 className="size-4" /></button><button onClick={leave} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-paper-400 hover:bg-ink-800 hover:text-paper-200"><X className="size-4" /> Sair</button></div>
-    <Suspense fallback={<div className="grid flex-1 place-items-center"><Loader2 className="size-6 animate-spin text-paper-400" /></div>}><LiveKitRoom token={session.token} serverUrl={session.url} connect video audio options={ROOM_OPTIONS} onDisconnected={leave} data-lk-theme="default" className="flex min-h-0 flex-1 flex-col"><MeetingRoomContent roomId={session.room.id} canModerate={canModerate} /><RoomAudioRenderer /></LiveKitRoom></Suspense>
+    <MeetingRoomContent roomId={session.room.id} canModerate={canModerate} stageKey={stageEpoch} avatars={avatars} />
   </motion.div>
-  return createPortal(<AnimatePresence>{content}</AnimatePresence>, portalHost)
+  /**
+   * O `LiveKitRoom` (e com ele o `RoomAudioRenderer`) fica aqui, no documento
+   * principal, e só a interface é levada pelo portal para a janela de
+   * picture-in-picture.
+   *
+   * É o que conserta "algumas pessoas ficam sem áudio no PiP": mover o nó do
+   * portal para o outro documento adota toda a subárvore, e o navegador pausa
+   * os <audio> adotados sem restaurar a reprodução. Quem já estava na sala no
+   * momento da troca emudecia; quem entrava depois, não — porque o elemento
+   * dessa pessoa nascia já no documento certo. Com o áudio ancorado fora do
+   * portal, nenhum <audio> muda de documento.
+   */
+  return (
+    <Suspense fallback={createPortal(<div className="fixed inset-0 z-[100] grid place-items-center bg-ink-950"><Loader2 className="size-6 animate-spin text-paper-400" /></div>, portalHost)}>
+      <LiveKitRoom token={session.token} serverUrl={session.url} connect video={choice.video} audio={choice.audio} options={roomOptions} onDisconnected={leave} className="contents">
+        <RoomAudioRenderer />
+        <AudioOutputSync />
+        {createPortal(<AnimatePresence>{content}</AnimatePresence>, portalHost)}
+      </LiveKitRoom>
+    </Suspense>
+  )
 }
+
+/**
+ * Aplica a saída de áudio escolhida na tela de preview.
+ *
+ * Só dá para trocar o alto-falante depois que a sala existe — o LiveKit
+ * redireciona os elementos que ele mesmo criou, e eles só existem conectado.
+ */
+function AudioOutputSync() {
+  const room = useRoomContext()
+  const state = useConnectionState(room)
+  useEffect(() => {
+    if (state !== ConnectionState.Connected) return
+    const deviceId = getPreferredDevice("audiooutput")
+    if (!deviceId) return
+    // Falha esperada no Firefox, que não implementa setSinkId: a chamada segue
+    // no dispositivo padrão do sistema.
+    void room.switchActiveDevice("audiooutput", deviceId).catch(() => {})
+  }, [room, state])
+  return null
+}
+
 
 /** Grade de vídeo: câmeras + quem está compartilhando tela. */
 function fmtDate(iso: string): string {
@@ -873,10 +972,16 @@ type FloatingReaction = { id: string; emoji: string; from: string; right: number
 
 let reactionSeq = 0
 
-function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModerate: boolean }) {
+function MeetingRoomContent({ roomId, canModerate, stageKey, avatars }: { roomId: string; canModerate: boolean; stageKey: number; avatars: Map<string, string | null> }) {
   const room = useRoomContext()
   const participants = useParticipants()
   const [chatOpen, setChatOpen] = useState(false)
+  // Quantas mensagens chegaram com o painel fechado. Também num ref porque o
+  // ouvinte de `dataReceived` é montado uma vez só — ler o estado de dentro
+  // dele congelaria no valor do primeiro render.
+  const [unreadChat, setUnreadChat] = useState(0)
+  const chatOpenRef = useRef(false)
+  chatOpenRef.current = chatOpen
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>([])
   const [draft, setDraft] = useState("")
@@ -911,10 +1016,27 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
       try {
         const data = JSON.parse(new TextDecoder().decode(payload))
         if (data.target && data.target !== room.localParticipant.identity) return
-        if (data.type === "chat") setMessages((old) => [...old, { from: participant?.name || participant?.identity || "Participante", text: String(data.text), time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }])
+        if (data.type === "chat") {
+          const from = participant?.name || participant?.identity || "Participante"
+          const text = String(data.text)
+          setMessages((old) => [...old, { from, text, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }])
+          // Com o painel aberto a mensagem já aparece sozinha; avisar de novo
+          // seria ruído. Fechado, ninguém percebia que havia chat acontecendo.
+          if (!chatOpenRef.current) {
+            setUnreadChat((n) => n + 1)
+            beep()
+            toast.info(`${from}: ${text.slice(0, 80)}`)
+          }
+        }
         if (data.type === "moderation") {
-          if (data.action === "mute") void room.localParticipant.setMicrophoneEnabled(false)
-          if (data.action === "camera") void room.localParticipant.setCameraEnabled(false)
+          if (data.action === "mute") {
+            void room.localParticipant.setMicrophoneEnabled(false)
+            toast.info("O organizador desligou seu microfone.")
+          }
+          if (data.action === "camera") {
+            void room.localParticipant.setCameraEnabled(false)
+            toast.info("O organizador desligou sua câmera.")
+          }
         }
         if (data.type === "reaction" && typeof data.emoji === "string") {
           // A reação do próprio participante local já é mostrada na hora do
@@ -940,6 +1062,16 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
     room.on("dataReceived", onData)
     return () => { room.off("dataReceived", onData) }
   }, [room, spawnReaction])
+
+  // Pedido de moderação dirigido a uma pessoa — o ouvinte acima filtra por
+  // `target`, então só ela desliga o próprio dispositivo. O servidor não
+  // precisa entrar nisso: quem publica já é o único com o botão na tela.
+  const moderate = (action: "mute" | "camera", target: string) => {
+    void room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify({ type: "moderation", action, target })),
+      { reliable: true },
+    )
+  }
 
   const send = () => {
     const text = draft.trim()
@@ -995,17 +1127,18 @@ function MeetingRoomContent({ roomId, canModerate }: { roomId: string; canModera
         </div>
       )}
       <div className="flex min-h-0 flex-1 basis-0">
-        <VideoStage handsRaised={handsRaised} reactions={reactions} />
+        <VideoStage key={stageKey} handsRaised={handsRaised} reactions={reactions} avatars={avatars} />
         {(chatOpen || peopleOpen) && <aside className="flex w-72 shrink-0 flex-col border-l border-ink-700 bg-ink-900 text-paper-200">
           <div className="flex items-center justify-between border-b border-ink-700 px-3 py-3 text-sm font-semibold">
             {chatOpen ? "Chat da reunião" : "Participantes"}
             <button onClick={() => { setChatOpen(false); setPeopleOpen(false) }} className="text-paper-400 hover:text-white"><X className="size-4" /></button>
           </div>
-          {chatOpen ? <><div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{messages.length === 0 && <p className="text-xs text-paper-500">Nenhuma mensagem ainda.</p>}{messages.map((m, i) => <div key={i} className="rounded-lg bg-white/5 p-2"><div className="flex justify-between text-[10px] text-paper-500"><span>{m.from}</span><span>{m.time}</span></div><p className="mt-1 break-words text-sm">{m.text}</p></div>)}</div><form onSubmit={(e) => { e.preventDefault(); send() }} className="flex gap-2 border-t border-ink-700 p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escreva uma mensagem" className="min-w-0 flex-1 rounded-lg bg-ink-800 px-3 py-2 text-xs outline-none ring-brand-500 focus:ring-1" /><button className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white"><Send className="size-4" /></button></form></> : <div className="space-y-2 overflow-y-auto p-3">{sortedParticipants.map((p) => <div key={p.identity} className="flex items-center gap-2 rounded-lg bg-white/5 p-2 text-xs"><span className="relative grid size-7 place-items-center rounded-full bg-brand-500/20 text-[10px]">{initialsOf(p.name || p.identity)}{handsRaised.has(p.identity) && <span title="Mão levantada" className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full bg-amber-400 text-[8px] leading-none">✋</span>}</span><span className="min-w-0 flex-1 truncate">{p.name || p.identity}</span>{canModerate && p.identity !== room.localParticipant.identity && <button title="Remover participante" onClick={() => void meetApi.removeParticipant(roomId, p.identity)} className="rounded p-1 text-red-300 hover:bg-red-500/20"><LogOut className="size-3.5" /></button>}</div>)}</div>}
+          {chatOpen ? <><div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{messages.length === 0 && <p className="text-xs text-paper-500">Nenhuma mensagem ainda.</p>}{messages.map((m, i) => <div key={i} className="rounded-lg bg-white/5 p-2"><div className="flex justify-between text-[10px] text-paper-500"><span>{m.from}</span><span>{m.time}</span></div><p className="mt-1 break-words text-sm">{m.text}</p></div>)}</div><form onSubmit={(e) => { e.preventDefault(); send() }} className="flex gap-2 border-t border-ink-700 p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escreva uma mensagem" className="min-w-0 flex-1 rounded-lg bg-ink-800 px-3 py-2 text-xs outline-none ring-brand-500 focus:ring-1" /><button className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white"><Send className="size-4" /></button></form></> : <div className="space-y-2 overflow-y-auto p-3">{sortedParticipants.map((p) => <div key={p.identity} className="flex items-center gap-2 rounded-lg bg-white/5 p-2 text-xs"><span className="relative grid size-7 place-items-center rounded-full bg-brand-500/20 text-[10px]">{initialsOf(p.name || p.identity)}{handsRaised.has(p.identity) && <span title="Mão levantada" className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full bg-amber-400 text-[8px] leading-none">✋</span>}</span><span className="min-w-0 flex-1 truncate">{p.name || p.identity}</span>{canModerate && p.identity !== room.localParticipant.identity && <><button title="Desligar microfone desta pessoa" onClick={() => moderate("mute", p.identity)} className="rounded p-1 text-paper-300 hover:bg-white/10"><MicOff className="size-3.5" /></button><button title="Desligar câmera desta pessoa" onClick={() => moderate("camera", p.identity)} className="rounded p-1 text-paper-300 hover:bg-white/10"><VideoOff className="size-3.5" /></button><button title="Remover participante" onClick={() => void meetApi.removeParticipant(roomId, p.identity)} className="rounded p-1 text-red-300 hover:bg-red-500/20"><LogOut className="size-3.5" /></button></>}</div>)}</div>}
         </aside>}
       </div>
       <MeetControlBar
-        onChat={() => { setChatOpen((v) => !v); setPeopleOpen(false) }}
+        onChat={() => { setChatOpen((v) => { if (!v) setUnreadChat(0); return !v }); setPeopleOpen(false) }}
+        unreadChat={unreadChat}
         onPeople={() => { setPeopleOpen((v) => !v); setChatOpen(false) }}
         peopleCount={participants.length}
         onReact={sendReaction}
@@ -1237,6 +1370,9 @@ function DeviceMenu({
                 type="button"
                 onClick={() => {
                   setActiveMediaDevice(d.deviceId)
+                  // Guarda a escolha: sem isto ela valia só até sair da sala,
+                  // e a reunião seguinte voltava para o dispositivo padrão.
+                  setPreferredDevice(kind, d.deviceId)
                   setOpen(false)
                 }}
                 className={cx(
@@ -1262,6 +1398,7 @@ function DeviceMenu({
 
 function MeetControlBar({
   onChat,
+  unreadChat,
   onPeople,
   peopleCount,
   onReact,
@@ -1269,6 +1406,7 @@ function MeetControlBar({
   onToggleHand,
 }: {
   onChat: () => void
+  unreadChat: number
   onPeople: () => void
   peopleCount: number
   onReact: (emoji: string) => void
@@ -1317,7 +1455,17 @@ function MeetControlBar({
       >
         <Hand className="size-5" />
       </CallButton>
-      <CallButton onClick={onChat} label="Abrir chat"><MessageCircle className="size-5" /></CallButton>
+      <div className="relative shrink-0">
+        <CallButton onClick={onChat} label={unreadChat > 0 ? `Abrir chat (${unreadChat} não lidas)` : "Abrir chat"}><MessageCircle className="size-5" /></CallButton>
+        {unreadChat > 0 && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-brand-500 px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-ink-950"
+          >
+            {unreadChat > 9 ? "9+" : unreadChat}
+          </span>
+        )}
+      </div>
       <CallButton onClick={onPeople} label={`Participantes (${peopleCount})`}><Users className="size-5" /></CallButton>
       <CallButton
         variant="danger"
@@ -1327,6 +1475,54 @@ function MeetControlBar({
         <Phone className="size-5 rotate-[135deg]" />
       </CallButton>
     </div>
+  )
+}
+
+/**
+ * Quadro de câmera com o tratamento do Meet para vídeo desligado: em vez do
+ * bonequinho genérico da lib, a foto de perfil da pessoa num círculo no centro
+ * (ou as iniciais, quando ela não tem foto).
+ *
+ * O avatar é uma camada por cima do `ParticipantTile`, não um substituto: a
+ * faixa com o nome e o indicador de mudo continua aparecendo — é o que o CSS
+ * de `.lk-participant-metadata` em index.css garante.
+ */
+function CameraTile({
+  trackRef,
+  avatars,
+  style,
+}: {
+  trackRef: TrackReferenceOrPlaceholder
+  avatars: Map<string, string | null>
+  style?: React.CSSProperties
+}) {
+  const muted = useIsMuted(trackRef)
+  // Sem publicação = a pessoa nunca ligou a câmera (o quadro veio do
+  // `withPlaceholder`); com publicação muda = ligou e desligou depois.
+  const cameraOff = !trackRef.publication || muted
+  const participant = trackRef.participant
+  const name = participant.name || participant.identity
+  const avatar = avatars.get(participant.identity) ?? null
+
+  return (
+    <>
+      <ParticipantTile trackRef={trackRef} style={style} />
+      {cameraOff && (
+        <div className="pointer-events-none absolute inset-0 z-[1] grid place-items-center">
+          {avatar ? (
+            <img
+              src={avatar}
+              alt={name}
+              className="aspect-square h-[36%] max-h-24 min-h-10 rounded-full object-cover shadow-lg ring-2 ring-white/10"
+            />
+          ) : (
+            <span className="grid aspect-square h-[36%] max-h-24 min-h-10 place-items-center rounded-full bg-brand-500/25 text-base font-semibold text-brand-200 ring-2 ring-white/10">
+              {initialsOf(name)}
+            </span>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -1432,9 +1628,11 @@ function HandRaisedBadge() {
 function VideoStage({
   handsRaised,
   reactions,
+  avatars,
 }: {
   handsRaised: Set<string>
   reactions: FloatingReaction[]
+  avatars: Map<string, string | null>
 }) {
   const cameraTracks = useTracks(
     [{ source: Track.Source.Camera, withPlaceholder: true }],
@@ -1481,8 +1679,9 @@ function VideoStage({
               {cameraTracks.map((track, i) => (
                 <div key={`${track.participant.identity}-${track.source}-${i}`} className="relative shrink-0">
                   {handsRaised.has(track.participant.identity) && <HandRaisedBadge />}
-                  <ParticipantTile
+                  <CameraTile
                     trackRef={track}
+                    avatars={avatars}
                     style={{ width: "100%", height: "120px", flexShrink: 0 }}
                   />
                 </div>
@@ -1518,7 +1717,7 @@ function VideoStage({
             }}
           >
             {handsRaised.has(track.participant.identity) && <HandRaisedBadge />}
-            <ParticipantTile trackRef={track} style={{ width: "100%", height: "100%" }} />
+            <CameraTile trackRef={track} avatars={avatars} style={{ width: "100%", height: "100%" }} />
           </div>
         ))}
       </div>

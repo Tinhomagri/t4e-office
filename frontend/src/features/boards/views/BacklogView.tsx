@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
+  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -45,6 +46,10 @@ import type {
   CardPriority,
   Member,
   Sprint,
+} from "@/features/workspace/workspace.types"
+import {
+  DEFAULT_SPRINT_DAYS,
+  SPRINT_DURATIONS,
 } from "@/features/workspace/workspace.types"
 import { Button, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
@@ -79,6 +84,30 @@ function loadCapacity(sprintId: string): number | null {
 
 function sumPoints(cards: Card[]) {
   return cards.reduce((acc, c) => acc + (c.points ?? 0), 0)
+}
+
+// Datas de sprint são `YYYY-MM-DD` sem hora. Somar em UTC e formatar em UTC
+// evita o clássico "um dia a menos" de quem está em GMT-3: `new Date("2026-03-02")`
+// é meia-noite UTC, que no Brasil ainda é dia 1º.
+function addDays(isoDay: string, days: number): string {
+  const base = new Date(`${isoDay}T00:00:00Z`)
+  if (Number.isNaN(base.getTime())) return isoDay
+  base.setUTCDate(base.getUTCDate() + days)
+  return base.toISOString().slice(0, 10)
+}
+
+function fmtDay(isoDay: string): string {
+  const date = new Date(`${isoDay}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return isoDay
+  return date.toLocaleDateString("pt-BR", {
+    day: "2-digit", month: "short", timeZone: "UTC",
+  })
+}
+
+/** "2 semanas", "10 dias" — o rótulo do preset quando houver um. */
+function durationLabel(days: number): string {
+  const preset = SPRINT_DURATIONS.find((d) => d.days === days)
+  return preset?.label ?? `${days} dias`
 }
 
 // Lexorank é string ordenável: comparar como texto dá a ordem manual do usuário.
@@ -120,6 +149,11 @@ export function BacklogView({
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [newGoal, setNewGoal] = useState("")
+  // Duração do ciclo. `null` = personalizada: nesse caso o término é digitado
+  // em vez de calculado a partir do início.
+  const [newDuration, setNewDuration] = useState<number | null>(DEFAULT_SPRINT_DAYS)
+  const [newStart, setNewStart] = useState("")
+  const [newEnd, setNewEnd] = useState("")
   const [completingSprint, setCompletingSprint] = useState<Sprint | null>(null)
   const [epicFilter, setEpicFilter] = useState<string | null>(null)
   // Seleção múltipla vive só na tela — só as linhas do Backlog viram
@@ -262,9 +296,27 @@ export function BacklogView({
 
   function submitSprint() {
     if (!newName.trim()) return
-    createSprint.mutate({ name: newName.trim(), goal: newGoal.trim() }, {
-      onSuccess: () => { setNewName(""); setNewGoal(""); setCreating(false) },
-    })
+    createSprint.mutate(
+      {
+        name: newName.trim(),
+        goal: newGoal.trim(),
+        duration_days: newDuration,
+        start_date: newStart || null,
+        // Com duração escolhida o término é consequência do início — mandar
+        // uma data aqui sobrescreveria o cálculo do servidor.
+        end_date: newDuration === null ? newEnd || null : null,
+      },
+      {
+        onSuccess: () => {
+          setNewName("")
+          setNewGoal("")
+          setNewDuration(DEFAULT_SPRINT_DAYS)
+          setNewStart("")
+          setNewEnd("")
+          setCreating(false)
+        },
+      },
+    )
   }
 
   const totalBacklogPts = sumPoints(backlogCards)
@@ -371,6 +423,55 @@ export function BacklogView({
                     Cancelar
                   </button>
                 </div>
+              </div>
+
+              {/* Duração do ciclo. Com um preset escolhido, só o início é
+                  digitado e o término sai da conta; "Personalizada" libera as
+                  duas pontas para quem tem um calendário próprio. */}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label className="flex-1">
+                  <span className="mb-1 block text-xs font-medium text-paper-500">Duração</span>
+                  <select
+                    value={newDuration ?? "custom"}
+                    onChange={(e) =>
+                      setNewDuration(e.target.value === "custom" ? null : Number(e.target.value))
+                    }
+                    className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
+                  >
+                    {SPRINT_DURATIONS.map((d) => (
+                      <option key={d.label} value={d.days ?? "custom"}>{d.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex-1">
+                  <span className="mb-1 block text-xs font-medium text-paper-500">
+                    Início {newDuration !== null && <span className="text-paper-400">(opcional)</span>}
+                  </span>
+                  <input
+                    type="date"
+                    value={newStart}
+                    onChange={(e) => setNewStart(e.target.value)}
+                    className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
+                  />
+                </label>
+                {newDuration === null ? (
+                  <label className="flex-1">
+                    <span className="mb-1 block text-xs font-medium text-paper-500">Término</span>
+                    <input
+                      type="date"
+                      value={newEnd}
+                      min={newStart || undefined}
+                      onChange={(e) => setNewEnd(e.target.value)}
+                      className="w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper placeholder-paper-400 outline-none focus:border-brand-400"
+                    />
+                  </label>
+                ) : (
+                  <p className="flex-1 pb-2 text-xs text-paper-500">
+                    {newStart
+                      ? `Termina em ${fmtDay(addDays(newStart, newDuration - 1))}.`
+                      : "Sem data de início, a janela é calculada no dia em que a sprint for iniciada."}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -660,6 +761,16 @@ function SprintSection({
             <span className="font-bold text-ink dark:text-paper">{sprint.name}</span>
             <StatusBadge status={sprint.status} />
             <span className="text-xs text-paper-400">{cards.length} cards</span>
+            {/* Janela do ciclo: quem olha o backlog precisa saber até quando a
+                sprint vai sem abrir a configuração dela. */}
+            {(sprint.start_date || sprint.duration_days) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-paper-100 px-2 py-0.5 text-[10px] font-medium text-paper-500 dark:bg-ink-800">
+                <CalendarRange className="size-3" />
+                {sprint.start_date && sprint.end_date
+                  ? `${fmtDay(sprint.start_date)} – ${fmtDay(sprint.end_date)}`
+                  : durationLabel(sprint.duration_days ?? DEFAULT_SPRINT_DAYS)}
+              </span>
+            )}
           </div>
           {sprint.goal && (
             <p className="mt-0.5 text-xs text-paper-500 italic">"{sprint.goal}"</p>

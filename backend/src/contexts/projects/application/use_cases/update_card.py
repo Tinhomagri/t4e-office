@@ -30,6 +30,7 @@ _TRACKED = [
     "priority",
     "points",
     "assignee_id",
+    "collaborator_ids",
     "reporter_id",
     "sprint_id",
     "start_date",
@@ -56,6 +57,9 @@ def _repr(card: Card) -> dict[str, str]:
         "priority": card.priority.value,
         "points": "" if card.points is None else str(card.points),
         "assignee_id": card.assignee_id or "",
+        # Ordenado no diff: o `.set()` do M2M devolve em ordem de banco, e sem
+        # isto trocar a ordem da lista entraria no histórico como alteração.
+        "collaborator_ids": ", ".join(sorted(card.collaborator_ids)),
         "reporter_id": card.reporter_id or "",
         "sprint_id": card.sprint_id or "",
         "start_date": "" if card.start_date is None else str(card.start_date),
@@ -111,6 +115,7 @@ class UpdateCard:
         priority=_UNSET,
         points=_UNSET,
         assignee_id=_UNSET,
+        collaborator_ids=_UNSET,
         reporter_id=_UNSET,
         sprint_id=_UNSET,
         start_date=_UNSET,
@@ -157,6 +162,8 @@ class UpdateCard:
             card.points = points
         if assignee_id is not _UNSET:
             card.assignee_id = assignee_id
+        if collaborator_ids is not _UNSET:
+            card.collaborator_ids = list(collaborator_ids or [])
         if reporter_id is not _UNSET:
             card.reporter_id = reporter_id
         if sprint_id is not _UNSET:

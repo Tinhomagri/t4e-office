@@ -33,6 +33,8 @@ export interface AuthUser {
   density?: "comfortable" | "compact"
   notification_preferences?: Record<string, boolean>
   availability?: "available" | "focus" | "away" | "offline"
+  /** Marca personalizada (cores, fontes, logotipo). Ver `shared/whitelabel`. */
+  whitelabel?: Record<string, unknown>
   has_usable_password?: boolean
   date_joined?: string
 }

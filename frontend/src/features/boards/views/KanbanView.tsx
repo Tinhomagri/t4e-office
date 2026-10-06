@@ -217,15 +217,29 @@ export function KanbanView({
   const allCards = cards ?? []
 
   const scopeCards = useMemo(() => {
-    if (jqlResults !== null) return jqlResults
-    const base = scope.kind === "backlog"
-      ? allCards.filter((c) => !c.sprint_id)
-      : allCards.filter((c) => c.sprint_id === scope.id)
+    // Busca/quick filter define QUAIS cards entram; o painel de filtros
+    // recorta o que entrou. Antes a busca saía por cima e devolvia o resultado
+    // cru: com um chip ativo ("Só meus", "Bugs") ou texto na barra, clicar num
+    // avatar não mudava nada na tela — o filtro de pessoas simplesmente não
+    // era consultado. No Jira os dois se somam, e é isso aqui.
+    const base = jqlResults !== null
+      ? jqlResults
+      : scope.kind === "backlog"
+        ? allCards.filter((c) => !c.sprint_id)
+        : allCards.filter((c) => c.sprint_id === scope.id)
 
     return base.filter((c) => {
       if (filters.types.length && !filters.types.includes(c.type)) return false
       if (filters.priorities.length && !filters.priorities.includes(c.priority)) return false
-      if (filters.assigneeIds.length && !filters.assigneeIds.includes(c.assignee_id ?? "")) return false
+      // Responsável OU participante: quem está no card de qualquer forma
+      // espera encontrá-lo ao filtrar pelo próprio nome.
+      if (
+        filters.assigneeIds.length &&
+        !filters.assigneeIds.includes(c.assignee_id ?? "") &&
+        !(c.collaborator_ids ?? []).some((id) => filters.assigneeIds.includes(id))
+      ) {
+        return false
+      }
       return true
     })
   }, [allCards, scope, filters, jqlResults])
@@ -1903,6 +1917,9 @@ function AssigneePicker({
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const assignee = members.find((m) => m.user_id === card.assignee_id)
+  const collaborators = (card.collaborator_ids ?? [])
+    .map((id) => members.find((m) => m.user_id === id))
+    .filter((m): m is Member => !!m)
 
   // O card tem `overflow-hidden` (e ainda vive dentro da coluna que rola), então
   // um menu ali dentro nasce recortado. Vai por portal no body, com a posição
@@ -1927,9 +1944,23 @@ function AssigneePicker({
       if (!boxRef.current?.contains(alvo) && !menuRef.current?.contains(alvo)) setOpen(false)
     }
     const esc = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false)
-    // Fora do fluxo do card, o menu não acompanha a rolagem: fecha em vez de
-    // ficar flutuando solto sobre o quadro.
-    const reposition = () => setOpen(false)
+    // Fora do fluxo do card, o menu precisa ser reposicionado na mão a cada
+    // rolagem — antes ele simplesmente fechava, e como a PRÓPRIA lista de
+    // pessoas rola (e o ouvinte é de captura, então o scroll dela também
+    // chegava aqui), escolher alguém de uma equipe grande era impossível: o
+    // menu sumia no primeiro movimento da roda do mouse.
+    const reposition = (event?: Event) => {
+      // Rolagem dentro do próprio menu não mexe na âncora: nada a refazer.
+      if (event?.target instanceof Node && menuRef.current?.contains(event.target)) return
+      const rect = buttonRef.current?.getBoundingClientRect()
+      // O card saiu da área visível da coluna: aí sim fecha, senão o menu
+      // ficaria apontando para um card que não está mais na tela.
+      if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false)
+        return
+      }
+      place()
+    }
     document.addEventListener("mousedown", close)
     document.addEventListener("keydown", esc)
     window.addEventListener("scroll", reposition, true)
@@ -2365,15 +2396,34 @@ export function CardCell({
               </span>
             )}
           </div>
-          {onAssign && !dragging ? (
-            <AssigneePicker card={card} members={members} onAssign={onAssign} />
-          ) : assignee ? (
-            <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
-          ) : (
-            <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400">
-              ?
-            </span>
-          )}
+          <div className="flex items-center gap-1">
+            {/* Participantes à esquerda do responsável, sobrepostos: o rodapé
+                do card é estreito e uma fila de avatares em tamanho cheio
+                empurraria o resto para fora. */}
+            {collaborators.length > 0 && (
+              <span className="flex -space-x-1.5" title={collaborators.map((m) => m.name).join(", ")}>
+                {collaborators.slice(0, 3).map((m) => (
+                  <span key={m.user_id} className="rounded-full ring-1 ring-paper dark:ring-ink-900">
+                    <ColoredAvatar name={m.name} userId={m.user_id} size="xs" />
+                  </span>
+                ))}
+                {collaborators.length > 3 && (
+                  <span className="grid size-5 place-items-center rounded-full bg-paper-200 text-[9px] font-semibold text-paper-600 ring-1 ring-paper dark:bg-ink-700 dark:text-paper-300 dark:ring-ink-900">
+                    +{collaborators.length - 3}
+                  </span>
+                )}
+              </span>
+            )}
+            {onAssign && !dragging ? (
+              <AssigneePicker card={card} members={members} onAssign={onAssign} />
+            ) : assignee ? (
+              <ColoredAvatar name={assignee.name} userId={assignee.user_id} size="xs" />
+            ) : (
+              <span className="grid size-5 place-items-center rounded-full border border-dashed border-paper-300 text-[9px] text-paper-400">
+                ?
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>

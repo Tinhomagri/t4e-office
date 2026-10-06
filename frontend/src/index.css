@@ -26,6 +26,17 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* Câmera desligada mostra a foto de perfil da pessoa (ver CameraTile), não o
+   bonequinho genérico da lib — que some aqui. A faixa com nome e mudo sobe
+   acima dessa camada pra continuar legível por cima do avatar. */
+.meet-video-stage .lk-participant-placeholder {
+  opacity: 0;
+}
+
+.meet-video-stage .lk-participant-metadata {
+  z-index: 2;
+}
+
 @layer base {
   :root {
     color-scheme: light;

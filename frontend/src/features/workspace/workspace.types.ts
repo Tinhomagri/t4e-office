@@ -119,6 +119,8 @@ export interface Card {
   priority: CardPriority
   points: number | null
   assignee_id: string | null
+  /** Participantes além do responsável — ver `collaborators` no backend. */
+  collaborator_ids: string[]
   reporter_id: string | null
   // Nome de quem relatou pelo link público, sem conta aqui — preenchido só
   // quando reporter_id é null e o card veio de fora (source="public_link").
@@ -199,6 +201,8 @@ export interface Sprint {
   goal: string
   start_date: string | null
   end_date: string | null
+  /** Duração do ciclo em dias. `null` = personalizada (datas na mão). */
+  duration_days: number | null
   status: SprintStatus
   started_at?: string | null
   completed_at?: string | null
@@ -264,6 +268,7 @@ export interface CreateCardInput {
   priority?: CardPriority
   points?: number | null
   assignee_id?: string | null
+  collaborator_ids?: string[]
   reporter_id?: string | null
   sprint_id?: string | null
   start_date?: string | null
@@ -572,7 +577,19 @@ export interface CreateSprintInput {
   goal?: string
   start_date?: string | null
   end_date?: string | null
+  duration_days?: number | null
 }
+
+/** Durações oferecidas na criação da sprint. `null` = personalizada. */
+export const SPRINT_DURATIONS: { days: number | null; label: string }[] = [
+  { days: 7, label: "1 semana" },
+  { days: 14, label: "2 semanas" },
+  { days: 21, label: "3 semanas" },
+  { days: 28, label: "4 semanas" },
+  { days: null, label: "Personalizada" },
+]
+
+export const DEFAULT_SPRINT_DAYS = 14
 
 export type UpdateSprintInput = Partial<CreateSprintInput> & { status?: SprintStatus }
 

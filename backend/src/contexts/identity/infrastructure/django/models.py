@@ -60,6 +60,10 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     theme = models.CharField(max_length=10, blank=True, default="system")
     density = models.CharField(max_length=12, blank=True, default="comfortable")
     notification_preferences = models.JSONField(default=dict, blank=True)
+    # Marca personalizada (cores, fontes, raios, logotipo). Fica no perfil, e
+    # não só no navegador, para a pessoa reencontrar o mesmo visual em outro
+    # computador. Formato em frontend/src/shared/whitelabel.ts.
+    whitelabel = models.JSONField(default=dict, blank=True)
     availability = models.CharField(max_length=12, blank=True, default="available")
     is_active = models.BooleanField(default=False)  # ativo apenas após verificar email
     email_verified = models.BooleanField(default=False)

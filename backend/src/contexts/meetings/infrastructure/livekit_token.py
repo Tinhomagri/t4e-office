@@ -82,6 +82,66 @@ def _admin_token(room: str) -> str:
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
+def _list_token() -> str:
+    """Token administrativo sem sala: `roomList` é um grant global."""
+    key = settings.LIVEKIT_API_KEY
+    secret = settings.LIVEKIT_API_SECRET
+    now = int(time.time())
+    payload = {
+        "iss": key,
+        "sub": key,
+        "nbf": now,
+        "exp": now + 60,
+        "video": {"roomList": True},
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def live_room_counts(*, rooms: list[str]) -> dict[str, int] | None:
+    """Quantas pessoas o SFU vê em cada sala NESTE instante.
+
+    A fonte da verdade sobre quem está numa chamada é o SFU, não a nossa
+    tabela: ela só registra saída quando o cliente avisa, e fechar a aba,
+    perder a rede ou o navegador travar nunca avisa. A sala ficava "com 1
+    pessoa" para sempre.
+
+    Uma chamada só para a lista inteira — `ListRooms` aceita vários nomes —
+    para a listagem não virar N+1 contra o SFU.
+
+    Devolve `None` quando o SFU não respondeu: "não sei" e "sala vazia" são
+    respostas diferentes, e quem chama precisa distinguir as duas.
+    """
+    if not rooms:
+        return {}
+    try:
+        resp = httpx.post(
+            f"{settings.LIVEKIT_ADMIN_URL}/twirp/livekit.RoomService/ListRooms",
+            json={"names": rooms},
+            headers={"Authorization": f"Bearer {_list_token()}"},
+            # Conexão com prazo curto: esta chamada entra no caminho de uma
+            # listagem que o navegador repete a cada 15s. Com o SFU fora do ar,
+            # esperar os 5s cheios só para descobrir isso travaria a tela.
+            timeout=httpx.Timeout(5.0, connect=2.0),
+        )
+        if resp.status_code != 200:
+            return None
+        payload = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    # Sala sem sessão ao vivo nem aparece na resposta, então o zero tem que
+    # vir daqui, não da ausência.
+    counts = {name: 0 for name in rooms}
+    for room in payload.get("rooms") or []:
+        name = room.get("name")
+        if name not in counts:
+            continue
+        # O Twirp serializa em lowerCamelCase; aceitar os dois evita depender
+        # da configuração de JSON do servidor.
+        raw = room.get("numParticipants", room.get("num_participants", 0))
+        counts[name] = int(raw or 0)
+    return counts
+
+
 def end_live_session(*, room: str) -> None:
     """Derruba TODO MUNDO que está ao vivo na sala agora, sem mexer no nosso
     registro de sala (`MeetingRoomModel`) — pensado pra sala fixa (daily,
