@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from contexts.projects.domain.entities.sprint import DEFAULT_SPRINT_DAYS
 from contexts.projects.infrastructure.django.models import CardModel, SprintModel
 from contexts.projects.infrastructure.lexorank import (
     REBALANCE_AT_LENGTH,
@@ -132,12 +133,18 @@ class SprintStartView(APIView):
             sprint.end_date = request.data["end_date"]
         if "goal" in request.data:
             sprint.goal = request.data.get("goal") or ""
+        if request.data.get("duration_days") is not None:
+            sprint.duration_days = int(request.data["duration_days"])
         # Sprint sem janela definida não rende burndown nem "dias restantes".
-        # Assume o padrão do time (começa hoje, 2 semanas) em vez de ficar nula.
+        # Começa hoje e termina pela duração escolhida na criação; sem duração
+        # escolhida, as duas semanas que o produto já assumia aqui.
         if not sprint.start_date:
             sprint.start_date = timezone.localdate()
         if not sprint.end_date:
-            sprint.end_date = sprint.start_date + timedelta(days=14)
+            days = sprint.duration_days or DEFAULT_SPRINT_DAYS
+            # `- 1` porque o dia de início conta: 14 dias a partir de uma
+            # segunda terminam no domingo seguinte, não na segunda depois.
+            sprint.end_date = sprint.start_date + timedelta(days=days - 1)
         sprint.save()
 
         # Cards da sprint ainda em backlog sobem para "todo" (como no Jira).
@@ -154,7 +161,7 @@ class SprintStartView(APIView):
                 notif_type="sprint_started",
                 title=f"Sprint iniciada: {sprint.name}",
                 body=sprint.goal,
-                link="/boards",
+                link="/app/boards",
             )
         return Response(_ser_sprint(sprint))
 
@@ -269,8 +276,12 @@ class CardChildrenView(APIView):
         card = CardModel.objects.select_related("project").filter(id=card_id).first()
         if card is None:
             raise NotFoundError("Card não encontrado.")
-        qs = (card.epic_children if card.type == "epic" else card.subtasks).order_by(
-            "rank", "number"
+        qs = (
+            (card.epic_children if card.type == "epic" else card.subtasks)
+            # Sem o prefetch, ler os participantes de cada filho na montagem do
+            # payload abaixo custaria uma query por card.
+            .prefetch_related("collaborators")
+            .order_by("rank", "number")
         )
         key = card.project.key
         return Response([
@@ -283,6 +294,7 @@ class CardChildrenView(APIView):
                 "priority": c.priority,
                 "points": c.points,
                 "assignee_id": str(c.assignee_id) if c.assignee_id else None,
+                "collaborator_ids": [str(u.id) for u in c.collaborators.all()],
             }
             for c in qs
         ])

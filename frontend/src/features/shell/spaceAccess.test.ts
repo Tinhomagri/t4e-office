@@ -44,16 +44,25 @@ describe("useMySpaceIds", () => {
     await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
   })
 
-  it("admin vê somente os spaces liberados pelo dono", async () => {
+  it("admin vê todos os spaces, mesmo com allowed_spaces restrito", async () => {
     useAuthStore.setState({ user: { id: "u1" } as any })
     setMembers([
       { user_id: "u1", name: "Ana", email: "a@a.com", role: "admin", allowed_spaces: ["marketing"] },
     ])
     const { result } = renderHook(() => useMySpaceIds("ws1"), { wrapper })
-    await waitFor(() => expect(result.current).toEqual(["marketing"]))
+    await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
   })
 
-  it("admin ou membro legado sem lista não vê nenhum space", async () => {
+  it("admin sem lista nenhuma continua vendo tudo", async () => {
+    useAuthStore.setState({ user: { id: "u1" } as any })
+    setMembers([
+      { user_id: "u1", name: "Ana", email: "a@a.com", role: "admin", allowed_spaces: null },
+    ])
+    const { result } = renderHook(() => useMySpaceIds("ws1"), { wrapper })
+    await waitFor(() => expect(result.current).toEqual(["boards", "marketing", "comercial"]))
+  })
+
+  it("membro legado sem lista não vê nenhum space", async () => {
     useAuthStore.setState({ user: { id: "u1" } as any })
     setMembers([
       { user_id: "u1", name: "Ana", email: "a@a.com", role: "member", allowed_spaces: null },

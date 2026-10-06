@@ -153,6 +153,11 @@ class SprintModel(models.Model):
     external_key = models.CharField(max_length=60, blank=True, default="", db_index=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    duration_days = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Duração do ciclo em dias. Nulo = personalizada (datas na mão).",
+    )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="planned")
     # Timestamps do ciclo de vida (iniciar/concluir sprint, como no Jira)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -225,6 +230,16 @@ class CardModel(models.Model):
         null=True,
         blank=True,
         related_name="assigned_cards",
+    )
+    # Quem mais está no card, além do responsável.
+    #
+    # Separado de `assignee` de propósito: o responsável é quem presta contas
+    # pelo card (e é por ele que carga, relatório e "Meu Dia" contam). Colocar
+    # cinco pessoas no mesmo papel tornaria "de quem é isso?" sem resposta.
+    collaborators = models.ManyToManyField(
+        "identity.UserModel",
+        blank=True,
+        related_name="collaborating_cards",
     )
     # Relator: quem abriu/pediu o card
     reporter = models.ForeignKey(

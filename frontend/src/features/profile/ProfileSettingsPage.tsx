@@ -2,7 +2,7 @@ import { motion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   Bell, Camera, Check, ChevronRight, CircleUserRound, Copy,
-  KeyRound, LockKeyhole, Mail, Palette, Plus, Save,
+  KeyRound, LockKeyhole, Mail, Paintbrush, Palette, Plus, Save,
   ShieldCheck, Sparkles, Trash2, UserRound,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -13,15 +13,18 @@ import { useAuthStore } from "@/features/auth/auth.store"
 import { useCreateToken, useRevokeToken, useTokens } from "@/features/tokens/tokens.hooks"
 import { extractApiError } from "@/shared/api/client"
 import { useThemeStore } from "@/shared/theme.store"
+import type { Whitelabel } from "@/shared/whitelabel"
+import { WhitelabelSection } from "./WhitelabelSection"
 import { Button, Field, Input, Modal, Select, Textarea, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 import type { Member } from "@/features/workspace/workspace.types"
 
-type Section = "profile" | "preferences" | "security" | "tokens"
+type Section = "profile" | "preferences" | "whitelabel" | "security" | "tokens"
 
 const sections = [
   { id: "profile" as const, label: "Perfil", description: "Identidade e apresentação", icon: CircleUserRound },
   { id: "preferences" as const, label: "Preferências", description: "Aparência e notificações", icon: Palette },
+  { id: "whitelabel" as const, label: "Marca", description: "Cores, fontes e logotipo", icon: Paintbrush },
   { id: "security" as const, label: "Segurança", description: "Acesso e senha", icon: ShieldCheck },
   { id: "tokens" as const, label: "Tokens de API", description: "Acesso de integrações externas", icon: KeyRound },
 ]
@@ -84,6 +87,13 @@ export function ProfileSettingsPage() {
     } catch (error) {
       toast.error(extractApiError(error))
     } finally { setSaving(false) }
+  }
+
+  // A marca salva junto com o resto do perfil, para seguir a pessoa em outro
+  // computador. O store já cuidou de aplicar e de guardar no navegador.
+  const persistWhitelabel = async (whitelabel: Whitelabel) => {
+    const updated = await updateProfile({ whitelabel })
+    setUser(updated)
   }
 
   const saveProfile = () => void save({
@@ -150,6 +160,7 @@ export function ProfileSettingsPage() {
         <motion.main key={section} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
           {section === "profile" && <ProfileSection form={form} setForm={setForm} avatar={avatar} setAvatar={setAvatar} saving={saving} onSave={saveProfile} />}
           {section === "preferences" && <PreferencesSection form={form} setForm={setForm} saving={saving} onSave={savePreferences} />}
+          {section === "whitelabel" && <WhitelabelSection onPersist={persistWhitelabel} />}
           {section === "security" && <SecuritySection user={user} passwords={passwords} setPasswords={setPasswords} saving={passwordSaving} onSave={savePassword} />}
           {section === "tokens" && <TokensSection />}
         </motion.main>

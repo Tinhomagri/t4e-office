@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useThemeStore } from "@/shared/theme.store"
+import { useWhitelabelStore } from "@/shared/whitelabel"
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
@@ -93,6 +94,8 @@ function useMediaQuery(query: string) {
 
 export function AppShell() {
   const navigate = useNavigate()
+  // Marca do whitelabel: nome, sigla e logotipo escolhidos no Perfil.
+  const brand = useWhitelabelStore((state) => state.preview ?? state.whitelabel)
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
@@ -131,6 +134,12 @@ export function AppShell() {
   // menu em vez de levar a uma tela de "acesso negado".
   const myRole = useMyRole(activeWorkspaceId)
   const isWorkspaceAdmin = myRole === "owner" || myRole === "admin"
+  // Analytics e Pessoas são administração do workspace — ver `adminOnly`
+  // em spaces.ts.
+  const visibleGroups = useMemo(
+    () => space.groups.filter((g) => !g.adminOnly || isWorkspaceAdmin),
+    [space.groups, isWorkspaceAdmin],
+  )
   const commonGroup = useMemo(
     () =>
       isWorkspaceAdmin
@@ -214,11 +223,13 @@ export function AppShell() {
           onClick={() => navigate("/app")}
           className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-colors duration-150 hover:bg-paper-100 focus-ring dark:hover:bg-ink-800"
         >
-          <span className="grid size-6 place-items-center rounded bg-brand-500 text-[11px] font-bold text-white">
-            T4
+          <span className="grid size-6 place-items-center overflow-hidden rounded bg-brand-500 text-[11px] font-bold text-white">
+            {brand.logoUrl
+              ? <img src={brand.logoUrl} alt="" className="size-full object-contain" />
+              : (brand.appInitials || "T4")}
           </span>
           <span className="hidden text-[15px] font-semibold tracking-[-0.01em] text-ink dark:text-paper sm:inline">
-            Office
+            {brand.appName || "Office"}
           </span>
         </button>
 
@@ -337,7 +348,7 @@ export function AppShell() {
                 transition={{ duration: 0.2, ease: EASE }}
                 className="flex flex-col gap-4"
               >
-                {space.groups.map((group) => (
+                {visibleGroups.map((group) => (
                   <NavGroupBlock key={group.heading} group={group} collapsed={collapsed} />
                 ))}
               </motion.div>

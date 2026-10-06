@@ -321,7 +321,12 @@ export function useStartSprint(projectId: string | null) {
       input,
     }: {
       sprintId: string
-      input?: { start_date?: string; end_date?: string; goal?: string }
+      input?: {
+        start_date?: string
+        end_date?: string
+        goal?: string
+        duration_days?: number | null
+      }
     }) => wsApi.startSprint(sprintId, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sprints", projectId] })

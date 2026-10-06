@@ -10,7 +10,7 @@ import type { SessionStatus } from "@/features/poker/poker.types"
 /** Barra flutuante de aviso — mesma moldura da roda, sem cartas. */
 export function PokerSeatHint({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-lg bg-ink-950/80 px-3 py-2 text-[12px] text-white/80 backdrop-blur-sm">
+    <div className="absolute bottom-16 left-1/2 max-w-[calc(100vw-2rem)] -translate-x-1/2 text-balance rounded-lg bg-ink-950/80 px-3 py-2 text-center text-[12px] text-white/80 backdrop-blur-sm">
       {children}
     </div>
   )
@@ -52,12 +52,17 @@ export function PokerVoteWheel({
     return <PokerSeatHint>{NOT_VOTING_HINT[status] ?? "Votação fechada"}</PokerSeatHint>
   }
 
+  // `max-w` + `flex-wrap`: as nove cartas em linha única pedem ~368px, e numa
+  // janela estreita (celular, ou o Escritório numa coluna lateral) a barra
+  // centrada transbordava dos dois lados — as cartas das pontas ficavam fora
+  // da tela, sem como clicar. Agora ela quebra em duas linhas antes disso, e
+  // as cartas encolhem um passo no limiar mais apertado.
   return (
-    <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 flex-col items-center gap-1">
+    <div className="absolute bottom-16 left-1/2 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-1">
       {error && (
-        <p className="rounded-md bg-red-600/90 px-2 py-1 text-[11px] text-white">{error}</p>
+        <p className="max-w-full rounded-md bg-red-600/90 px-2 py-1 text-center text-[11px] text-white">{error}</p>
       )}
-      <div className="flex gap-1 rounded-lg bg-ink-950/80 p-1.5 backdrop-blur-sm">
+      <div className="flex max-w-full flex-wrap justify-center gap-1 rounded-lg bg-ink-950/80 p-1.5 backdrop-blur-sm">
         {FIBONACCI.map((value) => (
           <button
             key={value}
@@ -70,7 +75,7 @@ export function PokerVoteWheel({
                 onError: () => setError("Não foi possível votar agora."),
               })
             }}
-            className="grid size-9 place-items-center rounded-md text-sm font-bold text-white transition-colors hover:bg-white/15 focus-ring"
+            className="grid size-8 shrink-0 place-items-center rounded-md text-[13px] font-bold text-white transition-colors hover:bg-white/15 focus-ring min-[380px]:size-9 min-[380px]:text-sm"
           >
             {value}
           </button>

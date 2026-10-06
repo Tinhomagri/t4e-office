@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from "react-router-dom"
 
 import { useAuthStore } from "@/features/auth/auth.store"
+import { AdminOnly } from "@/features/shell/AdminOnly"
 import { AppShell } from "@/features/shell/AppShell"
 import { AvatarLabPage } from "@/features/avatar/AvatarLabPage"
 import { AnonymousReportPage } from "@/features/anonymous-reports/AnonymousReportPage"
@@ -116,7 +117,7 @@ export const appRoutes: RouteObject[] = [
   { path: "boards", element: <BoardsPage /> },
   { path: "projects", element: <ProjectsPage /> },
   { path: "boards/:projectId/settings", element: <BoardSettingsPage /> },
-  { path: "members", element: <MembersPage /> },
+  { path: "members", element: <AdminOnly><MembersPage /></AdminOnly> },
   { path: "poker", element: <PokerPage /> },
   { path: "poker/:sessionId", element: <PokerPage /> },
   {
@@ -134,15 +135,15 @@ export const appRoutes: RouteObject[] = [
       { path: "metas", element: <GoalsRoute /> },
     ],
   },
-  { path: "reports", element: <ReportsPage /> },
-  { path: "portfolio", element: <PortfolioPage /> },
-  { path: "portfolio/membro/:userId", element: <MemberPortfolioPage /> },
-  { path: "portfolio/:projectId", element: <ProjectPortfolioPage /> },
+  { path: "reports", element: <AdminOnly><ReportsPage /></AdminOnly> },
+  { path: "portfolio", element: <AdminOnly><PortfolioPage /></AdminOnly> },
+  { path: "portfolio/membro/:userId", element: <AdminOnly><MemberPortfolioPage /></AdminOnly> },
+  { path: "portfolio/:projectId", element: <AdminOnly><ProjectPortfolioPage /></AdminOnly> },
   { path: "integrations", element: <IntegrationsPage /> },
   { path: "reunioes", element: <MeetingsPage /> },
   { path: "perfil", element: <ProfileSettingsPage /> },
   { path: "chat", element: <ChatPage /> },
-  { path: "desks", element: <DesksManagerPage /> },
+  { path: "desks", element: <AdminOnly><DesksManagerPage /></AdminOnly> },
   // Meu Card nasceu no PC do escritório, mas é uma tela do produto como outra
   // qualquer — ter rota é o que deixa o PC abri-la pelo mesmo caminho.
   { path: "my-card", element: <MyCardPage /> },
@@ -152,7 +153,7 @@ export const appRoutes: RouteObject[] = [
   { path: "marketing/trafego", element: <TrafficPage /> },
   { path: "marketing/redes", element: <SocialAccountsPage /> },
   { path: "marketing/biblioteca", element: <DriveLibraryPage /> },
-  { path: "avatar", element: <AvatarLabPage /> },
+  { path: "avatar", element: <AdminOnly><AvatarLabPage /></AdminOnly> },
   { path: "copilot", element: <CopilotPage /> },
 ]
 

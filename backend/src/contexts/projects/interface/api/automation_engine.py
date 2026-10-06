@@ -150,7 +150,7 @@ def run_rule(rule, triggered_by: str = "cron") -> AutomationRunLogModel:  # type
                 user_id=str(uid),
                 notif_type="automation_ran",
                 title=f"Automação '{rule.name}' executada ({status_str})",
-                link="/boards",
+                link="/app/boards",
             )
     except Exception:  # noqa: BLE001
         pass
