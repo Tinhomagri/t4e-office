@@ -1917,9 +1917,6 @@ function AssigneePicker({
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const assignee = members.find((m) => m.user_id === card.assignee_id)
-  const collaborators = (card.collaborator_ids ?? [])
-    .map((id) => members.find((m) => m.user_id === id))
-    .filter((m): m is Member => !!m)
 
   // O card tem `overflow-hidden` (e ainda vive dentro da coluna que rola), então
   // um menu ali dentro nasce recortado. Vai por portal no body, com a posição
@@ -2212,6 +2209,9 @@ export function CardCell({
   onOpen?: (card: Card) => void
 }) {
   const assignee = members.find((m) => m.user_id === card.assignee_id)
+  const collaborators = (card.collaborator_ids ?? [])
+    .map((id) => members.find((m) => m.user_id === id))
+    .filter((m): m is Member => !!m)
   const isEpic = card.type === "epic"
   const isDone = card.status === "done"
   const due = dueState(card.due_date)
