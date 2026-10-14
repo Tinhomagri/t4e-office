@@ -4,7 +4,7 @@ from drf_spectacular.renderers import OpenApiJsonRenderer
 from drf_spectacular.views import SpectacularAPIView
 from rest_framework.permissions import AllowAny
 
-from contexts.agent_api.interface.views import AuditoriaView, health
+from contexts.agent_api.interface.views import AuditoriaView, ProjetosView, health
 
 urlpatterns = [
     path("health/", health, name="agentes-health"),
@@ -23,4 +23,5 @@ urlpatterns = [
         name="agentes-openapi",
     ),
     path("auditoria/", AuditoriaView.as_view(), name="agentes-auditoria"),
+    path("projetos/", ProjetosView.as_view(), name="agentes-projetos"),
 ]

@@ -20,3 +20,7 @@ def day(value: date | datetime | None) -> str | None:
 
 def hours(seconds: int | float | None) -> float | None:
     return None if seconds is None else round(seconds / 3600, 2)
+
+
+PROJECT_STATUS = {"active": "ativo", "paused": "pausado", "closed": "encerrado"}
+PROJECT_STATUS_IN = {v: k for k, v in PROJECT_STATUS.items()}
