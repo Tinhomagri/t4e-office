@@ -22,6 +22,7 @@
 - Nunca expor e-mail, telefone, endereço, custo.
 - Comandos de teste: `cd backend && pytest -q <path>`; front: `cd frontend && npx vitest run <path>` e `npm run lint`.
 - Código e comentários em português, no estilo do repo.
+- Escopo: só backend/API. Sem telas — campos novos ficam editáveis pelo PATCH da API normal e pelo admin; agentes e consumidores são do Leonardo.
 
 ## File Structure
 
@@ -42,7 +43,6 @@ backend/src/contexts/agent_api/
   tests/test_auth.py, test_tokens.py, test_tracked_time.py, test_projetos.py, test_cards.py, test_horas.py
 backend/src/contexts/projects/  (campos novos — ver Tasks 3-4)
 backend/src/contexts/projects/domain/working_time.py  (+ segmentos com responsável)
-frontend/src/features/boards/...  (configurações do projeto, drawer, Kanban)
 ```
 
 ---
@@ -186,24 +186,22 @@ Views do contexto: `authentication_classes = []`, `permission_classes = [AllowAn
 - [ ] **Step 4:** testes passam + `pytest -q src/contexts/projects src/contexts/identity` (middleware não quebra fluxo normal).
 - [ ] **Step 5:** commit `feat(agent_api): middleware somente leitura, auditoria e limite de taxa`.
 
-### Task 3: Campos novos de Projeto/Sprint/Worklog + UI de configurações
+### Task 3: Campos novos de Projeto/Sprint/Worklog 
 
 **Files:**
 - Modify: `projects/infrastructure/django/models.py` (ProjectModel: `status` choices `active/paused/closed` default `active`, `manager_client_id`, `manager_contract_id` CharField(64, blank), `updated_at` auto_now; SprintModel e WorklogModel: `updated_at` auto_now), migration `projects`, `projects/interface/api/board_config_views.py` (ProjectDetailView aceita/devolve os 3 campos), testes em `projects/interface/api/tests/test_project_agent_fields.py`
-- Modify front: tipos em `workspace.types.ts`, tela de configurações do projeto (`frontend/src/features/boards/settings/` — achar o form de detalhes com `grep -rn "deadline" frontend/src/features/boards/settings`): select Status + 2 inputs "ID do cliente no Manager" / "ID do contrato no Manager".
 
 - [ ] **Step 1:** teste PATCH `/api/projects/<id>/` com `{"status":"paused","manager_contract_id":"C-9"}` → 200 e GET devolve; `status` inválido → 400.
-- [ ] **Step 2:** FAIL. **Step 3:** implementar (migration com `default=timezone.now` para `updated_at` existentes). **Step 4:** PASS + vitest/lint front.
+- [ ] **Step 2:** FAIL. **Step 3:** implementar (migration com `default=timezone.now` para `updated_at` existentes). **Step 4:** PASS.
 - [ ] **Step 5:** commit `feat(projects): status do projeto e ids do Manager`.
 
-### Task 4: Campos novos de Card (tipos, bloqueio, pedido do cliente) + UI
+### Task 4: Campos novos de Card (tipos, bloqueio, pedido do cliente)
 
 **Files:**
 - Modify: `projects/infrastructure/django/models.py` (TYPE_CHOICES += `("support","Suporte"), ("improvement","Melhoria")`; `blocked` Bool, `block_reason` Text blank, `blocked_at` DateTime null, `client_request` Bool null), `projects/domain/entities/card.py` (CardType + campos), `repositories_impl.py` (mapear), `application/use_cases/update_card.py` (params `blocked`, `block_reason`, `client_request`; `_TRACKED` += `blocked`, `block_reason`; `blocked_at` = now ao bloquear, None ao desbloquear; desbloquear limpa motivo; bloquear sem motivo → `ValidationError`), `interface/api/serializers.py` (Card + UpdateCard), `card_views.py` (`card_row`, `_card_dict`), migration; testes `projects/interface/api/tests/test_card_block.py`
-- Modify front: `workspace.types.ts`, `CardDrawer.tsx` (ToolbarButton cadeado: bloquear abre prompt de motivo; toggle "Pedido do cliente" no painel lateral; `FIELD_LABEL` += `blocked: "Bloqueio"`, `block_reason: "Motivo do bloqueio"`), `KanbanView.tsx` (`CardCell`: selo vermelho `Lock` com `title={card.block_reason}` quando `card.blocked`), select de tipo (onde houver lista de tipos: `grep -rn '"chore"' frontend/src`).
 
 - [ ] **Step 1:** testes: PATCH `{"blocked":true,"block_reason":"Aguardando acesso"}` → 200, histórico `blocked`; `{"blocked":true}` sem motivo → 400; `{"blocked":false}` limpa motivo/data; PATCH `{"type":"support"}` → 200; `{"client_request":true}` → 200.
-- [ ] **Step 2:** FAIL. **Step 3:** implementar. **Step 4:** PASS (+ suíte `projects`), vitest + lint.
+- [ ] **Step 2:** FAIL. **Step 3:** implementar. **Step 4:** PASS (+ suíte `projects`).
 - [ ] **Step 5:** commit `feat(boards): card bloqueado com motivo, tipos suporte/melhoria e pedido do cliente`.
 
 ### Task 5: Tempo rastreado materializado
