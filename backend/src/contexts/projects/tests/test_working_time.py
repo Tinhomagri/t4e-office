@@ -144,3 +144,53 @@ def test_status_inicial_vem_do_old_value_do_primeiro_evento():
         working_slugs=WORKING,
     )
     assert wt.worked_seconds == 2 * 3600
+
+
+# ── trechos fechados com responsável ──────────────────────────────────────────
+
+def _assignee(when, old, new):
+    return CardEvent(when=when, field="assignee_id", old_value=old, new_value=new)
+
+
+def test_trechos_fechados_trazem_responsavel_do_momento():
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="doing",
+        current_assignee_id="ana",
+        events=[
+            _status(_at(12, 10), "todo", "doing"),
+            _paused(_at(12, 11), True),
+            _paused(_at(12, 13), False),
+        ],
+        working_slugs=WORKING,
+    )
+    (seg,) = wt.segments
+    assert (seg.start, seg.end, seg.seconds, seg.assignee_id) == (
+        _at(12, 10), _at(12, 11), 3600, "ana",
+    )
+
+
+def test_troca_de_responsavel_quebra_o_trecho():
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="review",
+        current_assignee_id="bia",
+        events=[
+            _status(_at(12, 10), "todo", "doing"),
+            _assignee(_at(12, 11), "ana", "bia"),
+            _status(_at(12, 13), "doing", "review"),
+        ],
+        working_slugs=WORKING,
+    )
+    assert [(s.assignee_id, s.seconds) for s in wt.segments] == [("ana", 3600), ("bia", 7200)]
+    assert wt.worked_seconds == 3 * 3600
+
+
+def test_sem_responsavel_vira_none():
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="review",
+        events=[_status(_at(12, 10), "todo", "doing"), _status(_at(12, 11), "doing", "review")],
+        working_slugs=WORKING,
+    )
+    assert wt.segments[0].assignee_id is None

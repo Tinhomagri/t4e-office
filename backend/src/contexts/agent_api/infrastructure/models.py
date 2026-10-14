@@ -1,5 +1,7 @@
 """Modelos da API de agentes: identidade do agente (só o hash do token) e o
 log de auditoria de toda requisição feita com token de agente."""
+import uuid
+
 from django.db import models
 
 
@@ -50,3 +52,32 @@ class AgentAuditLogModel(models.Model):
         ordering = ["-criado_em"]
         verbose_name = "Auditoria de agente"
         verbose_name_plural = "Auditoria de agentes"
+
+
+class TrackedTimeEntryModel(models.Model):
+    """Trecho fechado de tempo rastreado (card em andamento e não pausado),
+    por pessoa. Cópia materializada do que `projects.domain.working_time`
+    deriva do histórico — o histórico é a fonte da verdade; isto existe para
+    `/horas` ser uma consulta simples com id estável."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    card = models.ForeignKey(
+        "projects.CardModel", on_delete=models.CASCADE, related_name="tracked_time"
+    )
+    pessoa = models.ForeignKey(
+        "identity.UserModel",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tracked_time",
+    )
+    inicio = models.DateTimeField()
+    fim = models.DateTimeField()
+    segundos = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        db_table = "agent_api_tracked_time"
+        constraints = [
+            models.UniqueConstraint(fields=["card", "inicio"], name="tracked_time_card_inicio")
+        ]

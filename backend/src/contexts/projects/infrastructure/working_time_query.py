@@ -16,7 +16,7 @@ from contexts.projects.infrastructure.django.models import (
     WorkflowStatusModel,
 )
 
-TRACKED_FIELDS = ("status", "paused")
+TRACKED_FIELDS = ("status", "paused", "assignee_id")
 
 
 def working_slugs_by_project(project_ids: Iterable[str]) -> dict[str, set[str]]:
@@ -31,7 +31,7 @@ def working_slugs_by_project(project_ids: Iterable[str]) -> dict[str, set[str]]:
 
 def working_time_for_cards(cards: Iterable[CardModel]) -> dict[str, WorkingTime]:
     """`WorkingTime` por id de card. Recebe os cards já carregados (precisa só
-    de id, project_id, status e created_at)."""
+    de id, project_id, status, assignee_id e created_at)."""
     cards = list(cards)
     if not cards:
         return {}
@@ -50,6 +50,7 @@ def working_time_for_cards(cards: Iterable[CardModel]) -> dict[str, WorkingTime]
             current_status=c.status,
             events=events.get(str(c.id), []),
             working_slugs=slugs.get(str(c.project_id), set()),
+            current_assignee_id=str(c.assignee_id) if c.assignee_id else None,
         )
         for c in cards
     }

@@ -31,12 +31,23 @@ class CardEvent:
 
 
 @dataclass(frozen=True)
+class Segment:
+    """Trecho fechado de trabalho — quem era o responsável enquanto contava."""
+
+    start: datetime
+    end: datetime
+    seconds: int  # horário comercial
+    assignee_id: str | None
+
+
+@dataclass(frozen=True)
 class WorkingTime:
     # Soma dos trechos JÁ FECHADOS; o trecho aberto (desde `running_since`) o
     # front soma ao vivo, pra o contador andar sem recarregar a lista.
     worked_seconds: int
     running_since: datetime | None
     paused_at: datetime | None
+    segments: tuple[Segment, ...] = ()
 
 
 def business_seconds_between(start: datetime, end: datetime) -> int:
@@ -65,18 +76,36 @@ def compute_working_time(
     current_status: str,
     events: list[CardEvent],
     working_slugs: set[str],
+    current_assignee_id: str | None = None,
 ) -> WorkingTime:
-    """Percorre o histórico (status + pausa) em ordem e soma os trechos ativos."""
+    """Percorre o histórico (status, pausa, responsável) em ordem e soma os
+    trechos ativos. Troca de responsável com o card rodando fecha o trecho de
+    um e abre o do outro — cada pessoa fica com as horas dela."""
     events = sorted(events, key=lambda e: e.when)
     first_status = next((e for e in events if e.field == "status"), None)
     status = first_status.old_value if first_status else current_status
+    first_assignee = next((e for e in events if e.field == "assignee_id"), None)
+    assignee = (first_assignee.old_value if first_assignee else current_assignee_id) or None
     paused_at: datetime | None = None
 
     def running() -> bool:
         return status in working_slugs and paused_at is None
 
-    worked = 0
+    segments: list[Segment] = []
     segment_start: datetime | None = created_at if running() else None
+
+    def close(at: datetime) -> None:
+        nonlocal segment_start
+        if segment_start is not None:
+            segments.append(
+                Segment(
+                    start=segment_start,
+                    end=at,
+                    seconds=business_seconds_between(segment_start, at),
+                    assignee_id=assignee,
+                )
+            )
+        segment_start = None
 
     for event in events:
         was_running = running()
@@ -85,17 +114,23 @@ def compute_working_time(
             paused_at = None
         elif event.field == "paused":
             paused_at = event.when if event.new_value else None
+        elif event.field == "assignee_id":
+            if was_running:
+                close(event.when)
+                segment_start = event.when
+            assignee = event.new_value or None
+            continue
         else:
             continue
         is_running = running()
-        if was_running and not is_running and segment_start is not None:
-            worked += business_seconds_between(segment_start, event.when)
-            segment_start = None
+        if was_running and not is_running:
+            close(event.when)
         elif not was_running and is_running:
             segment_start = event.when
 
     return WorkingTime(
-        worked_seconds=worked,
+        worked_seconds=sum(seg.seconds for seg in segments),
         running_since=segment_start if running() else None,
         paused_at=paused_at if status in working_slugs else None,
+        segments=tuple(segments),
     )

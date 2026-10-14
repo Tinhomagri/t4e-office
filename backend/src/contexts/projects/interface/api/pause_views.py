@@ -4,6 +4,7 @@ A pausa é só uma entrada `paused` no histórico (`"1"` pausa, `""` retoma) —
 tempo trabalhado é derivado dele (`domain.working_time`). Card continua na
 coluna; só para de contar. Idempotente: pausar o que já está pausado não grava
 nada de novo (duplo clique não polui o histórico)."""
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
@@ -11,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from contexts.projects.infrastructure.django.models import CardHistoryModel
+from contexts.projects.infrastructure.django.models import CardHistoryModel, CardModel
 from contexts.projects.infrastructure.working_time_query import (
     working_slugs_by_project,
     working_time_fields,
@@ -48,6 +49,8 @@ def _set_paused(request: Request, card_id: str, *, paused: bool) -> Response:
             new_value="1" if paused else "",
         )
         current = working_time_for_cards([card])[str(card.id)]
+        # Horas do card mudaram: `updated_since` da API de agentes precisa ver.
+        CardModel.objects.filter(id=card.id).update(updated_at=timezone.now())
     return Response(working_time_fields(current))
 
 

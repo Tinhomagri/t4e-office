@@ -7,3 +7,6 @@ class AgentApiConfig(AppConfig):
     name = "contexts.agent_api"
     label = "agent_api"
     verbose_name = "API de agentes"
+
+    def ready(self):
+        from contexts.agent_api.infrastructure import signals  # noqa: F401
