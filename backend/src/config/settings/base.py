@@ -78,11 +78,26 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Token de agente (API de leitura do Leonardo): barra escrita em qualquer
+    # rota, audita e limita taxa. Ver contexts/agent_api/interface/middleware.py.
+    "contexts.agent_api.interface.middleware.AgentTokenMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
+
+# Cache compartilhado entre workers (limite de taxa da API de agentes precisa
+# contar as requisições de todos os processos). Sem CACHE_URL, memória local —
+# ok em dev/teste, conta por processo em produção.
+_CACHE_URL = env("CACHE_URL", default="")
+CACHES = {
+    "default": (
+        {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": _CACHE_URL}
+        if _CACHE_URL
+        else {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    )
+}
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 

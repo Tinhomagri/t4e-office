@@ -34,6 +34,8 @@ urlpatterns = [
     path("api/sales/", include("contexts.sales.interface.api.urls")),
     path("api/chatwoot/", include("contexts.chatwoot.interface.api.urls")),
     path("api/meetings/", include("contexts.meetings.interface.api.urls")),
+    # API somente leitura para os agentes de IA (documento do Leonardo).
+    path("api/agentes/v1/", include("contexts.agent_api.interface.urls")),
 ]
 
 # Hostinger roda processo único com disco persistente: o próprio Django

@@ -39,7 +39,8 @@ def test_revoked_personal_token_is_rejected(client, user):
     assert response.status_code == 401
 
 
-def test_unknown_personal_token_is_rejected(client):
+def test_unknown_personal_token_is_rejected(client, db):
+    # `db`: o middleware da API de agentes consulta o token no banco antes.
     client.credentials(HTTP_AUTHORIZATION="Bearer token-que-nao-existe")
     response = client.get("/api/auth/me/")
     assert response.status_code == 401
