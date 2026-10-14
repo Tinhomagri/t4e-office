@@ -90,6 +90,15 @@ class ProjectModel(models.Model):
     # o comportamento de antes desta configuração existir.
     mural_notification_excluded_user_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    # Situação comercial do projeto (lida pelos agentes). Arquivado continua
+    # sendo `archived_at`; a API de agentes trata arquivado como encerrado.
+    STATUS_CHOICES = [("active", "Ativo"), ("paused", "Pausado"), ("closed", "Encerrado")]
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    # Ids do cliente e do contrato no T4E Manager — ligam o trabalho do time ao
+    # que foi contratado. Texto livre por enquanto (sem integração com o Manager).
+    manager_client_id = models.CharField(max_length=64, blank=True, default="")
+    manager_contract_id = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         db_table = "projects_project"
@@ -158,6 +167,7 @@ class SprintModel(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "projects_sprint"
@@ -481,6 +491,7 @@ class WorklogModel(models.Model):
     started_at = models.DateTimeField()
     comment = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "projects_worklog"

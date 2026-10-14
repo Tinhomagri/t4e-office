@@ -96,6 +96,9 @@ def _ser_project(project: ProjectModel) -> dict:
         "access_user_ids": [str(value) for value in (project.access_user_ids or [])],
         "visibility": project.visibility,
         "deadline": project.deadline.isoformat() if project.deadline else None,
+        "status": project.status,
+        "manager_client_id": project.manager_client_id,
+        "manager_contract_id": project.manager_contract_id,
         "created_at": project.created_at.isoformat(),
         "public_token": project.public_token,
         "public_allow_create": project.public_allow_create,
@@ -128,7 +131,15 @@ class ProjectDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     # Campos de texto editáveis direto do payload.
-    TEXT_FIELDS = ("name", "description", "category", "avatar_emoji", "avatar_color")
+    TEXT_FIELDS = (
+        "name",
+        "description",
+        "category",
+        "avatar_emoji",
+        "avatar_color",
+        "manager_client_id",
+        "manager_contract_id",
+    )
     # Campos UUID que aceitam "" / null para limpar.
     UUID_FIELDS = ("lead_id", "default_assignee_id")
 
@@ -215,6 +226,12 @@ class ProjectDetailView(APIView):
                     project.deadline = date.fromisoformat(str(raw_deadline))
                 except ValueError as exc:
                     raise ValidationError("Data de prazo inválida. Use o formato AAAA-MM-DD.") from exc
+
+        if "status" in request.data:
+            status_value = str(request.data["status"] or "")
+            if status_value not in dict(ProjectModel.STATUS_CHOICES):
+                raise ValidationError("Status do projeto inválido.")
+            project.status = status_value
 
         if "public_allow_create" in request.data:
             project.public_allow_create = bool(request.data["public_allow_create"])
