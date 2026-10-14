@@ -82,6 +82,10 @@ def _card_to_entity(row: CardModel) -> Card:
         original_estimate_seconds=row.original_estimate_seconds,
         remaining_estimate_seconds=row.remaining_estimate_seconds,
         flagged=row.flagged,
+        blocked=row.blocked,
+        block_reason=row.block_reason,
+        blocked_at=row.blocked_at,
+        client_request=row.client_request,
         archived_at=row.archived_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -170,6 +174,10 @@ class DjangoCardRepository(CardRepository):
             original_estimate_seconds=card.original_estimate_seconds,
             remaining_estimate_seconds=card.remaining_estimate_seconds,
             flagged=card.flagged,
+            blocked=card.blocked,
+            block_reason=card.block_reason,
+            blocked_at=card.blocked_at,
+            client_request=card.client_request,
             archived_at=card.archived_at,
         )
         return _card_to_entity(row)
@@ -217,6 +225,10 @@ class DjangoCardRepository(CardRepository):
             original_estimate_seconds=card.original_estimate_seconds,
             remaining_estimate_seconds=card.remaining_estimate_seconds,
             flagged=card.flagged,
+            blocked=card.blocked,
+            block_reason=card.block_reason,
+            blocked_at=card.blocked_at,
+            client_request=card.client_request,
             archived_at=card.archived_at,
         )
         row = CardModel.objects.get(id=card.id)

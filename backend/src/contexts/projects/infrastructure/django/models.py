@@ -195,6 +195,8 @@ class CardModel(models.Model):
         ("debt", "Débito técnico"),
         ("spike", "Spike"),
         ("chore", "Tarefa"),
+        ("support", "Suporte"),
+        ("improvement", "Melhoria"),
         ("epic", "Épico"),
         # Tipos de marketing
         ("post", "Post"),
@@ -225,7 +227,7 @@ class CardModel(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")
     status = models.CharField(max_length=50, default="todo")
-    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="feature")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="feature")
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
     points = models.PositiveSmallIntegerField(null=True, blank=True)
     # Responsável: FK por id ao usuário do contexto identity
@@ -307,6 +309,12 @@ class CardModel(models.Model):
     # card. Cliente marca na criação pelo link público quando é urgente; time
     # também pode marcar/desmarcar depois.
     flagged = models.BooleanField(default=False)
+    # Impedimento com motivo (≠ flagged, que é urgência). Ver domínio Card.
+    blocked = models.BooleanField(default=False)
+    block_reason = models.TextField(blank=True, default="")
+    blocked_at = models.DateTimeField(null=True, blank=True)
+    # None = deduzido pela origem; True/False = marcado pelo time.
+    client_request = models.BooleanField(null=True, blank=True)
     # Arquivado sai do board e dos relatórios, mas preserva o histórico.
     archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -30,6 +30,8 @@ class CardType(str, Enum):
     DEBT = "debt"
     SPIKE = "spike"
     CHORE = "chore"
+    SUPPORT = "support"
+    IMPROVEMENT = "improvement"
     EPIC = "epic"
     # Tipos de trabalho de marketing
     POST = "post"
@@ -118,6 +120,14 @@ class Card:
     # Sinalizador de atenção (igual "Flag" do Jira) — aura laranja + "!" no
     # card. Cliente marca na criação pelo link público; time também alterna.
     flagged: bool = False
+    # Impedimento (acesso, cliente, outro time…). Diferente de `flagged`, que é
+    # urgência. Bloquear exige motivo — é o que o agente/gestor lê.
+    blocked: bool = False
+    block_reason: str = ""
+    blocked_at: datetime | None = None
+    # Pedido do cliente: None = deduz pela origem (link público/Chatwoot);
+    # True/False = o time marcou à mão.
+    client_request: bool | None = None
     # Arquivar preserva histórico sem poluir board/relatórios; deletar perdia o
     # rastro do que foi decidido.
     archived_at: datetime | None = None
@@ -145,6 +155,8 @@ class Card:
             raise ValidationError("Um épico não pode ser subtarefa.")
         if self.points is not None and self.points < 0:
             raise ValidationError("Story points não podem ser negativos.")
+        if self.blocked and not self.block_reason.strip():
+            raise ValidationError("Informe o motivo do bloqueio.")
         if self.resolution is not None and self.resolved_at is None:
             raise ValidationError("Card resolvido precisa da data de resolução.")
         if self.resolution is None and self.resolved_at is not None:

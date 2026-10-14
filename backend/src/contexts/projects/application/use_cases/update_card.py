@@ -44,6 +44,9 @@ _TRACKED = [
     "remaining_estimate_seconds",
     "archived_at",
     "flagged",
+    "blocked",
+    "block_reason",
+    "client_request",
 ]
 
 
@@ -74,6 +77,9 @@ def _repr(card: Card) -> dict[str, str]:
         ),
         "archived_at": "" if card.archived_at is None else str(card.archived_at),
         "flagged": "1" if card.flagged else "",
+        "blocked": "1" if card.blocked else "",
+        "block_reason": card.block_reason,
+        "client_request": "" if card.client_request is None else ("1" if card.client_request else "0"),
     }
 
 
@@ -127,6 +133,9 @@ class UpdateCard:
         remaining_estimate_seconds=_UNSET,
         archived=_UNSET,
         flagged=_UNSET,
+        blocked=_UNSET,
+        block_reason=_UNSET,
+        client_request=_UNSET,
     ) -> Card:
         card = self.card_repository.get(card_id=card_id)
         if card is None:
@@ -191,6 +200,15 @@ class UpdateCard:
                 card.archived_at = None
         if flagged is not _UNSET:
             card.flagged = flagged
+        if block_reason is not _UNSET:
+            card.block_reason = block_reason or ""
+        if blocked is not _UNSET and blocked != card.blocked:
+            card.blocked = blocked
+            card.blocked_at = datetime.now(UTC) if blocked else None
+            if not blocked:
+                card.block_reason = ""
+        if client_request is not _UNSET:
+            card.client_request = client_request
 
         # Entrada na sprint. Card ainda no Backlog (coluna is_default) que ganha
         # sprint_id pula pra coluna "Pendente" (is_sprint_entry) — sem isso fica

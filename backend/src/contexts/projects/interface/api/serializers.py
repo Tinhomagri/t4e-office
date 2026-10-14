@@ -55,7 +55,7 @@ _STATUS = [
     "briefing", "criacao", "aprovacao", "agendado", "publicado",
 ]
 _TYPE = [
-    "feature", "bug", "debt", "spike", "chore", "epic",
+    "feature", "bug", "debt", "spike", "chore", "support", "improvement", "epic",
     # tipos marketing
     "post", "peca", "campanha", "artigo", "email",
 ]
@@ -129,6 +129,9 @@ class UpdateCardSerializer(serializers.Serializer):
     )
     archived = serializers.BooleanField(required=False)
     flagged = serializers.BooleanField(required=False)
+    blocked = serializers.BooleanField(required=False)
+    block_reason = serializers.CharField(required=False, allow_blank=True)
+    client_request = serializers.BooleanField(required=False, allow_null=True)
 
 
 class CardSerializer(serializers.Serializer):
@@ -165,6 +168,10 @@ class CardSerializer(serializers.Serializer):
     original_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
     remaining_estimate_seconds = serializers.IntegerField(allow_null=True, default=None)
     flagged = serializers.BooleanField(default=False)
+    blocked = serializers.BooleanField(default=False)
+    block_reason = serializers.CharField(allow_blank=True, default="")
+    blocked_at = serializers.DateTimeField(allow_null=True, default=None)
+    client_request = serializers.BooleanField(allow_null=True, default=None)
     archived = serializers.BooleanField(default=False)
     archived_at = serializers.DateTimeField(allow_null=True, default=None)
     # Só as telas que misturam projetos (Meu Dia) preenchem isto; nas listagens
