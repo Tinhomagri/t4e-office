@@ -181,6 +181,11 @@ class CardSerializer(serializers.Serializer):
     # Desde quando o card está numa coluna `is_working` (config do board, não
     # o slug "doing") — null quando o card não está numa coluna dessas.
     doing_since = serializers.DateTimeField(allow_null=True, default=None)
+    # Card pausado (ainda na coluna em andamento, mas sem contar tempo).
+    paused_at = serializers.DateTimeField(allow_null=True, default=None)
+    # Segundos de expediente dos trechos já fechados; o trecho aberto (desde
+    # `doing_since`) o front soma ao vivo.
+    worked_seconds = serializers.IntegerField(default=0)
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

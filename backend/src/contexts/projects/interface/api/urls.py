@@ -67,6 +67,7 @@ from contexts.projects.interface.api.notification_views import (
     NotificationReadAllView,
     NotificationStreamView,
 )
+from contexts.projects.interface.api.pause_views import CardPauseView, CardResumeView
 from contexts.projects.interface.api.permission_scheme_views import (
     ProjectAccessView,
     ProjectDeleteGrantView,
@@ -132,6 +133,8 @@ urlpatterns = [
         name="card-list-create",
     ),
     path("cards/<uuid:card_id>/", CardDetailView.as_view(), name="card-detail"),
+    path("cards/<uuid:card_id>/pause/", CardPauseView.as_view(), name="card-pause"),
+    path("cards/<uuid:card_id>/resume/", CardResumeView.as_view(), name="card-resume"),
     path(
         "cards/<uuid:card_id>/comments/",
         CardCommentView.as_view(),

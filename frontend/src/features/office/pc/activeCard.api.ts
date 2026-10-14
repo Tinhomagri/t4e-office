@@ -6,7 +6,10 @@ export interface ActiveCardItem {
   number: number
   title: string
   project: string
-  doing_since: string
+  // null quando pausado — aí `paused_at` vem preenchido.
+  doing_since: string | null
+  paused_at: string | null
+  worked_seconds: number
   working_note: string
 }
 

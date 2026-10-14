@@ -228,3 +228,22 @@ def test_coluna_sem_a_flag_nao_conta(scenario):
     assert get_active_card(
         workspace_id=str(scenario["ws"].id), user_id=str(scenario["dev"].id)
     ) is None
+
+
+def test_card_pausado_continua_na_lista_marcado_como_pausado(scenario):
+    """Pausado ainda é card ativo da pessoa (está na coluna em andamento), mas
+    sem contador rodando: `doing_since` nulo e `paused_at` preenchido."""
+    dev = scenario["dev"]
+    project = scenario["project"]
+    card = CardModel.objects.create(project=project, number=1, title="Pausado", assignee=dev)
+    _move_to_doing(card, dev)
+    CardHistoryModel.objects.create(
+        card=card, author=dev, field="paused", old_value="", new_value="1"
+    )
+
+    result = get_active_card(workspace_id=str(scenario["ws"].id), user_id=str(dev.id))
+
+    (row,) = result["cards"]
+    assert row["doing_since"] is None
+    assert row["paused_at"] is not None
+    assert row["worked_seconds"] >= 0

@@ -30,7 +30,6 @@ import {
   Bookmark,
   CalendarDays,
   Check,
-  Clock,
   ChevronDown,
   History,
   ChevronRight,
@@ -55,9 +54,9 @@ import { Link } from "react-router-dom"
 import { Button, EmptyState, Field, Input, Modal, cx } from "@/shared/ui/primitives"
 import { toast } from "@/shared/ui/toast"
 import { jiraDrop, popCheck, settleSpring } from "@/shared/lib/motion"
-import { formatDoingSince } from "@/shared/lib/businessTime"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
+import { WorkingTimeBadge } from "../WorkingTimeBadge"
 import { useBoardPrefs, colKey } from "../board.prefs.store"
 import {
   applyCardDrop,
@@ -2190,7 +2189,7 @@ export function CardCell({
   const allSubtasksDone = nSub > 0 && (card.subtasks_done ?? 0) === nSub
   const nComments = card.comments_count ?? 0
   const nFiles = card.attachments_count ?? 0
-  const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null || !!card.doing_since
+  const hasMeta = nSub > 0 || nComments > 0 || nFiles > 0 || due != null || !!card.doing_since || !!card.paused_at
   const reduceMotion = useReducedMotion()
 
   return (
@@ -2321,15 +2320,7 @@ export function CardCell({
                 {due.label}
               </span>
             )}
-            {card.doing_since && (
-              <span
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300"
-                title="Tempo em andamento (horário comercial)"
-              >
-                <Clock className="size-3" />
-                {formatDoingSince(card.doing_since)}
-              </span>
-            )}
+            <WorkingTimeBadge card={card} readOnly={dragging || !onOpen} />
             {nSub > 0 && (
               <span className="inline-flex items-center gap-0.5 tabular" title="Subtarefas">
                 <ListTree className="size-3" />

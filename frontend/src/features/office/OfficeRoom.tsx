@@ -37,7 +37,7 @@ import { OfficeVideoOverlay } from "./OfficeVideoOverlay"
 import { joinOfficeRoom, type JoinResult } from "@/features/meetings/meetings.api"
 import { mediaErrorMessage, type MediaKind } from "@/features/meetings/MediaSync"
 import { toast as notify } from "@/shared/ui/toast"
-import { formatDoingSince } from "@/shared/lib/businessTime"
+import { formatWorkedTime } from "@/shared/lib/businessTime"
 
 // Presença de quem está PARADO. Só evita cair da janela de frescor (30s no
 // backend) — não é o caminho do movimento.
@@ -633,7 +633,9 @@ export function OfficeRoom({
                     {card.project}
                   </div>
                   <div className="text-gray-300">
-                    há {formatDoingSince(card.doing_since)} em andamento
+                    {card.doing_since
+                      ? `${formatWorkedTime(card)} trabalhadas · em andamento`
+                      : `pausado · ${formatWorkedTime(card)} trabalhadas`}
                   </div>
                   {card.working_note && (
                     <div className="mt-1 text-gray-200">{card.working_note}</div>

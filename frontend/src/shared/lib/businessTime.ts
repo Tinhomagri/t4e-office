@@ -28,10 +28,32 @@ export function businessMinutesBetween(start: Date, end: Date): number {
   return Math.round(total)
 }
 
-export function formatDoingSince(iso: string): string {
-  const minutes = businessMinutesBetween(new Date(iso), new Date())
+function formatMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
   if (hours === 0) return `${mins}min`
   return `${hours}h${mins > 0 ? ` ${mins}min` : ""}`
+}
+
+export function formatDoingSince(iso: string): string {
+  return formatMinutes(businessMinutesBetween(new Date(iso), new Date()))
+}
+
+interface WorkedTime {
+  // Trechos já fechados (vem do backend, já em horário comercial).
+  worked_seconds?: number | null
+  // Início do trecho rodando agora — null quando pausado.
+  doing_since?: string | null
+}
+
+/** Tempo real trabalhado no card: o acumulado das pausas anteriores + o
+ * trecho aberto contado ao vivo. Pausado = só o acumulado, congelado. */
+export function workedMinutes({ worked_seconds, doing_since }: WorkedTime): number {
+  const closed = Math.round((worked_seconds ?? 0) / 60)
+  const open = doing_since ? businessMinutesBetween(new Date(doing_since), new Date()) : 0
+  return closed + open
+}
+
+export function formatWorkedTime(time: WorkedTime): string {
+  return formatMinutes(workedMinutes(time))
 }

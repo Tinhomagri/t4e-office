@@ -156,6 +156,11 @@ export interface Card {
   // Desde quando o card entrou numa coluna is_working — null se não está
   // numa agora. Vem preenchido na listagem de cards do board (Kanban).
   doing_since?: string | null
+  // Card pausado: continua na coluna em andamento, mas o tempo não conta.
+  paused_at?: string | null
+  // Segundos de expediente dos trechos já fechados (antes da pausa/saída da
+  // coluna); o trecho aberto desde `doing_since` soma-se ao vivo.
+  worked_seconds?: number
   archived?: boolean
   archived_at?: string | null
   created_at: string | null

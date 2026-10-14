@@ -246,6 +246,20 @@ export async function updateCard(
   return data
 }
 
+export interface CardWorkingTime {
+  doing_since: string | null
+  paused_at: string | null
+  worked_seconds: number
+}
+
+/** Pausa/retoma o contador de um card em andamento (fica na mesma coluna). */
+export async function setCardPaused(cardId: string, paused: boolean): Promise<CardWorkingTime> {
+  const { data } = await api.post<CardWorkingTime>(
+    `/cards/${cardId}/${paused ? "pause" : "resume"}/`,
+  )
+  return data
+}
+
 export async function deleteCard(cardId: string): Promise<void> {
   await api.delete(`/cards/${cardId}/`)
 }

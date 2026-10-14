@@ -135,41 +135,27 @@ def _complete_parent_when_all_subtasks_done(*, child: Card, actor_id: str) -> No
     ).execute(card_id=str(parent.id), actor_id=actor_id, status=done_slugs[0])
 
 
-def _working_since_map(project_id: str) -> dict[str, str]:
-    """`doing_since` de todo card que está numa coluna `is_working` do projeto —
-    mesma lógica de `presence.active_card`, só que pra TODOS os cards do board
-    de uma vez (não só o card ativo de uma pessoa), numa única query anotada.
+def _working_time_map(project_id: str) -> dict[str, dict]:
+    """Tempo trabalhado (`doing_since`, `paused_at`, `worked_seconds`) de todo
+    card que está numa coluna `is_working` do projeto — mesma regra do
+    Escritório (`presence.active_card`), pra TODOS os cards do board de uma vez.
     Card fora de coluna `is_working` nem aparece no dict (front trata ausência
     como "não está em andamento")."""
-    from django.db.models import OuterRef, Subquery
-
-    from contexts.projects.infrastructure.django.models import (
-        CardHistoryModel,
-        WorkflowStatusModel,
+    from contexts.projects.infrastructure.working_time_query import (
+        working_slugs_by_project,
+        working_time_fields,
+        working_time_for_cards,
     )
 
-    working_slugs = list(
-        WorkflowStatusModel.objects.filter(
-            project_id=project_id, is_working=True
-        ).values_list("slug", flat=True)
-    )
-    if not working_slugs:
+    slugs = working_slugs_by_project([project_id]).get(str(project_id))
+    if not slugs:
         return {}
-
-    latest_status_change = (
-        CardHistoryModel.objects.filter(
-            card_id=OuterRef("pk"), field="status", new_value=OuterRef("status")
-        )
-        .order_by("-created_at")
-        .values("created_at")[:1]
-    )
-    rows = (
-        CardModel.objects.filter(project_id=project_id, status__in=working_slugs)
-        .annotate(status_changed_at=Subquery(latest_status_change))
-        .values("id", "status_changed_at", "created_at")
+    cards = CardModel.objects.filter(project_id=project_id, status__in=slugs).only(
+        "id", "project_id", "status", "created_at"
     )
     return {
-        str(r["id"]): r["status_changed_at"] or r["created_at"] for r in rows
+        card_id: working_time_fields(wt)
+        for card_id, wt in working_time_for_cards(cards).items()
     }
 
 
@@ -326,12 +312,12 @@ class CardListCreateView(APIView):
                 qs = qs.exclude(id__in=old_done)
             project = projects.get(project_id=project_id)
             counts = _counts_map(str(project_id))
-            working_since = _working_since_map(str(project_id))
+            working = _working_time_map(str(project_id))
             rows = [
                 card_row(
                     cm,
                     project.key,
-                    {**counts.get(str(cm.id), {}), "doing_since": working_since.get(str(cm.id))},
+                    {**counts.get(str(cm.id), {}), **working.get(str(cm.id), {})},
                 )
                 for cm in qs
             ]
@@ -343,13 +329,13 @@ class CardListCreateView(APIView):
             result = [c for c in result if c.id not in old_done]
         project = projects.get(project_id=project_id)
         counts = _counts_map(str(project_id))
-        working_since = _working_since_map(str(project_id))
+        working = _working_time_map(str(project_id))
         data = CardSerializer(
             [
                 {
                     **_card_dict(c, project.key),
                     **counts.get(str(c.id), {}),
-                    "doing_since": working_since.get(str(c.id)),
+                    **working.get(str(c.id), {}),
                 }
                 for c in result
             ],

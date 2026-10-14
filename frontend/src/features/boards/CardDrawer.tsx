@@ -41,6 +41,7 @@ import {
 } from "@/features/boards/CardAiSuggestions"
 import { RepurposeDialog } from "./RepurposeDialog"
 import { ColoredAvatar, errMsg } from "./board.shared"
+import { WorkingTimeBadge } from "./WorkingTimeBadge"
 import {
   useAddCardComponent,
   useAddCardVersion,
@@ -301,6 +302,13 @@ export function CardDrawer({
                 <span aria-hidden>{TYPE_ICON[draft.type]}</span>
                 <span className="font-mono">{card.ref}</span>
               </span>
+              {/* Cópia viva da listagem: o `card` da prop pode ser o snapshot
+                  de quando o drawer abriu, e o badge precisa refletir a pausa. */}
+              <WorkingTimeBadge
+                card={(allCards ?? []).find((c) => c.id === card.id) ?? card}
+                readOnly={!can("edit_issue")}
+                className="ml-2 text-[11px] font-medium"
+              />
 
               {savedHint && (
                 <span className="ml-2 flex items-center gap-1 text-xs font-medium text-success animate-fade-in">
@@ -1743,6 +1751,7 @@ const FIELD_LABEL: Record<string, string> = {
   parent_id: "Card pai",
   epic_id: "Epic",
   labels: "Labels",
+  flagged: "Sinalização",
 }
 // Campos cujo valor é um id/uuid — não mostrar o valor cru.
 const OPAQUE_FIELDS = new Set([
@@ -1756,6 +1765,19 @@ const OPAQUE_FIELDS = new Set([
 function HistoryLine({ h }: { h: CardHistoryEntry }) {
   const label = FIELD_LABEL[h.field] ?? h.field
   const opaque = OPAQUE_FIELDS.has(h.field)
+  // Pausa grava "1"/"" — vira frase, não diff de valor cru.
+  if (h.field === "paused") {
+    return (
+      <li className="flex gap-2.5">
+        <ColoredAvatar name={h.author_name} userId={h.author_id} size="sm" />
+        <div className="min-w-0 flex-1 pt-0.5 text-[13px] text-paper-600">
+          <span className="font-medium text-ink dark:text-paper">{h.author_name || "Alguém"}</span>{" "}
+          {h.new_value ? "pausou" : "retomou"} a contagem de tempo
+          <span className="ml-1.5 text-[11px] text-paper-400">{fmtDateTime(h.created_at)}</span>
+        </div>
+      </li>
+    )
+  }
   return (
     <li className="flex gap-2.5">
       <ColoredAvatar name={h.author_name} userId={h.author_id} size="sm" />

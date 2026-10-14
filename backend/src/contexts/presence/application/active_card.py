@@ -8,10 +8,10 @@ from django.db.models import Exists, OuterRef
 
 from contexts.identity.infrastructure.django.models import MembershipModel
 from contexts.projects.infrastructure.django.models import (
-    CardHistoryModel,
     CardModel,
     WorkflowStatusModel,
 )
+from contexts.projects.infrastructure.working_time_query import working_time_for_cards
 from shared.domain.errors import NotFoundError, PermissionDeniedError
 
 
@@ -38,17 +38,13 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
         Exists(em_trabalho), assignee_id=user_id, project__workspace_id=workspace_id
     ).select_related("project")
 
+    candidates = list(candidates)
+    working = working_time_for_cards(candidates)
     cards = []
     for card in candidates:
-        entry = (
-            # Desde quando está nesta coluna — que pode não se chamar "doing".
-            CardHistoryModel.objects.filter(
-                card_id=card.id, field="status", new_value=card.status
-            )
-            .order_by("-created_at")
-            .first()
-        )
-        since = entry.created_at if entry else card.created_at
+        # Desde quando está contando (null se pausado) + o acumulado — mesma
+        # regra do board (`domain.working_time`).
+        wt = working[str(card.id)]
         cards.append(
             {
                 "id": str(card.id),
@@ -56,7 +52,9 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
                 "number": card.number,
                 "title": card.title,
                 "project": card.project.key,
-                "doing_since": since.isoformat(),
+                "doing_since": wt.running_since.isoformat() if wt.running_since else None,
+                "paused_at": wt.paused_at.isoformat() if wt.paused_at else None,
+                "worked_seconds": wt.worked_seconds,
                 "working_note": card.working_note,
             }
         )
@@ -64,7 +62,8 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
     if not cards:
         return None
 
-    cards.sort(key=lambda c: c["doing_since"], reverse=True)
+    # Rodando primeiro, mais recente no topo; pausados depois.
+    cards.sort(key=lambda c: c["doing_since"] or "", reverse=True)
     return {"active": True, "cards": cards}
 
 

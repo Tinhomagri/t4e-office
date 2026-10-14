@@ -138,6 +138,25 @@ export function useUpdateCard(projectId: string | null) {
   })
 }
 
+export function useSetCardPaused(projectId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ cardId, paused }: { cardId: string; paused: boolean }) =>
+      wsApi.setCardPaused(cardId, paused),
+    onSuccess: (time, { cardId }) => {
+      // Mesmo motivo do useUpdateCard: o badge do Kanban muda na hora, sem
+      // esperar a reconsulta da lista.
+      qc.setQueriesData<Card[]>({ queryKey: ["cards", projectId] }, (current) =>
+        current?.map((card) => (card.id === cardId ? { ...card, ...time } : card)),
+      )
+      qc.invalidateQueries({ queryKey: ["cards", projectId] })
+      qc.invalidateQueries({ queryKey: ["card-history", cardId] })
+      qc.invalidateQueries({ queryKey: ["my-work"] })
+      qc.invalidateQueries({ queryKey: ["active-card"] })
+    },
+  })
+}
+
 export function useDeleteCard(projectId: string | null) {
   const qc = useQueryClient()
   return useMutation({
