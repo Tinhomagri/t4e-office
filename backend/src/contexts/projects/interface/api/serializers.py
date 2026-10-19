@@ -193,6 +193,8 @@ class CardSerializer(serializers.Serializer):
     # Segundos de expediente dos trechos já fechados; o trecho aberto (desde
     # `doing_since`) o front soma ao vivo.
     worked_seconds = serializers.IntegerField(default=0)
+    # Em coluna em andamento, mas bloqueado: não conta tempo até desbloquear.
+    blocked_in_progress = serializers.BooleanField(default=False)
     # Contadores para densidade do card (anotados na view, sem N+1).
     comments_count = serializers.IntegerField(default=0)
     attachments_count = serializers.IntegerField(default=0)

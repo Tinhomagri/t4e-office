@@ -9,7 +9,7 @@ from contexts.projects.infrastructure.django.models import CardModel
 from contexts.projects.infrastructure.working_time_query import working_time_for_cards
 
 # Mudanças no histórico que alteram os trechos.
-TRIGGER_FIELDS = frozenset({"status", "paused", "assignee_id"})
+TRIGGER_FIELDS = frozenset({"status", "paused", "assignee_id", "blocked"})
 
 
 @transaction.atomic

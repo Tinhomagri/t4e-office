@@ -27,6 +27,7 @@ _WorkingTimeSerializer = inline_serializer(
         "doing_since": serializers.DateTimeField(allow_null=True),
         "paused_at": serializers.DateTimeField(allow_null=True),
         "worked_seconds": serializers.IntegerField(),
+        "blocked_in_progress": serializers.BooleanField(),
     },
 )
 

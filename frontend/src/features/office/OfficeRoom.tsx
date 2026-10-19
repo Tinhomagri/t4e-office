@@ -635,7 +635,7 @@ export function OfficeRoom({
                   <div className="text-gray-300">
                     {card.doing_since
                       ? `${formatWorkedTime(card)} trabalhadas · em andamento`
-                      : `pausado · ${formatWorkedTime(card)} trabalhadas`}
+                      : `${card.blocked_in_progress ? "bloqueado" : "pausado"} · ${formatWorkedTime(card)} trabalhadas`}
                   </div>
                   {card.working_note && (
                     <div className="mt-1 text-gray-200">{card.working_note}</div>

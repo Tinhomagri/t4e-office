@@ -155,7 +155,7 @@ def _working_time_map(project_id: str) -> dict[str, dict]:
     if not slugs:
         return {}
     cards = CardModel.objects.filter(project_id=project_id, status__in=slugs).only(
-        "id", "project_id", "status", "assignee_id", "created_at"
+        "id", "project_id", "status", "assignee_id", "blocked", "created_at"
     )
     return {
         card_id: working_time_fields(wt)

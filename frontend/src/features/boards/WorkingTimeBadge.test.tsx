@@ -68,4 +68,15 @@ describe("<WorkingTimeBadge />", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument()
     expect(screen.getByText("1h 30min")).toBeInTheDocument()
   })
+
+  it("bloqueado: mostra 'Bloqueado' sem botão (pausar não resolve bloqueio)", () => {
+    render(
+      <WorkingTimeBadge
+        card={{ ...base, doing_since: null, paused_at: null, blocked_in_progress: true }}
+      />,
+    )
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(screen.getByText(/bloqueado/i)).toBeInTheDocument()
+    expect(screen.getByText("1h 30min")).toBeInTheDocument()
+  })
 })

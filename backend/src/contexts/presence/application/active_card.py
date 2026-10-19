@@ -55,6 +55,7 @@ def get_active_card(*, workspace_id: str, user_id: str) -> dict | None:
                 "doing_since": wt.running_since.isoformat() if wt.running_since else None,
                 "paused_at": wt.paused_at.isoformat() if wt.paused_at else None,
                 "worked_seconds": wt.worked_seconds,
+                "blocked_in_progress": wt.blocked,
                 "working_note": card.working_note,
             }
         )

@@ -194,3 +194,68 @@ def test_sem_responsavel_vira_none():
         working_slugs=WORKING,
     )
     assert wt.segments[0].assignee_id is None
+
+
+# ── bloqueio para a contagem ──────────────────────────────────────────────────
+
+def _blocked(when, blocked: bool):
+    return CardEvent(when=when, field="blocked", old_value="", new_value="1" if blocked else "")
+
+
+def test_bloquear_para_a_contagem_e_desbloquear_retoma():
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="doing",
+        events=[
+            _status(_at(12, 10), "todo", "doing"),
+            _blocked(_at(12, 11), True),
+            _blocked(_at(12, 15), False),
+        ],
+        working_slugs=WORKING,
+    )
+    assert wt.worked_seconds == 3600
+    assert wt.running_since == _at(12, 15)
+    assert wt.blocked is False
+
+
+def test_bloqueado_em_andamento_nao_conta_e_e_sinalizado():
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="doing",
+        events=[_status(_at(12, 10), "todo", "doing"), _blocked(_at(12, 12), True)],
+        working_slugs=WORKING,
+    )
+    assert (wt.worked_seconds, wt.running_since, wt.paused_at) == (2 * 3600, None, None)
+    assert wt.blocked is True
+
+
+def test_bloqueio_sobrevive_a_mudanca_de_coluna():
+    # Diferente da pausa: mover o card não desbloqueia.
+    wt = compute_working_time(
+        created_at=_at(12, 9),
+        current_status="doing",
+        events=[
+            _status(_at(12, 10), "todo", "doing"),
+            _blocked(_at(12, 11), True),
+            _status(_at(12, 12), "doing", "review"),
+            _status(_at(12, 13), "review", "doing"),
+        ],
+        working_slugs=WORKING,
+    )
+    assert wt.worked_seconds == 3600 and wt.running_since is None
+
+
+def test_card_ja_bloqueado_sem_historico_nao_conta():
+    wt = compute_working_time(
+        created_at=_at(12, 9), current_status="doing", current_blocked=True,
+        events=[], working_slugs=WORKING,
+    )
+    assert wt.running_since is None and wt.blocked is True
+
+
+def test_trecho_aberto_traz_responsavel():
+    wt = compute_working_time(
+        created_at=_at(12, 9), current_status="doing", current_assignee_id="ana",
+        events=[_status(_at(12, 10), "todo", "doing")], working_slugs=WORKING,
+    )
+    assert (wt.running_since, wt.running_assignee_id) == (_at(12, 10), "ana")

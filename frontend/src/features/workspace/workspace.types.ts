@@ -161,6 +161,8 @@ export interface Card {
   // Segundos de expediente dos trechos já fechados (antes da pausa/saída da
   // coluna); o trecho aberto desde `doing_since` soma-se ao vivo.
   worked_seconds?: number
+  // Em coluna em andamento, mas bloqueado: o tempo não conta até desbloquear.
+  blocked_in_progress?: boolean
   archived?: boolean
   archived_at?: string | null
   created_at: string | null

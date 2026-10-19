@@ -16,7 +16,7 @@ from contexts.projects.infrastructure.django.models import (
     WorkflowStatusModel,
 )
 
-TRACKED_FIELDS = ("status", "paused", "assignee_id")
+TRACKED_FIELDS = ("status", "paused", "assignee_id", "blocked")
 
 
 def working_slugs_by_project(project_ids: Iterable[str]) -> dict[str, set[str]]:
@@ -31,7 +31,7 @@ def working_slugs_by_project(project_ids: Iterable[str]) -> dict[str, set[str]]:
 
 def working_time_for_cards(cards: Iterable[CardModel]) -> dict[str, WorkingTime]:
     """`WorkingTime` por id de card. Recebe os cards já carregados (precisa só
-    de id, project_id, status, assignee_id e created_at)."""
+    de id, project_id, status, assignee_id, blocked e created_at)."""
     cards = list(cards)
     if not cards:
         return {}
@@ -51,6 +51,7 @@ def working_time_for_cards(cards: Iterable[CardModel]) -> dict[str, WorkingTime]
             events=events.get(str(c.id), []),
             working_slugs=slugs.get(str(c.project_id), set()),
             current_assignee_id=str(c.assignee_id) if c.assignee_id else None,
+            current_blocked=c.blocked,
         )
         for c in cards
     }
@@ -60,9 +61,15 @@ def working_time_fields(wt: WorkingTime | None) -> dict:
     """Campos que o front consome (`doing_since` mantém o nome antigo: início do
     trecho que está contando agora)."""
     if wt is None:
-        return {"doing_since": None, "paused_at": None, "worked_seconds": 0}
+        return {
+            "doing_since": None,
+            "paused_at": None,
+            "worked_seconds": 0,
+            "blocked_in_progress": False,
+        }
     return {
         "doing_since": wt.running_since,
         "paused_at": wt.paused_at,
         "worked_seconds": wt.worked_seconds,
+        "blocked_in_progress": wt.blocked,
     }

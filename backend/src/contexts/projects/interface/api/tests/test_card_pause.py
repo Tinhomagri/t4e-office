@@ -123,3 +123,18 @@ def test_listagem_card_fora_de_andamento_sem_tempo_aberto(scenario):
     row = _row(scenario)
     assert row["doing_since"] is None
     assert row["paused_at"] is None
+
+
+def test_card_bloqueado_em_andamento_para_de_contar(scenario):
+    card = scenario["card"]
+    resp = scenario["client"].patch(
+        f"/api/cards/{card.id}/", {"blocked": True, "block_reason": "Sem acesso"}, format="json"
+    )
+    assert resp.status_code == 200
+    row = _row(scenario)
+    assert row["doing_since"] is None
+    assert row["paused_at"] is None
+    assert row["blocked_in_progress"] is True
+    scenario["client"].patch(f"/api/cards/{card.id}/", {"blocked": False}, format="json")
+    row = _row(scenario)
+    assert row["doing_since"] is not None and row["blocked_in_progress"] is False

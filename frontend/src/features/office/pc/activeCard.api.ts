@@ -10,6 +10,7 @@ export interface ActiveCardItem {
   doing_since: string | null
   paused_at: string | null
   worked_seconds: number
+  blocked_in_progress?: boolean
   working_note: string
 }
 

@@ -25,7 +25,7 @@ BUSINESS_DAY_END = time(18, 0)
 @dataclass(frozen=True)
 class CardEvent:
     when: datetime
-    field: str  # "status" ou "paused"
+    field: str  # "status", "paused", "assignee_id" ou "blocked"
     old_value: str
     new_value: str
 
@@ -48,6 +48,10 @@ class WorkingTime:
     running_since: datetime | None
     paused_at: datetime | None
     segments: tuple[Segment, ...] = ()
+    # Bloqueado numa coluna em andamento: não conta, mas não é pausa (o
+    # botão de retomar não resolve — precisa desbloquear).
+    blocked: bool = False
+    running_assignee_id: str | None = None
 
 
 def business_seconds_between(start: datetime, end: datetime) -> int:
@@ -77,19 +81,23 @@ def compute_working_time(
     events: list[CardEvent],
     working_slugs: set[str],
     current_assignee_id: str | None = None,
+    current_blocked: bool = False,
 ) -> WorkingTime:
     """Percorre o histórico (status, pausa, responsável) em ordem e soma os
     trechos ativos. Troca de responsável com o card rodando fecha o trecho de
-    um e abre o do outro — cada pessoa fica com as horas dela."""
+    um e abre o do outro — cada pessoa fica com as horas dela. Card bloqueado
+    não conta; diferente da pausa, mudar de coluna não desbloqueia."""
     events = sorted(events, key=lambda e: e.when)
     first_status = next((e for e in events if e.field == "status"), None)
     status = first_status.old_value if first_status else current_status
     first_assignee = next((e for e in events if e.field == "assignee_id"), None)
     assignee = (first_assignee.old_value if first_assignee else current_assignee_id) or None
+    first_blocked = next((e for e in events if e.field == "blocked"), None)
+    blocked = bool(first_blocked.old_value) if first_blocked else current_blocked
     paused_at: datetime | None = None
 
     def running() -> bool:
-        return status in working_slugs and paused_at is None
+        return status in working_slugs and paused_at is None and not blocked
 
     segments: list[Segment] = []
     segment_start: datetime | None = created_at if running() else None
@@ -114,6 +122,8 @@ def compute_working_time(
             paused_at = None
         elif event.field == "paused":
             paused_at = event.when if event.new_value else None
+        elif event.field == "blocked":
+            blocked = bool(event.new_value)
         elif event.field == "assignee_id":
             if was_running:
                 close(event.when)
@@ -131,6 +141,8 @@ def compute_working_time(
     return WorkingTime(
         worked_seconds=sum(seg.seconds for seg in segments),
         running_since=segment_start if running() else None,
-        paused_at=paused_at if status in working_slugs else None,
+        paused_at=paused_at if status in working_slugs and not blocked else None,
         segments=tuple(segments),
+        blocked=blocked and status in working_slugs,
+        running_assignee_id=assignee if running() else None,
     )
