@@ -581,7 +581,8 @@ export interface CreateSprintInput {
   end_date?: string | null
 }
 
-export type UpdateSprintInput = Partial<CreateSprintInput> & { status?: SprintStatus }
+// Status não entra: iniciar/concluir têm rota própria (startSprint/completeSprint).
+export type UpdateSprintInput = Partial<CreateSprintInput>
 
 // ── Automations ──────────────────────────────────────────────────────────────
 

@@ -325,9 +325,16 @@ export async function updateSprint(
   return data
 }
 
+export interface StartSprintInput {
+  name?: string
+  start_date?: string
+  end_date?: string
+  goal?: string
+}
+
 export async function startSprint(
   sprintId: string,
-  payload: { start_date?: string; end_date?: string; goal?: string } = {},
+  payload: StartSprintInput = {},
 ): Promise<Sprint> {
   const { data } = await api.post<Sprint>(`/sprints/${sprintId}/start/`, payload)
   return data
@@ -337,13 +344,31 @@ export interface SprintCompleteResult extends Sprint {
   summary: { completed_cards: number; moved_cards: number; moved_to: string }
 }
 
+/** Destino dos cards abertos: backlog, uma sprint existente (id) ou "new". */
+export interface CompleteSprintInput {
+  moveTo: "backlog" | "new" | string
+  newSprintName?: string
+}
+
 export async function completeSprint(
   sprintId: string,
-  moveTo: "backlog" | string = "backlog",
+  { moveTo, newSprintName }: CompleteSprintInput = { moveTo: "backlog" },
 ): Promise<SprintCompleteResult> {
   const { data } = await api.post<SprintCompleteResult>(`/sprints/${sprintId}/complete/`, {
     move_to: moveTo,
+    ...(moveTo === "new" && newSprintName ? { new_sprint_name: newSprintName } : {}),
   })
+  return data
+}
+
+export interface SprintCompletePreview {
+  completed_cards: number
+  open_cards: number
+  suggested_name: string
+}
+
+export async function getSprintCompletePreview(sprintId: string): Promise<SprintCompletePreview> {
+  const { data } = await api.get<SprintCompletePreview>(`/sprints/${sprintId}/complete/`)
   return data
 }
 

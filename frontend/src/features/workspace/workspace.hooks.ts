@@ -328,7 +328,13 @@ export function useUpdateSprint(projectId: string | null) {
   return useMutation({
     mutationFn: ({ sprintId, input }: { sprintId: string; input: UpdateSprintInput }) =>
       wsApi.updateSprint(sprintId, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sprints", projectId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sprints", projectId] })
+      toast.success("Sprint atualizada")
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? "Não foi possível atualizar a sprint")
+    },
   })
 }
 
@@ -340,7 +346,7 @@ export function useStartSprint(projectId: string | null) {
       input,
     }: {
       sprintId: string
-      input?: { start_date?: string; end_date?: string; goal?: string }
+      input?: wsApi.StartSprintInput
     }) => wsApi.startSprint(sprintId, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sprints", projectId] })
@@ -353,11 +359,20 @@ export function useStartSprint(projectId: string | null) {
   })
 }
 
+/** Prévia do diálogo de concluir: concluídos × abertos e nome sugerido. */
+export function useSprintCompletePreview(sprintId: string | null) {
+  return useQuery({
+    queryKey: ["sprint-complete-preview", sprintId],
+    queryFn: () => wsApi.getSprintCompletePreview(sprintId!),
+    enabled: !!sprintId,
+  })
+}
+
 export function useCompleteSprint(projectId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ sprintId, moveTo }: { sprintId: string; moveTo: string }) =>
-      wsApi.completeSprint(sprintId, moveTo),
+    mutationFn: ({ sprintId, ...input }: { sprintId: string } & wsApi.CompleteSprintInput) =>
+      wsApi.completeSprint(sprintId, input),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["sprints", projectId] })
       qc.invalidateQueries({ queryKey: ["cards", projectId] })

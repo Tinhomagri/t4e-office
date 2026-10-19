@@ -57,6 +57,7 @@ import { jiraDrop, popCheck, settleSpring } from "@/shared/lib/motion"
 import { IssueTypeIcon, PriorityIcon } from "@/shared/ui/issue"
 import { JqlSearchBar } from "../JqlSearchBar"
 import { WorkingTimeBadge } from "../WorkingTimeBadge"
+import { formatSprintRange } from "../sprints/sprintDates"
 import { useBoardPrefs, colKey } from "../board.prefs.store"
 import {
   applyCardDrop,
@@ -414,6 +415,7 @@ export function KanbanView({
               onClick={() => setScope({ kind: "sprint", id: s.id })}
               label={s.name}
               dot={s.status === "active"}
+              dates={formatSprintRange(s.start_date, s.end_date)}
               count={allCards.filter((c) => c.sprint_id === s.id).length}
               points={allCards.filter((c) => c.sprint_id === s.id && c.points).reduce((acc, c) => acc + (c.points ?? 0), 0)}
             />
@@ -2380,6 +2382,7 @@ function ScopeChip({
   dot = false,
   count,
   points,
+  dates,
 }: {
   active: boolean
   onClick: () => void
@@ -2387,10 +2390,13 @@ function ScopeChip({
   dot?: boolean
   count?: number
   points?: number
+  /** Intervalo da sprint ("12 out – 23 out"), quando tem datas. */
+  dates?: string
 }) {
   return (
     <button
       onClick={onClick}
+      title={dates || undefined}
       className={cx(
         "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
         active
@@ -2400,6 +2406,11 @@ function ScopeChip({
     >
       {dot && <span className="size-1.5 rounded-full bg-success animate-pulse" />}
       {label}
+      {dates && dot && (
+        <span className={cx("text-[10px] font-normal", active ? "text-paper/70" : "text-paper-400")}>
+          {dates}
+        </span>
+      )}
       {count !== undefined && (
         <span className={cx(
           "grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold",

@@ -21,6 +21,7 @@ import {
   ChevronRight,
   CircleDot,
   GripVertical,
+  Pencil,
   Play,
   Plus,
   Square,
@@ -37,8 +38,10 @@ import {
   useEpics,
   useProjectPermissions,
   useRankCard,
+  useSprintCompletePreview,
   useStartSprint,
   useUpdateCard,
+  useUpdateSprint,
 } from "@/features/workspace/workspace.hooks"
 import type {
   Card,
@@ -47,6 +50,8 @@ import type {
   Sprint,
 } from "@/features/workspace/workspace.types"
 import { Button, cx } from "@/shared/ui/primitives"
+import { CompleteSprintModal, EditSprintModal, StartSprintModal } from "../sprints/SprintDialogs"
+import { daysRemaining, formatSprintRange } from "../sprints/sprintDates"
 import { toast } from "@/shared/ui/toast"
 
 const PRIORITY_DOT: Record<CardPriority, string> = {
@@ -121,6 +126,10 @@ export function BacklogView({
   const [newName, setNewName] = useState("")
   const [newGoal, setNewGoal] = useState("")
   const [completingSprint, setCompletingSprint] = useState<Sprint | null>(null)
+  const [startingSprint, setStartingSprint] = useState<Sprint | null>(null)
+  const [editingSprint, setEditingSprint] = useState<Sprint | null>(null)
+  const updateSprint = useUpdateSprint(projectId)
+  const completePreview = useSprintCompletePreview(completingSprint?.id ?? null)
   const [epicFilter, setEpicFilter] = useState<string | null>(null)
   // Seleção múltipla vive só na tela — só as linhas do Backlog viram
   // selecionáveis, cards já numa sprint saem daqui de outro jeito (drag).
@@ -383,8 +392,9 @@ export function BacklogView({
               cards={listOf(s.id)}
               members={members}
               onOpen={onOpen}
-              onStart={() => startSprint.mutate({ sprintId: s.id })}
+              onStart={() => setStartingSprint(s)}
               onClose={() => setCompletingSprint(s)}
+              onEdit={can("manage_sprints") ? () => setEditingSprint(s) : undefined}
               starting={startSprint.isPending}
             />
           ))}
@@ -415,13 +425,44 @@ export function BacklogView({
       {completingSprint && (
         <CompleteSprintModal
           sprint={completingSprint}
-          openSprints={openSprints.filter((s) => s.id !== completingSprint.id)}
+          // Destino: só sprints futuras — a ativa é a que está sendo concluída.
+          openSprints={openSprints.filter((s) => s.status === "planned")}
+          preview={completePreview.data}
           isPending={completeSprint.isPending}
           onCancel={() => setCompletingSprint(null)}
-          onConfirm={(moveTo) => {
+          onConfirm={(choice) => {
             completeSprint.mutate(
-              { sprintId: completingSprint.id, moveTo },
+              { sprintId: completingSprint.id, ...choice },
               { onSuccess: () => setCompletingSprint(null) },
+            )
+          }}
+        />
+      )}
+
+      {startingSprint && (
+        <StartSprintModal
+          sprint={startingSprint}
+          cardCount={listOf(startingSprint.id).length}
+          isPending={startSprint.isPending}
+          onCancel={() => setStartingSprint(null)}
+          onConfirm={(values) => {
+            startSprint.mutate(
+              { sprintId: startingSprint.id, input: values },
+              { onSuccess: () => setStartingSprint(null) },
+            )
+          }}
+        />
+      )}
+
+      {editingSprint && (
+        <EditSprintModal
+          sprint={editingSprint}
+          isPending={updateSprint.isPending}
+          onCancel={() => setEditingSprint(null)}
+          onConfirm={(values) => {
+            updateSprint.mutate(
+              { sprintId: editingSprint.id, input: values },
+              { onSuccess: () => setEditingSprint(null) },
             )
           }}
         />
@@ -557,57 +598,6 @@ function EpicPanel({
   )
 }
 
-// ─── Modal de conclusão de sprint ──────────────────────────────────────────────
-
-function CompleteSprintModal({
-  sprint,
-  openSprints,
-  isPending,
-  onCancel,
-  onConfirm,
-}: {
-  sprint: Sprint
-  openSprints: Sprint[]
-  isPending: boolean
-  onCancel: () => void
-  onConfirm: (moveTo: string) => void
-}) {
-  const [moveTo, setMoveTo] = useState("backlog")
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink-950/60 backdrop-blur-sm p-4" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className="w-full max-w-md rounded-2xl border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 p-5 shadow-xl animate-fade-up">
-        <h3 className="text-sm font-bold text-ink dark:text-paper">Concluir "{sprint.name}"</h3>
-        <p className="mt-1 text-xs text-paper-400">
-          Cards não concluídos precisam de um destino.
-        </p>
-        <label className="mt-4 block text-xs font-semibold text-paper-500">Mover cards abertos para</label>
-        <select
-          value={moveTo}
-          onChange={(e) => setMoveTo(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-paper-200 dark:border-ink-700 bg-paper dark:bg-ink-900 px-3 py-2 text-sm text-ink dark:text-paper outline-none focus:border-brand-400"
-        >
-          <option value="backlog">Backlog do projeto</option>
-          {openSprints.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onCancel} className="rounded-lg border border-paper-200 dark:border-ink-700 px-4 py-2 text-sm font-medium text-paper-500 hover:bg-paper-100 dark:hover:bg-ink-800">
-            Cancelar
-          </button>
-          <button
-            onClick={() => onConfirm(moveTo)}
-            disabled={isPending}
-            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-          >
-            Concluir sprint
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Sprint section ────────────────────────────────────────────────────────────
 
 function SprintSection({
@@ -617,6 +607,7 @@ function SprintSection({
   onOpen,
   onStart,
   onClose,
+  onEdit,
   starting = false,
 }: {
   sprint: Sprint
@@ -625,6 +616,8 @@ function SprintSection({
   onOpen: (c: Card) => void
   onStart: () => void
   onClose: () => void
+  /** Ausente sem permissão de gerenciar sprints. */
+  onEdit?: () => void
   starting?: boolean
 }) {
   const [open, setOpen] = useState(true)
@@ -635,6 +628,7 @@ function SprintSection({
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
   const capacity = loadCapacity(sprint.id)
   const isActive = sprint.status === "active"
+  const daysLeft = isActive && sprint.end_date ? daysRemaining(sprint.end_date) : null
 
   return (
     <section
@@ -660,6 +654,12 @@ function SprintSection({
             <span className="font-bold text-ink dark:text-paper">{sprint.name}</span>
             <StatusBadge status={sprint.status} />
             <span className="text-xs text-paper-400">{cards.length} cards</span>
+            {sprint.start_date && sprint.end_date && (
+              <span className="text-xs text-paper-500 tabular">
+                {formatSprintRange(sprint.start_date, sprint.end_date)}
+                {daysLeft != null && ` · ${daysLeft} dia${daysLeft === 1 ? "" : "s"} restante${daysLeft === 1 ? "" : "s"}`}
+              </span>
+            )}
           </div>
           {sprint.goal && (
             <p className="mt-0.5 text-xs text-paper-500 italic">"{sprint.goal}"</p>
@@ -690,6 +690,16 @@ function SprintSection({
               cap {capacity}
             </span>
           )}
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              aria-label={`Editar ${sprint.name}`}
+              title="Editar sprint (nome, datas, meta)"
+              className="grid size-7 place-items-center rounded-lg text-paper-400 hover:bg-paper-100 hover:text-ink dark:hover:bg-ink-800 dark:hover:text-paper transition-colors"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          )}
           {sprint.status === "planned" && (
             <button
               onClick={onStart}
@@ -705,7 +715,7 @@ function SprintSection({
               onClick={onClose}
               className="flex items-center gap-1.5 rounded-lg border border-paper-200 dark:border-ink-700 px-3 py-1.5 text-xs font-medium text-paper-600 hover:bg-paper-100 dark:hover:bg-ink-800 transition-colors"
             >
-              <CheckCircle2 className="size-3.5" /> Encerrar
+              <CheckCircle2 className="size-3.5" /> Concluir sprint
             </button>
           )}
         </div>
