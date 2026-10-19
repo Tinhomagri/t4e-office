@@ -2,11 +2,8 @@
 
 Seguem o padrão pragmático de extra_views: ORM direto + guards de capacidade.
 """
-from datetime import timedelta
 
 from django.db.models import Count, Q, Sum
-from django.utils import timezone
-from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -23,8 +20,12 @@ from contexts.projects.interface.api.notification_views import notify
 from contexts.projects.interface.api.permissions import (
     assert_card_capability,
     assert_card_member,
-    assert_project_capability,
     assert_project_member,
+)
+from contexts.projects.interface.api.sprint_lifecycle import (
+    complete_preview,
+    complete_sprint,
+    start_sprint,
 )
 from shared.domain.errors import NotFoundError, ValidationError
 
@@ -94,51 +95,19 @@ class EpicListView(APIView):
 
 
 class SprintStartView(APIView):
-    """Inicia uma sprint: POST /sprints/<id>/start/ {start_date?, end_date?, goal?}."""
+    """Inicia uma sprint: POST /sprints/<id>/start/ {name?, start_date?, end_date?, goal?}."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, sprint_id: str) -> Response:
-        sprint = SprintModel.objects.filter(id=sprint_id).select_related("project").first()
-        if sprint is None:
-            raise NotFoundError("Sprint não encontrada.")
-        assert_project_capability(
-            project_id=str(sprint.project_id), user_id=_uid(request),
-            capability=caps.MANAGE_SPRINTS,
+        sprint = start_sprint(
+            sprint_id=str(sprint_id),
+            actor_id=_uid(request),
+            name=request.data.get("name"),
+            start_date=request.data.get("start_date"),
+            end_date=request.data.get("end_date"),
+            goal=request.data.get("goal"),
         )
-        if sprint.status == "active":
-            return Response({"error": "A sprint já está ativa."}, status=status.HTTP_400_BAD_REQUEST)
-        if sprint.status == "closed":
-            return Response({"error": "Sprint encerrada não pode ser reiniciada."}, status=status.HTTP_400_BAD_REQUEST)
-        other = SprintModel.objects.filter(
-            project_id=sprint.project_id, status="active"
-        ).exclude(id=sprint.id).first()
-        if other is not None:
-            return Response(
-                {"error": f"Já existe uma sprint ativa ({other.name}). Conclua-a antes de iniciar outra."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not sprint.cards.exists():
-            return Response(
-                {"error": "Adicione ao menos um card à sprint antes de iniciá-la."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        sprint.status = "active"
-        sprint.started_at = timezone.now()
-        if request.data.get("start_date"):
-            sprint.start_date = request.data["start_date"]
-        if request.data.get("end_date"):
-            sprint.end_date = request.data["end_date"]
-        if "goal" in request.data:
-            sprint.goal = request.data.get("goal") or ""
-        # Sprint sem janela definida não rende burndown nem "dias restantes".
-        # Assume o padrão do time (começa hoje, 2 semanas) em vez de ficar nula.
-        if not sprint.start_date:
-            sprint.start_date = timezone.localdate()
-        if not sprint.end_date:
-            sprint.end_date = sprint.start_date + timedelta(days=14)
-        sprint.save()
 
         # Cards da sprint ainda em backlog sobem para "todo" (como no Jira).
         sprint.cards.filter(status="backlog").update(status="todo")
@@ -160,57 +129,27 @@ class SprintStartView(APIView):
 
 
 class SprintCompleteView(APIView):
-    """Conclui uma sprint: POST /sprints/<id>/complete/ {move_to: "backlog"|sprint_id}.
+    """Conclui uma sprint.
 
-    Cards não concluídos vão para o backlog ou para outra sprint. Retorna resumo.
+    GET  /sprints/<id>/complete/ → prévia do diálogo (concluídos, abertos,
+         nome sugerido para a próxima sprint).
+    POST /sprints/<id>/complete/ {move_to: "backlog" | "new" | <sprint_id>,
+         new_sprint_name?} → conclui e devolve o resumo.
     """
 
     permission_classes = [IsAuthenticated]
 
+    def get(self, request: Request, sprint_id: str) -> Response:
+        return Response(complete_preview(sprint_id=str(sprint_id), actor_id=_uid(request)))
+
     def post(self, request: Request, sprint_id: str) -> Response:
-        sprint = SprintModel.objects.filter(id=sprint_id).first()
-        if sprint is None:
-            raise NotFoundError("Sprint não encontrada.")
-        assert_project_capability(
-            project_id=str(sprint.project_id), user_id=_uid(request),
-            capability=caps.MANAGE_SPRINTS,
+        sprint, summary = complete_sprint(
+            sprint_id=str(sprint_id),
+            actor_id=_uid(request),
+            move_to=str(request.data.get("move_to") or "backlog"),
+            new_sprint_name=request.data.get("new_sprint_name"),
         )
-        if sprint.status != "active":
-            return Response(
-                {"error": "Só é possível concluir uma sprint ativa."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        done_count = sprint.cards.filter(status="done").count()
-        open_cards = sprint.cards.exclude(status="done")
-        open_count = open_cards.count()
-
-        move_to = request.data.get("move_to", "backlog")
-        if move_to == "backlog":
-            open_cards.update(sprint=None, status="backlog")
-        else:
-            target = SprintModel.objects.filter(
-                id=move_to, project_id=sprint.project_id
-            ).exclude(id=sprint.id).first()
-            if target is None or target.status == "closed":
-                return Response(
-                    {"error": "Sprint de destino inválida."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            open_cards.update(sprint=target)
-
-        sprint.status = "closed"
-        sprint.completed_at = timezone.now()
-        sprint.save(update_fields=["status", "completed_at"])
-
-        return Response({
-            **_ser_sprint(sprint),
-            "summary": {
-                "completed_cards": done_count,
-                "moved_cards": open_count,
-                "moved_to": move_to,
-            },
-        })
+        return Response({**_ser_sprint(sprint), "summary": summary})
 
 
 class CardRankView(APIView):

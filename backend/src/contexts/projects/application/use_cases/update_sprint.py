@@ -1,6 +1,9 @@
-"""Caso de uso: atualização de sprint (editar, iniciar, encerrar)."""
-from contexts.projects.domain.entities.card import CardStatus
-from contexts.projects.domain.entities.sprint import Sprint, SprintStatus
+"""Caso de uso: edição de sprint (nome, meta, datas).
+
+Mudar o status (iniciar/concluir) NÃO passa por aqui — ver
+`interface/api/sprint_lifecycle.py`, que valida, grava início/fim e decide o
+destino dos cards abertos."""
+from contexts.projects.domain.entities.sprint import Sprint
 from contexts.projects.domain.repositories.card_repository import CardRepository
 from contexts.projects.domain.repositories.project_repository import (
     ProjectRepository,
@@ -14,11 +17,7 @@ _UNSET = object()
 
 
 class UpdateSprint:
-    """Atualiza campos de uma sprint; só altera o que for informado.
-
-    Ao mudar o status para `active`, garante no máximo uma sprint ativa por
-    projeto (encerra as demais ativas).
-    """
+    """Atualiza campos de uma sprint; só altera o que for informado."""
 
     def __init__(
         self,
@@ -41,7 +40,6 @@ class UpdateSprint:
         goal=_UNSET,
         start_date=_UNSET,
         end_date=_UNSET,
-        status=_UNSET,
     ) -> Sprint:
         sprint = self.sprint_repository.get(sprint_id=sprint_id)
         if sprint is None:
@@ -62,28 +60,7 @@ class UpdateSprint:
             sprint.start_date = start_date
         if end_date is not _UNSET:
             sprint.end_date = end_date
-        if status is not _UNSET:
-            sprint.status = SprintStatus(status)
 
         # Revalida invariantes do domínio após a mutação.
         sprint.__post_init__()
-        updated = self.sprint_repository.update(sprint=sprint)
-
-        # Regra: uma sprint ativa por projeto.
-        if updated.status == SprintStatus.ACTIVE:
-            self.sprint_repository.clear_active(
-                project_id=updated.project_id, except_id=updated.id
-            )
-
-        # Ao encerrar: cards não concluídos voltam ao backlog do projeto.
-        # Cards `done` permanecem na sprint (histórico para relatórios).
-        if updated.status == SprintStatus.CLOSED:
-            cards = self.card_repository.list_by_project(
-                project_id=updated.project_id
-            )
-            for card in cards:
-                if card.sprint_id == updated.id and card.status != CardStatus.DONE.value:
-                    card.sprint_id = None
-                    card.status = CardStatus.BACKLOG.value
-                    self.card_repository.update(card=card)
-        return updated
+        return self.sprint_repository.update(sprint=sprint)

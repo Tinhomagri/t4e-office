@@ -281,7 +281,6 @@ class UpdateSprintSerializer(serializers.Serializer):
     goal = serializers.CharField(required=False, allow_blank=True)
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
-    status = serializers.ChoiceField(choices=_SPRINT_STATUS, required=False)
 
 
 class SprintSerializer(serializers.Serializer):

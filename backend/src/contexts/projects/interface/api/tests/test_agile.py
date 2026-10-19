@@ -152,7 +152,8 @@ def test_concluir_sprint_move_abertos_para_backlog(scenario):
     assert body["status"] == "closed"
     assert body["summary"] == {"completed_cards": 1, "moved_cards": 1, "moved_to": "backlog"}
     aberto.refresh_from_db()
-    assert aberto.sprint_id is None and aberto.status == "backlog"
+    # Igual ao Jira: sai da sprint, mas mantém o status em que estava.
+    assert aberto.sprint_id is None and aberto.status == "doing"
 
 
 def test_concluir_sprint_move_abertos_para_outra_sprint(scenario):

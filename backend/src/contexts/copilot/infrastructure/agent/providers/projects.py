@@ -456,12 +456,22 @@ class ProjectsProvider:
             fields["name"] = a["sprint_name"]
         if "goal" in a:
             fields["goal"] = a["goal"]
-        if "status" in a:
-            fields["status"] = a["status"]
         if "start_date" in a:
             fields["start_date"] = parse_date(a.get("start_date"))
         if "end_date" in a:
             fields["end_date"] = parse_date(a.get("end_date"))
+        # Status muda pelo mesmo caminho da UI (validações do Jira); o resto
+        # é edição simples.
+        from contexts.projects.interface.api.sprint_lifecycle import (
+            complete_sprint,
+            start_sprint,
+        )
+
+        status = a.get("status")
+        if status == "active":
+            start_sprint(sprint_id=a["sprint_id"], actor_id=self.actor_id)
+        elif status == "closed":
+            complete_sprint(sprint_id=a["sprint_id"], actor_id=self.actor_id)
         sprint = UpdateSprint(
             self._projects, self._sprints, self._access, self._cards
         ).execute(sprint_id=a["sprint_id"], actor_id=self.actor_id, **fields)

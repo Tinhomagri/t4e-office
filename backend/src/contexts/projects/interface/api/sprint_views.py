@@ -10,18 +10,24 @@ from contexts.projects.application.use_cases.create_sprint import CreateSprint
 from contexts.projects.application.use_cases.list_sprints import ListSprints
 from contexts.projects.application.use_cases.update_sprint import UpdateSprint
 from contexts.projects.domain.entities.sprint import Sprint
+from contexts.projects.infrastructure.django.models import SprintModel
 from contexts.projects.infrastructure.django.repositories_impl import (
     DjangoCardRepository,
     DjangoProjectRepository,
     DjangoSprintRepository,
     DjangoWorkspaceAccess,
 )
-from contexts.projects.interface.api.permissions import assert_project_member
+from contexts.projects.interface.api import capabilities as caps
+from contexts.projects.interface.api.permissions import (
+    assert_project_capability,
+    assert_project_member,
+)
 from contexts.projects.interface.api.serializers import (
     CreateSprintSerializer,
     SprintSerializer,
     UpdateSprintSerializer,
 )
+from shared.domain.errors import NotFoundError, ValidationError
 
 
 def _sprint_dict(sprint: Sprint) -> dict:
@@ -91,6 +97,20 @@ class SprintDetailView(APIView):
 
     @extend_schema(request=UpdateSprintSerializer, responses=SprintSerializer)
     def patch(self, request: Request, sprint_id: str) -> Response:
+        # Iniciar/concluir têm rota própria (validação, datas de início/fim,
+        # destino dos cards abertos) — o PATCH só edita.
+        if "status" in request.data:
+            raise ValidationError(
+                "Use iniciar/concluir sprint para mudar o status, não a edição."
+            )
+        sprint_row = SprintModel.objects.filter(id=sprint_id).first()
+        if sprint_row is None:
+            raise NotFoundError("Sprint não encontrada.")
+        assert_project_capability(
+            project_id=str(sprint_row.project_id),
+            user_id=str(request.user.id),
+            capability=caps.MANAGE_SPRINTS,
+        )
         serializer = UpdateSprintSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         projects, sprints, access = _deps()
