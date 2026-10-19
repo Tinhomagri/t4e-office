@@ -5,6 +5,7 @@ from drf_spectacular.views import SpectacularAPIView
 from rest_framework.permissions import AllowAny
 
 from contexts.agent_api.interface.cards import CardDetailView, CardsView
+from contexts.agent_api.interface.etapa2 import CardHistoricoView, PessoasView, SprintsView
 from contexts.agent_api.interface.horas import HorasView
 from contexts.agent_api.interface.views import AuditoriaView, ProjetosView, health
 
@@ -28,5 +29,12 @@ urlpatterns = [
     path("projetos/", ProjetosView.as_view(), name="agentes-projetos"),
     path("cards/", CardsView.as_view(), name="agentes-cards"),
     path("cards/<uuid:card_id>/", CardDetailView.as_view(), name="agentes-card"),
+    path(
+        "cards/<uuid:card_id>/historico/",
+        CardHistoricoView.as_view(),
+        name="agentes-card-historico",
+    ),
     path("horas/", HorasView.as_view(), name="agentes-horas"),
+    path("sprints/", SprintsView.as_view(), name="agentes-sprints"),
+    path("pessoas/", PessoasView.as_view(), name="agentes-pessoas"),
 ]

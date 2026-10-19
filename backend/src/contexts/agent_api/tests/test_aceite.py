@@ -1,5 +1,4 @@
-"""Critério de aceite do Leonardo (§7), ponta a ponta — rotas da etapa 1.
-`/sprints` e `/pessoas` entram na etapa 2."""
+"""Critério de aceite do Leonardo (§7), ponta a ponta."""
 import json
 
 import pytest
@@ -7,10 +6,15 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from contexts.agent_api.infrastructure.models import AgentAuditLogModel
-from contexts.projects.infrastructure.django.models import CardModel, ProjectModel, WorklogModel
+from contexts.projects.infrastructure.django.models import (
+    CardModel,
+    ProjectModel,
+    SprintModel,
+    WorklogModel,
+)
 
 BASE = "/api/agentes/v1"
-LISTAS = ["projetos", "cards", "horas"]
+LISTAS = ["projetos", "cards", "horas", "sprints", "pessoas"]
 PROIBIDOS = ("email", "phone", "telefone", "salario", "salary", "custo", "cost", "cpf")
 
 
@@ -19,6 +23,7 @@ def dados(ws):
     p = ProjectModel.objects.create(workspace=ws, name="P", key="P", manager_contract_id="C-1")
     c = CardModel.objects.create(project=p, number=1, title="C", assignee=ws.owner)
     WorklogModel.objects.create(card=c, author=ws.owner, time_seconds=3600, started_at=timezone.now())
+    SprintModel.objects.create(project=p, name="S1")
 
 
 def test_1_health_sem_token(db):
@@ -80,6 +85,9 @@ def test_7_arquivo_do_servidor_404(api, path):
 
 def test_openapi_documenta_as_rotas(db):
     paths = APIClient().get(f"{BASE}/openapi.json").json()["paths"]
-    for rota in ("projetos/", "cards/", "cards/{card_id}/", "horas/", "auditoria/"):
+    for rota in (
+        "projetos/", "cards/", "cards/{card_id}/", "cards/{card_id}/historico/",
+        "horas/", "sprints/", "pessoas/", "auditoria/",
+    ):
         assert f"{BASE}/{rota}" in paths
     assert not any(not p.startswith(BASE) for p in paths)

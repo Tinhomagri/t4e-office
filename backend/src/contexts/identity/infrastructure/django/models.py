@@ -65,6 +65,8 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     email_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False, help_text="Acesso ao admin")
     date_joined = models.DateTimeField(auto_now_add=True)
+    # Sincronização incremental da API de agentes (`/pessoas?updated_since=`).
+    updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
@@ -173,6 +175,7 @@ class MembershipModel(models.Model):
         help_text="Spaces que admin ou membro pode ver; só owner vê todos.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "identity_membership"
