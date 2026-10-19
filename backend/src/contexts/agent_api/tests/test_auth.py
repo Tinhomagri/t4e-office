@@ -121,3 +121,17 @@ def test_token_usado_de_outro_jeito_nao_vaza(agente):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Token {TOKEN}")
     assert client.get(f"{BASE}/auditoria/").status_code == 401
+
+
+def test_auditoria_mostra_tentativa_com_token_invalido(api):
+    bad = APIClient()
+    bad.credentials(HTTP_AUTHORIZATION="Bearer errado")
+    bad.get(f"{BASE}/projetos/", HTTP_X_CORRELATION_ID="invasor")
+    linhas = api.get(f"{BASE}/auditoria/").json()["dados"]
+    linha = next(r for r in linhas if r["correlation_id"] == "invasor")
+    assert (linha["agente"], linha["status"]) == (None, 401)
+
+
+def test_mensagem_de_erro_sem_acento_escapado(db):
+    resp = APIClient().get(f"{BASE}/projetos/")
+    assert "inválido" in resp.content.decode()

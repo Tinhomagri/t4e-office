@@ -25,7 +25,8 @@ def health(request):
 
 class AuditoriaView(AgentAPIView):
     """GET /auditoria?agente=&desde= — requisições de agentes que compartilham
-    workspace com o token (inclusive as barradas)."""
+    workspace com o token (inclusive as barradas) e as tentativas com token
+    inválido (`agente: null`), que não pertencem a workspace nenhum."""
 
     @extend_schema(
         parameters=[
@@ -35,7 +36,7 @@ class AuditoriaView(AgentAPIView):
     )
     def get(self, request: Request):
         qs = AgentAuditLogModel.objects.filter(
-            agente__workspaces__in=self.workspace_ids()
+            Q(agente__workspaces__in=self.workspace_ids()) | Q(agente__isnull=True)
         ).distinct()
         if agente := request.query_params.get("agente"):
             qs = qs.filter(agente_id=agente)

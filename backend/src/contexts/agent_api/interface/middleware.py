@@ -27,7 +27,11 @@ LIMIT_PER_MINUTE = 60
 
 
 def _erro(status: int, codigo: str, mensagem: str, **headers) -> JsonResponse:
-    resp = JsonResponse({"erro": codigo, "mensagem": mensagem}, status=status)
+    resp = JsonResponse(
+        {"erro": codigo, "mensagem": mensagem},
+        status=status,
+        json_dumps_params={"ensure_ascii": False},
+    )
     for name, value in headers.items():
         resp[name] = value
     return resp
