@@ -16,7 +16,7 @@ import time
 from django.core.cache import cache
 from django.http import JsonResponse
 
-from contexts.agent_api.application.tokens import resolve_agent
+from contexts.agent_api.application.tokens import resolve_agent, touch_last_use
 from contexts.agent_api.infrastructure.models import AgentAuditLogModel
 
 PREFIX = "/api/agentes/v1/"
@@ -109,6 +109,7 @@ class AgentTokenMiddleware:
                 **{"Retry-After": str(retry)},
             )
         request.agent = agent
+        touch_last_use(agent)
         resp = self.get_response(request)
         if resp.status_code == 404 and "application/json" not in resp.get("Content-Type", ""):
             return _erro(404, "nao_encontrado", "Rota não encontrada.")

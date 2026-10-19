@@ -11,6 +11,9 @@ class AgentTokenModel(models.Model):
     `importar_tokens_agentes`). Não é usuário: não vale nas rotas normais."""
 
     id = models.SlugField(primary_key=True, max_length=60)
+    # Nome legível ("Leonardo – saúde das squads"); vazio nos importados do
+    # arquivo de hashes, que só trazem o id.
+    nome = models.CharField(max_length=120, blank=True, default="")
     token_hash = models.CharField(max_length=64, unique=True)
     ativo = models.BooleanField(default=True)
     escopos = models.JSONField(default=list)
@@ -18,6 +21,14 @@ class AgentTokenModel(models.Model):
     workspaces = models.ManyToManyField(
         "identity.WorkspaceModel", related_name="agent_tokens", blank=True
     )
+    criado_por = models.ForeignKey(
+        "identity.UserModel",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="agent_tokens_created",
+    )
+    ultimo_uso = models.DateTimeField(null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

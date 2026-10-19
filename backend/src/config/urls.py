@@ -36,6 +36,8 @@ urlpatterns = [
     path("api/meetings/", include("contexts.meetings.interface.api.urls")),
     # API somente leitura para os agentes de IA (documento do Leonardo).
     path("api/agentes/v1/", include("contexts.agent_api.interface.urls")),
+    # Gestão das chaves de agente pela tela do Office (só admin).
+    path("api/", include("contexts.agent_api.interface.admin_urls")),
 ]
 
 # Hostinger roda processo único com disco persistente: o próprio Django

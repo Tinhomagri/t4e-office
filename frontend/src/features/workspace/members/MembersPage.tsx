@@ -1,18 +1,19 @@
 import { useMemo, useState } from "react"
-import { History, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react"
+import { History, KeyRound, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react"
 
 import { useAuthStore } from "@/features/auth/auth.store"
 import { EmptyState, PageHeader, Spinner } from "@/shared/ui/primitives"
 import { SquadsTab } from "./SquadsTab"
 
 import { useMembers, useWorkspaces } from "../workspace.hooks"
+import { AgentKeysTab } from "./AgentKeysTab"
 import { AuditTab } from "./AuditTab"
 import { CapabilitiesTab } from "./CapabilitiesTab"
 import { MembersTab } from "./MembersTab"
 import { ProjectPermissionsTab } from "./ProjectPermissionsTab"
 import { TabBar, type TabDef } from "./shared"
 
-type TabId = "members" | "squads" | "project-perms" | "capabilities" | "audit"
+type TabId = "members" | "squads" | "project-perms" | "capabilities" | "audit" | "api-keys"
 
 const TABS: TabDef<TabId>[] = [
   { id: "members", label: "Membros", icon: <Users className="size-4" /> },
@@ -28,6 +29,11 @@ const TABS: TabDef<TabId>[] = [
     icon: <ShieldCheck className="size-4" />,
   },
   { id: "audit", label: "Auditoria", icon: <History className="size-4" /> },
+]
+
+// Só dono/admin enxergam a aba (a API também recusa os demais).
+const ADMIN_TABS: TabDef<TabId>[] = [
+  { id: "api-keys", label: "Chaves de API", icon: <KeyRound className="size-4" /> },
 ]
 
 export function MembersPage() {
@@ -70,7 +76,7 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
         subtitle="Equipe do workspace, papéis, acesso por projeto e auditoria"
       />
 
-      <TabBar tabs={TABS} active={tab} onChange={setTab} />
+      <TabBar tabs={canManage ? [...TABS, ...ADMIN_TABS] : TABS} active={tab} onChange={setTab} />
 
       {tab === "members" && <MembersTab workspaceId={workspaceId} />}
       {tab === "squads" && <SquadsTab workspaceId={workspaceId} />}
@@ -81,6 +87,7 @@ function MembersInner({ workspaceId }: { workspaceId: string }) {
       {tab === "audit" && (
         <AuditTab workspaceId={workspaceId} canView={canManage} />
       )}
+      {tab === "api-keys" && <AgentKeysTab workspaceId={workspaceId} canManage={canManage} />}
     </div>
   )
 }
