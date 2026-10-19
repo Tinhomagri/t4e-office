@@ -26,6 +26,7 @@ class UserSerializer(serializers.Serializer):
     theme = serializers.CharField(allow_blank=True, required=False)
     density = serializers.CharField(allow_blank=True, required=False)
     notification_preferences = serializers.DictField(required=False)
+    whitelabel = serializers.DictField(required=False)
     availability = serializers.CharField(allow_blank=True, required=False)
 
 

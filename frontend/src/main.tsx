@@ -12,6 +12,7 @@ import { RouterProvider } from "react-router-dom"
 import { router } from "@/app/router"
 import { extractApiError } from "@/shared/api/client"
 import { Toaster, toast } from "@/shared/ui/toast"
+import { bootWhitelabel } from "@/shared/whitelabel"
 
 import "./index.css"
 import "react-datepicker/dist/react-datepicker.css"
@@ -38,6 +39,10 @@ const queryClient = new QueryClient({
     onError: (err) => toast.error(extractApiError(err)),
   }),
 })
+
+// Antes do primeiro render: sem isto a tela nasce com a cor de fábrica e
+// troca de marca no quadro seguinte.
+bootWhitelabel()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

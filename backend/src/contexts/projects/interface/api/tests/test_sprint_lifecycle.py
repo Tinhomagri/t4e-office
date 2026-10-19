@@ -73,7 +73,8 @@ def test_iniciar_so_com_inicio_assume_duas_semanas(scenario):
     )
     assert resp.status_code == 200
     s.refresh_from_db()
-    assert s.end_date == date(2026, 10, 26)
+    # Dia de início conta (regra de `Sprint.window_from`): 14 dias → domingo 25.
+    assert s.end_date == date(2026, 10, 25)
 
 
 @pytest.mark.parametrize(

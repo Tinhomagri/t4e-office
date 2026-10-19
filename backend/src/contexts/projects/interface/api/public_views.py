@@ -42,7 +42,7 @@ from contexts.projects.infrastructure.django.models import (
     WorkflowStatusModel,
 )
 from contexts.projects.infrastructure.lexorank import rank_at_top
-from contexts.projects.interface.api.notification_views import EventStreamRenderer, notify
+from contexts.projects.interface.api.notification_views import EventStreamRenderer, card_link, notify
 from shared.domain.errors import NotFoundError, ValidationError
 
 MAX_MESSAGE_LEN = 2000
@@ -348,7 +348,7 @@ class PublicCardCommentCreateView(APIView):
                 notif_type="card_commented",
                 title=f"{author_name} comentou em {ref}",
                 body=body[:140],
-                link=f"/boards?card={card.id}",
+                link=card_link(str(card.project_id), str(card.id)),
             )
 
         return Response(_ser_comment(comment), status=201)

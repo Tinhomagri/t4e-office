@@ -37,6 +37,7 @@ function makeCard(over: Partial<Card>): Card {
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     assignee_id: null,
+    collaborator_ids: [],
     sprint_id: null,
     due_date: null,
     reporter_id: null,
@@ -63,6 +64,7 @@ const SPRINTS: Sprint[] = [
     status: "active",
     start_date: null,
     end_date: null,
+    duration_days: null,
   },
 ]
 

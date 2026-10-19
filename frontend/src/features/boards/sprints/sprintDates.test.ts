@@ -17,16 +17,16 @@ describe("datas de sprint", () => {
     expect(addDays("2026-12-28", 7)).toBe("2027-01-04")
   })
 
-  it("duração em semanas: fim = início + N semanas (como o Jira)", () => {
-    expect(endForDuration("2026-10-12", 1)).toBe("2026-10-19")
-    expect(endForDuration("2026-10-12", 2)).toBe("2026-10-26")
+  it("duração conta o dia de início: 2 semanas a partir de segunda acabam no domingo", () => {
+    expect(endForDuration("2026-10-12", 1)).toBe("2026-10-18")
+    expect(endForDuration("2026-10-12", 2)).toBe("2026-10-25")
   })
 
   it("reconhece duração padrão ou personalizada", () => {
-    expect(durationWeeks("2026-10-12", "2026-10-26")).toBe(2)
-    expect(durationWeeks("2026-10-12", "2026-11-09")).toBe(4)
+    expect(durationWeeks("2026-10-12", "2026-10-25")).toBe(2)
+    expect(durationWeeks("2026-10-12", "2026-11-08")).toBe(4)
     expect(durationWeeks("2026-10-12", "2026-10-23")).toBe("custom")
-    expect(durationWeeks("2026-10-12", "2026-12-07")).toBe("custom") // 8 semanas: fora dos atalhos
+    expect(durationWeeks("2026-10-12", "2026-12-06")).toBe("custom") // 8 semanas: fora dos atalhos
   })
 
   it("formata o intervalo curto em pt-BR", () => {

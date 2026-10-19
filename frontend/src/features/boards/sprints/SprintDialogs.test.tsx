@@ -14,6 +14,7 @@ const base: Sprint = {
   start_date: null,
   end_date: null,
   status: "planned",
+  duration_days: null,
 }
 
 beforeEach(() => {
@@ -28,7 +29,7 @@ describe("<StartSprintModal />", () => {
     render(<StartSprintModal sprint={base} cardCount={3} onCancel={vi.fn()} onConfirm={onConfirm} />)
     expect(screen.getByText(/3 cards/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/data de início/i)).toHaveValue("2026-10-19")
-    expect(screen.getByLabelText(/data de fim/i)).toHaveValue("2026-11-02")
+    expect(screen.getByLabelText(/data de fim/i)).toHaveValue("2026-11-01")
     expect(screen.getByRole("button", { name: "2 semanas" })).toHaveAttribute("aria-pressed", "true")
 
     const goal = screen.getByLabelText(/meta/i)
@@ -37,15 +38,16 @@ describe("<StartSprintModal />", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       name: "Sprint 12",
       start_date: "2026-10-19",
-      end_date: "2026-11-02",
+      end_date: "2026-11-01",
       goal: "Checkout no ar",
+      duration_days: 14,
     })
   })
 
   it("trocar a duração recalcula o fim; mexer no fim vira personalizada", async () => {
     render(<StartSprintModal sprint={base} cardCount={1} onCancel={vi.fn()} onConfirm={vi.fn()} />)
     await userEvent.click(screen.getByRole("button", { name: "4 semanas" }))
-    expect(screen.getByLabelText(/data de fim/i)).toHaveValue("2026-11-16")
+    expect(screen.getByLabelText(/data de fim/i)).toHaveValue("2026-11-15")
 
     const end = screen.getByLabelText(/data de fim/i)
     await userEvent.clear(end)
@@ -62,10 +64,28 @@ describe("<StartSprintModal />", () => {
     expect(screen.getByRole("button", { name: /^iniciar$/i })).toBeDisabled()
   })
 
+  it("data de fim editada à mão manda duração personalizada (null)", async () => {
+    const onConfirm = vi.fn()
+    render(<StartSprintModal sprint={base} cardCount={1} onCancel={vi.fn()} onConfirm={onConfirm} />)
+    const end = screen.getByLabelText(/data de fim/i)
+    await userEvent.clear(end)
+    await userEvent.type(end, "2026-10-30")
+    await userEvent.click(screen.getByRole("button", { name: /^iniciar$/i }))
+    expect(onConfirm.mock.calls[0][0]).toMatchObject({ end_date: "2026-10-30", duration_days: null })
+  })
+
+  it("usa a duração escolhida na criação da sprint", () => {
+    render(
+      <StartSprintModal sprint={{ ...base, duration_days: 21 }} cardCount={1} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    )
+    expect(screen.getByRole("button", { name: "3 semanas" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByLabelText(/data de fim/i)).toHaveValue("2026-11-08")
+  })
+
   it("usa as datas já planejadas da sprint", () => {
     render(
       <StartSprintModal
-        sprint={{ ...base, start_date: "2026-10-26", end_date: "2026-11-02" }}
+        sprint={{ ...base, start_date: "2026-10-26", end_date: "2026-11-01" }}
         cardCount={1}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
@@ -81,7 +101,7 @@ describe("<EditSprintModal />", () => {
     const onConfirm = vi.fn()
     render(
       <EditSprintModal
-        sprint={{ ...base, status: "active", start_date: "2026-10-12", end_date: "2026-10-26", goal: "A" }}
+        sprint={{ ...base, status: "active", start_date: "2026-10-12", end_date: "2026-10-25", goal: "A" }}
         onCancel={vi.fn()}
         onConfirm={onConfirm}
       />,
@@ -94,8 +114,9 @@ describe("<EditSprintModal />", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       name: "Sprint 12b",
       start_date: "2026-10-12",
-      end_date: "2026-11-02",
+      end_date: "2026-11-01",
       goal: "A",
+      duration_days: 21,
     })
   })
 

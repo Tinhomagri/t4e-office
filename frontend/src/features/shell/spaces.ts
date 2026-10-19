@@ -49,6 +49,14 @@ export interface NavGroup {
   items: NavItem[]
   /** Injeta o submenu de projetos (lista vinda da API) neste grupo. */
   projects?: "software" | "marketing"
+  /**
+   * Grupo de administração do workspace: só owner e admin.
+   *
+   * Quem é `member` (papel `developer` nos projetos) trabalha nos quadros, não
+   * administra pessoas nem lê o relatório do time inteiro — e o item sumir do
+   * menu é melhor que levar a uma tela que ele não deveria abrir.
+   */
+  adminOnly?: boolean
 }
 
 export interface Space {
@@ -103,6 +111,7 @@ export const SPACES: Space[] = [
       },
       {
         heading: "Analytics",
+        adminOnly: true,
         items: [
           { label: "Relatórios", to: "/app/reports", icon: LineChart },
           { label: "Portfólio", to: "/app/portfolio", icon: Building2 },
@@ -110,6 +119,7 @@ export const SPACES: Space[] = [
       },
       {
         heading: "Pessoas",
+        adminOnly: true,
         items: [
           { label: "Membros", to: "/app/members", icon: UserPlus },
           { label: "Mesas", to: "/app/desks", icon: Monitor },

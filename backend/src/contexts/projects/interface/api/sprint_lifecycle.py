@@ -2,8 +2,9 @@
 status de uma sprint (views e Copiloto chamam daqui; o PATCH só edita nome,
 meta e datas).
 
-- Iniciar: nome, datas e meta opcionais; fim não pode ser antes do início;
-  sem fim, assume 2 semanas. Uma sprint ativa por projeto.
+- Iniciar: nome, datas, meta e duração opcionais; fim não pode ser antes do
+  início; sem fim, a janela sai da duração da sprint (padrão 2 semanas),
+  contando o dia de início. Uma sprint ativa por projeto.
 - Concluir: "concluído" é pela categoria da coluna (`done`), não pelo slug.
   Abertos vão para o backlog, para uma sprint futura ou para uma sprint nova;
   mantêm o status (como no Jira) e cada saída vira histórico do card.
@@ -17,6 +18,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from contexts.projects.domain.entities.sprint import DEFAULT_SPRINT_DAYS
 from contexts.projects.infrastructure.django.models import (
     CardHistoryModel,
     SprintModel,
@@ -26,7 +28,14 @@ from contexts.projects.interface.api import capabilities as caps
 from contexts.projects.interface.api.permissions import assert_project_capability
 from shared.domain.errors import NotFoundError, ValidationError
 
-DEFAULT_DURATION = timedelta(days=14)
+# "Campo não enviado" ≠ None (None em `duration_days` = personalizada).
+UNSET = object()
+
+
+def window_end(start: date, duration_days: int | None) -> date:
+    """Último dia da sprint: o dia de início conta — 14 dias a partir de uma
+    segunda terminam no domingo seguinte (mesma regra de `Sprint.window_from`)."""
+    return start + timedelta(days=(duration_days or DEFAULT_SPRINT_DAYS) - 1)
 
 
 def _get_sprint(sprint_id: str, actor_id: str) -> SprintModel:
@@ -78,7 +87,14 @@ def next_sprint_name(name: str) -> str:
 
 @transaction.atomic
 def start_sprint(
-    *, sprint_id: str, actor_id: str, name=None, start_date=None, end_date=None, goal=None
+    *,
+    sprint_id: str,
+    actor_id: str,
+    name=None,
+    start_date=None,
+    end_date=None,
+    goal=None,
+    duration_days=UNSET,
 ) -> SprintModel:
     sprint = _get_sprint(sprint_id, actor_id)
     if sprint.status == "active":
@@ -101,8 +117,18 @@ def start_sprint(
         if not str(name).strip():
             raise ValidationError("O nome da sprint não pode ficar vazio.")
         sprint.name = str(name).strip()
-    start = parse_date(start_date, "start_date") or sprint.start_date or timezone.localdate()
-    end = parse_date(end_date, "end_date") or sprint.end_date or start + DEFAULT_DURATION
+    if duration_days is not UNSET:
+        sprint.duration_days = _parse_duration(duration_days)
+    new_start = parse_date(start_date, "start_date")
+    new_end = parse_date(end_date, "end_date")
+    start = new_start or sprint.start_date or timezone.localdate()
+    if new_end:
+        end = new_end
+    elif new_start or not sprint.end_date:
+        # Início mudou (ou nunca teve fim): a duração reposiciona o fim.
+        end = window_end(start, sprint.duration_days)
+    else:
+        end = sprint.end_date
     assert_date_order(start, end)
     sprint.start_date, sprint.end_date = start, end
     if goal is not None:
@@ -178,6 +204,18 @@ def complete_sprint(
         "moved_cards": len(open_cards),
         "moved_to": str(target.id) if target else "backlog",
     }
+
+
+def _parse_duration(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        days = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Duração da sprint inválida.") from exc
+    if not 1 <= days <= 365:
+        raise ValidationError("A duração da sprint deve ficar entre 1 e 365 dias.")
+    return days
 
 
 def _is_uuid(value) -> bool:

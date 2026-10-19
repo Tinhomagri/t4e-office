@@ -330,6 +330,8 @@ export interface StartSprintInput {
   start_date?: string
   end_date?: string
   goal?: string
+  /** `null` = personalizada (as datas valem como vieram). */
+  duration_days?: number | null
 }
 
 export async function startSprint(
@@ -727,6 +729,17 @@ export async function uploadAttachmentVersion(
     form,
     { headers: { "Content-Type": "multipart/form-data" } },
   )
+  return data
+}
+
+/**
+ * Um card pelo id, sem saber de que projeto ele é.
+ *
+ * Serve para resolver um deep-link `?card=` que chegou sem `?project=` —
+ * notificação antiga, link colado à mão — e descobrir qual board abrir.
+ */
+export async function getCard(cardId: string): Promise<Card> {
+  const { data } = await api.get<Card>(`/cards/${cardId}/`)
   return data
 }
 

@@ -66,6 +66,20 @@ def notify(user_id: str, notif_type: str, title: str, body: str = "", link: str 
     )
 
 
+def card_link(project_id: str, card_id: str) -> str:
+    """Link de notificação que abre um card específico.
+
+    Dois detalhes que faziam o clique na notificação cair em "404 Not Found":
+
+    1. O prefixo `/app`. Todas as telas do produto moram sob ele no router do
+       front; `/boards` sozinho não é rota nenhuma.
+    2. O `project`. A tela de quadros só encontra o card na lista do projeto
+       que está selecionado no momento — sem dizer qual é, a notificação abria
+       o quadro errado e o card nunca aparecia.
+    """
+    return f"/app/boards?project={project_id}&card={card_id}"
+
+
 def _ser(n: NotificationModel) -> dict:
     return {
         "id": str(n.id),

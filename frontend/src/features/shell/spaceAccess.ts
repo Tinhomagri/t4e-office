@@ -1,9 +1,12 @@
 // Deriva quais spaces o usuário atual pode ver no workspace ativo.
 //
 // Regras (espelham o backend — ver PATCH /auth/workspaces/<id>/members/<user_id>/):
-// - owner sempre enxerga todos os spaces, não importa o `allowed_spaces`
-//   guardado.
-// - admin e membro enxergam apenas os spaces da lista declarada pelo dono.
+// - owner e admin enxergam todos os spaces, não importa o `allowed_spaces`
+//   guardado. Quem administra o workspace é responsável por Membros, Mesas e
+//   Relatórios — recortar spaces para essa pessoa escondia justamente as telas
+//   que ela precisa administrar, e o backend nunca distinguiu os dois papéis
+//   nessas rotas.
+// - membro enxerga apenas os spaces da lista declarada pelo dono.
 //   `null`/undefined de dados legados falha fechado como lista vazia.
 // - sem workspace, sem sessão carregada, ou ainda carregando: lista vazia.
 //   Falha fechado — mostrar nada é menos grave que vazar um space por um
@@ -41,7 +44,7 @@ export function useMySpaceIds(workspaceId: string | null): SpaceId[] {
     const myself = list.find((m) => m.user_id === me.id)
     if (!myself) return []
 
-    if (myself.role === "owner") return ALL_SPACE_IDS
+    if (myself.role === "owner" || myself.role === "admin") return ALL_SPACE_IDS
 
     return ALL_SPACE_IDS.filter((id) => myself.allowed_spaces?.includes(id))
   }, [workspaceId, me?.id, members.data])

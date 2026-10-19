@@ -23,6 +23,7 @@ from contexts.projects.interface.api.permissions import (
     assert_project_member,
 )
 from contexts.projects.interface.api.sprint_lifecycle import (
+    UNSET,
     complete_preview,
     complete_sprint,
     start_sprint,
@@ -95,7 +96,8 @@ class EpicListView(APIView):
 
 
 class SprintStartView(APIView):
-    """Inicia uma sprint: POST /sprints/<id>/start/ {name?, start_date?, end_date?, goal?}."""
+    """Inicia uma sprint: POST /sprints/<id>/start/
+    {name?, start_date?, end_date?, goal?, duration_days?}."""
 
     permission_classes = [IsAuthenticated]
 
@@ -107,6 +109,8 @@ class SprintStartView(APIView):
             start_date=request.data.get("start_date"),
             end_date=request.data.get("end_date"),
             goal=request.data.get("goal"),
+            # Ausente = mantém a duração escolhida na criação; null = personalizada.
+            duration_days=request.data.get("duration_days", UNSET),
         )
 
         # Cards da sprint ainda em backlog sobem para "todo" (como no Jira).
@@ -123,7 +127,7 @@ class SprintStartView(APIView):
                 notif_type="sprint_started",
                 title=f"Sprint iniciada: {sprint.name}",
                 body=sprint.goal,
-                link="/boards",
+                link="/app/boards",
             )
         return Response(_ser_sprint(sprint))
 
@@ -208,8 +212,12 @@ class CardChildrenView(APIView):
         card = CardModel.objects.select_related("project").filter(id=card_id).first()
         if card is None:
             raise NotFoundError("Card não encontrado.")
-        qs = (card.epic_children if card.type == "epic" else card.subtasks).order_by(
-            "rank", "number"
+        qs = (
+            (card.epic_children if card.type == "epic" else card.subtasks)
+            # Sem o prefetch, ler os participantes de cada filho na montagem do
+            # payload abaixo custaria uma query por card.
+            .prefetch_related("collaborators")
+            .order_by("rank", "number")
         )
         key = card.project.key
         return Response([
@@ -222,6 +230,7 @@ class CardChildrenView(APIView):
                 "priority": c.priority,
                 "points": c.points,
                 "assignee_id": str(c.assignee_id) if c.assignee_id else None,
+                "collaborator_ids": [str(u.id) for u in c.collaborators.all()],
             }
             for c in qs
         ])
@@ -235,6 +244,7 @@ def _ser_sprint(s: SprintModel) -> dict:
         "goal": s.goal,
         "start_date": s.start_date.isoformat() if s.start_date else None,
         "end_date": s.end_date.isoformat() if s.end_date else None,
+        "duration_days": s.duration_days,
         "status": s.status,
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "completed_at": s.completed_at.isoformat() if s.completed_at else None,

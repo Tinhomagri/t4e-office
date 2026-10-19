@@ -32,6 +32,7 @@ class CreateSprint:
         goal: str = "",
         start_date: date | None = None,
         end_date: date | None = None,
+        duration_days: int | None = None,
     ) -> Sprint:
         project = self.project_repository.get(project_id=project_id)
         if project is None:
@@ -48,6 +49,12 @@ class CreateSprint:
             goal=goal,
             start_date=start_date,
             end_date=end_date,
+            duration_days=duration_days,
             status=SprintStatus.PLANNED,
         )
+        # Com duração e data de início, o término é consequência — quem está
+        # planejando já vê a janela fechada na lista, sem iniciar a sprint.
+        if duration_days and start_date and end_date is None:
+            sprint.start_date, sprint.end_date = sprint.window_from(start_date)
+            sprint.__post_init__()
         return self.sprint_repository.create(sprint=sprint)

@@ -26,6 +26,7 @@ import { AnimatePresence } from "framer-motion"
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useCopilotContextStore } from "@/features/copilot/copilot.context.store"
+import * as wsApi from "@/features/workspace/workspace.api"
 
 import { ResumoView } from "./views/ResumoView"
 import { ListaView } from "./views/ListaView"
@@ -154,6 +155,37 @@ function BoardsInner({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     const urlProject = searchParams.get("project")
     if (urlProject && urlProject !== projectId) setProjectIdState(urlProject)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // `?card=` sem `?project=`: descobre o board do card e completa a URL.
+  //
+  // É o caso das notificações gravadas antes de o link passar a carregar o
+  // projeto, e de qualquer link colado à mão. Sem isto o board abria no
+  // primeiro projeto da lista, o card não estava lá e o parâmetro era
+  // descartado em silêncio — nem o quadro certo, nem o card.
+  useEffect(() => {
+    const cardParam = searchParams.get("card")
+    if (!cardParam || searchParams.get("project")) return
+    let cancelled = false
+    void wsApi
+      .getCard(cardParam)
+      .then((card) => {
+        if (cancelled) return
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            next.set("project", card.project_id)
+            return next
+          },
+          { replace: true },
+        )
+      })
+      // Card apagado ou sem acesso: segue no board padrão em vez de travar.
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
@@ -333,6 +365,12 @@ function ProjectBoard({ project, workspaceId, view }: { project: Project; worksp
   useEffect(() => {
     const cardParam = searchParams.get("card")
     if (!cardParam || !cards) return
+    // O link traz `project` junto (notificação de card atribuído, por
+    // exemplo). Enquanto a lista carregada ainda for a do projeto ANTERIOR, o
+    // card não está nela — sair aqui evita apagar o parâmetro antes de o
+    // projeto certo chegar, que era o que fazia o card nunca abrir.
+    const projectParam = searchParams.get("project")
+    if (projectParam && projectParam !== projectId) return
     const found = cards.find((c) => c.id === cardParam)
     if (found) setOpenCard(found)
     setSearchParams(

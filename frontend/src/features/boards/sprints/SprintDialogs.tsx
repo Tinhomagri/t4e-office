@@ -7,6 +7,8 @@ import { Button, Field, Input, Modal, Textarea, cx } from "@/shared/ui/primitive
 import {
   DURATION_WEEKS,
   type SprintDuration,
+  daysToDuration,
+  durationToDays,
   durationWeeks,
   endForDuration,
   todayISO,
@@ -17,6 +19,8 @@ export interface SprintFormValues {
   start_date: string
   end_date: string
   goal: string
+  /** `null` = personalizada (as datas valem como vieram). */
+  duration_days: number | null
 }
 
 /**
@@ -25,17 +29,24 @@ export interface SprintFormValues {
  * no fim à mão vira "Personalizada".
  */
 function useSprintForm(sprint: Sprint) {
+  // Duração escolhida na criação vence; sem ela, deduz das datas; sem datas,
+  // 2 semanas (padrão do produto).
+  const chosen = daysToDuration(sprint.duration_days)
   const start = sprint.start_date ?? todayISO()
-  const end = sprint.end_date ?? endForDuration(start, 2)
-  const [values, setValues] = useState<SprintFormValues>({
+  const end =
+    sprint.end_date ??
+    endForDuration(start, chosen && chosen !== "custom" ? chosen : 2)
+  const [values, setValues] = useState<Omit<SprintFormValues, "duration_days">>({
     name: sprint.name,
     start_date: start,
     end_date: end,
     goal: sprint.goal ?? "",
   })
-  const [duration, setDuration] = useState<SprintDuration>(durationWeeks(start, end))
+  const [duration, setDuration] = useState<SprintDuration>(
+    sprint.start_date && sprint.end_date ? durationWeeks(start, end) : (chosen ?? 2),
+  )
 
-  const set = (patch: Partial<SprintFormValues>) => setValues((v) => ({ ...v, ...patch }))
+  const set = (patch: Partial<typeof values>) => setValues((v) => ({ ...v, ...patch }))
   const pickDuration = (d: SprintDuration) => {
     setDuration(d)
     if (d !== "custom" && values.start_date) set({ end_date: endForDuration(values.start_date, d) })
@@ -57,7 +68,11 @@ function useSprintForm(sprint: Sprint) {
         ? "A data de fim não pode ser anterior à de início."
         : null
   const valid = values.name.trim().length > 0 && dateError === null
-  const payload = (): SprintFormValues => ({ ...values, name: values.name.trim() })
+  const payload = (): SprintFormValues => ({
+    ...values,
+    name: values.name.trim(),
+    duration_days: durationToDays(duration),
+  })
   return { values, set, duration, pickDuration, setStart, setEnd, dateError, valid, payload }
 }
 

@@ -5,11 +5,12 @@ import {
   useTracks,
 } from "@livekit/components-react"
 import { Track } from "livekit-client"
+import { useMemo } from "react"
 import { Mic, MicOff } from "lucide-react"
 
 import type { JoinResult } from "@/features/meetings/meetings.api"
 import { MediaSync, type MediaKind } from "@/features/meetings/MediaSync"
-import { ROOM_OPTIONS } from "@/features/meetings/roomOptions"
+import { buildRoomOptions } from "@/features/meetings/roomOptions"
 
 /** Posição do cartão, medida a partir do CENTRO do wrapper da mesa. */
 export type SeatPoint = { x: number; y: number }
@@ -121,6 +122,9 @@ export function PokerVideoOverlay({
   video: boolean
   onMediaError?: (kind: MediaKind, error: unknown) => void
 }) {
+  // Memoizado: o `LiveKitRoom` recria a `Room` quando a identidade do objeto
+  // de opções muda, e `buildRoomOptions` devolve um objeto novo a cada chamada.
+  const roomOptions = useMemo(() => buildRoomOptions(), [])
   return (
     <LiveKitRoom
       token={session.token}
@@ -130,7 +134,7 @@ export function PokerVideoOverlay({
       video={false}
       // adaptiveStream/dynacast/limite de captura: sem isso, cada cartão de
       // 128×96 recebia vídeo em qualidade cheia (ver roomOptions.ts).
-      options={ROOM_OPTIONS}
+      options={roomOptions}
       className="pointer-events-none absolute inset-0"
     >
       <MediaSync audio={audio} video={video} onError={onMediaError} />

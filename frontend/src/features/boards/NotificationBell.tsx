@@ -29,6 +29,19 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d`
 }
 
+/**
+ * Conserta links gravados antes de o backend passar a emitir o caminho certo.
+ *
+ * Todas as telas do produto vivem sob `/app`; notificações antigas apontam
+ * para `/boards?...` e o router respondia 404. Linhas já no banco não mudam
+ * sozinhas, então a correção também vale na hora de navegar.
+ */
+function appPath(link: string): string {
+  if (link.startsWith("/app")) return link
+  if (link.startsWith("/boards")) return `/app${link}`
+  return link
+}
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [toastQueue, setToastQueue] = useState<Notification[]>([])
@@ -62,7 +75,7 @@ export function NotificationBell() {
 
   function handleNotifClick(n: Notification) {
     if (!n.read) markOne.mutate(n.id)
-    if (n.link) navigate(n.link)
+    if (n.link) navigate(appPath(n.link))
     setOpen(false)
   }
 

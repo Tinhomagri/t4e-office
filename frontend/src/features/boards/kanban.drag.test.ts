@@ -23,6 +23,7 @@ function card(id: string, status: CardStatus): Card {
     priority: "medium",
     points: null,
     assignee_id: null,
+    collaborator_ids: [],
     reporter_id: null,
     sprint_id: null,
     start_date: null,

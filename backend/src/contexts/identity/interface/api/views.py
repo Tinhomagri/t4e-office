@@ -72,6 +72,41 @@ PROFILE_CHOICES = {
 }
 
 
+WHITELABEL_TEXT_FIELDS = {"appName": 40, "appInitials": 4, "logoUrl": 500_000}
+WHITELABEL_MAPS = ("colors", "fonts", "radius")
+
+
+def _clean_whitelabel(raw: object) -> dict:
+    """Normaliza a marca personalizada antes de gravar.
+
+    O front já peneira o que recebe (ver `sanitizeWhitelabel`), mas o valor
+    acaba dentro de uma propriedade CSS no navegador de quem usa — então o
+    servidor não aceita o que não reconhece: só os três mapas de token, com
+    chave e valor de texto curto, e os campos de identidade com limite. Quem
+    manda outra coisa recebe a marca vazia, não um erro, porque isto nunca é
+    digitado à mão.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    clean: dict = {}
+    for name in WHITELABEL_MAPS:
+        source = raw.get(name)
+        if not isinstance(source, dict):
+            continue
+        bucket = {
+            str(key)[:60]: str(value)[:200]
+            for key, value in source.items()
+            if isinstance(value, str) and value.strip()
+        }
+        if bucket:
+            clean[name] = bucket
+    for field, limit in WHITELABEL_TEXT_FIELDS.items():
+        value = raw.get(field)
+        if isinstance(value, str) and value.strip():
+            clean[field] = value.strip()[:limit]
+    return clean
+
+
 def _profile_data(user: UserModel) -> dict:
     return {
         "id": str(user.id), "email": user.email, "full_name": user.full_name,
@@ -79,6 +114,7 @@ def _profile_data(user: UserModel) -> dict:
         "phone": user.phone, "bio": user.bio, "location": user.location,
         "timezone": user.timezone, "language": user.language, "theme": user.theme,
         "density": user.density, "notification_preferences": user.notification_preferences,
+        "whitelabel": user.whitelabel,
         "availability": user.availability, "has_usable_password": user.has_usable_password(),
         "date_joined": user.date_joined,
     }
@@ -373,6 +409,9 @@ class MeView(APIView):
             allowed = {"email", "desktop", "mentions", "meetings", "daily_digest"}
             user.notification_preferences = {key: bool(value) for key, value in preferences.items() if key in allowed}
             changed.append("notification_preferences")
+        if "whitelabel" in request.data:
+            user.whitelabel = _clean_whitelabel(request.data["whitelabel"])
+            changed.append("whitelabel")
         if changed:
             user.save(update_fields=changed)
         return Response(_profile_data(user))

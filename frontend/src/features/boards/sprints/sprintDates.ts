@@ -1,6 +1,7 @@
 /**
- * Datas de sprint como o Jira: duração de 1–4 semanas (fim = início + N
- * semanas) ou personalizada. Tudo em "AAAA-MM-DD" (o que a API manda e
+ * Datas de sprint como o Jira: duração de 1–4 semanas ou personalizada. O dia
+ * de início conta (mesma regra do backend, `Sprint.window_from`): 2 semanas a
+ * partir de uma segunda terminam no domingo seguinte. Tudo em "AAAA-MM-DD" (o que a API manda e
  * recebe) e calculado em UTC — `new Date("2026-10-12")` local escorregaria um
  * dia no fuso de São Paulo.
  */
@@ -25,11 +26,22 @@ export function addDays(iso: string, days: number): string {
 }
 
 export function endForDuration(start: string, weeks: number): string {
-  return addDays(start, weeks * 7)
+  return addDays(start, weeks * 7 - 1)
+}
+
+/** Semanas ↔ `duration_days` da API (`null` = personalizada). */
+export function durationToDays(d: SprintDuration): number | null {
+  return d === "custom" ? null : d * 7
+}
+
+export function daysToDuration(days: number | null | undefined): SprintDuration | null {
+  if (!days) return null
+  const weeks = days / 7
+  return (DURATION_WEEKS as readonly number[]).includes(weeks) ? (weeks as SprintDuration) : "custom"
 }
 
 export function durationWeeks(start: string, end: string): SprintDuration {
-  const days = (toUTC(end) - toUTC(start)) / DAY_MS
+  const days = (toUTC(end) - toUTC(start)) / DAY_MS + 1
   const weeks = days / 7
   return (DURATION_WEEKS as readonly number[]).includes(weeks)
     ? (weeks as SprintDuration)

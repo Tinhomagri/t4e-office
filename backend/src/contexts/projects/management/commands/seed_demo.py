@@ -160,7 +160,7 @@ class Command(BaseCommand):
                     type="card_assigned",
                     title=f"Você foi atribuído a {project.key}-{i}",
                     body=title,
-                    link=f"/projects/{project.id}/cards/{card.id}",
+                    link=f"/app/boards?project={project.id}&card={card.id}",
                 )
 
         self.stdout.write(

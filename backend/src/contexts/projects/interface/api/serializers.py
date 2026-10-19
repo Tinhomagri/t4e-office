@@ -78,6 +78,9 @@ class CreateCardSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=_PRIORITY, default="medium")
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     assignee_id = serializers.CharField(required=False, allow_null=True)
+    collaborator_ids = serializers.ListField(
+        child=serializers.CharField(), required=False
+    )
     reporter_id = serializers.CharField(required=False, allow_null=True)
     sprint_id = serializers.CharField(required=False, allow_null=True)
     start_date = serializers.DateField(required=False, allow_null=True)
@@ -103,6 +106,9 @@ class UpdateCardSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=_PRIORITY, required=False)
     points = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     assignee_id = serializers.CharField(required=False, allow_null=True)
+    collaborator_ids = serializers.ListField(
+        child=serializers.CharField(), required=False
+    )
     reporter_id = serializers.CharField(required=False, allow_null=True)
     sprint_id = serializers.CharField(required=False, allow_null=True)
     start_date = serializers.DateField(required=False, allow_null=True)
@@ -148,6 +154,7 @@ class CardSerializer(serializers.Serializer):
     priority = serializers.CharField()
     points = serializers.IntegerField(allow_null=True)
     assignee_id = serializers.CharField(allow_null=True)
+    collaborator_ids = serializers.ListField(child=serializers.CharField(), default=list)
     reporter_id = serializers.CharField(allow_null=True)
     # Nome de quem relatou pelo link público, sem conta aqui — preenchido só
     # quando reporter_id é null (source="public_link").
@@ -272,6 +279,9 @@ class CreateSprintSerializer(serializers.Serializer):
     goal = serializers.CharField(required=False, allow_blank=True, default="")
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
+    duration_days = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1, max_value=365
+    )
 
 
 class UpdateSprintSerializer(serializers.Serializer):
@@ -281,6 +291,9 @@ class UpdateSprintSerializer(serializers.Serializer):
     goal = serializers.CharField(required=False, allow_blank=True)
     start_date = serializers.DateField(required=False, allow_null=True)
     end_date = serializers.DateField(required=False, allow_null=True)
+    duration_days = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1, max_value=365
+    )
 
 
 class SprintSerializer(serializers.Serializer):
@@ -292,6 +305,7 @@ class SprintSerializer(serializers.Serializer):
     goal = serializers.CharField()
     start_date = serializers.DateField(allow_null=True)
     end_date = serializers.DateField(allow_null=True)
+    duration_days = serializers.IntegerField(allow_null=True, default=None)
     status = serializers.CharField()
     started_at = serializers.DateTimeField(allow_null=True, default=None)
     completed_at = serializers.DateTimeField(allow_null=True, default=None)

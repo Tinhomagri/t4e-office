@@ -21,9 +21,24 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       setSession: (tokens) =>
         set({ accessToken: tokens.access, refreshToken: tokens.refresh }),
-      setUser: (user) => set({ user }),
+      setUser: (user) => {
+        set({ user })
+        // A marca mora no perfil para acompanhar a pessoa em outro
+        // computador; o store do whitelabel é só o cache que o app lê antes
+        // do primeiro render. Import dinâmico para não criar ciclo.
+        void import("@/shared/whitelabel").then((m) =>
+          m.useWhitelabelStore.getState().setWhitelabel(
+            m.sanitizeWhitelabel(user.whitelabel),
+          ),
+        )
+      },
       clear: () => {
         set({ accessToken: null, refreshToken: null, user: null })
+        // A marca é de quem estava logado: deixá-la de pé entregaria a
+        // identidade visual da pessoa anterior para quem entrar depois.
+        void import("@/shared/whitelabel").then((m) =>
+          m.useWhitelabelStore.getState().setWhitelabel(m.EMPTY_WHITELABEL),
+        )
         // O workspace ativo é escopo de conta, não de navegador: sem limpar, a
         // próxima pessoa a entrar herda o workspace da anterior e as primeiras
         // requisições saem com um id ao qual ela não tem acesso (403).
