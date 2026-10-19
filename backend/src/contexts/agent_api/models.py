@@ -3,4 +3,5 @@ from contexts.agent_api.infrastructure.models import (  # noqa: F401
     AgentAuditLogModel,
     AgentTokenModel,
     TrackedTimeEntryModel,
+    WebhookOutboxModel,
 )

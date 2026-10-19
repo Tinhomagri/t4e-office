@@ -90,6 +90,10 @@ ROOT_URLCONF = "config.urls"
 # Cache compartilhado entre workers (limite de taxa da API de agentes precisa
 # contar as requisições de todos os processos). Sem CACHE_URL, memória local —
 # ok em dev/teste, conta por processo em produção.
+# Webhooks da API de agentes (etapa 3). Sem URL, nenhum evento é gerado.
+AGENT_WEBHOOK_URL = env("AGENT_WEBHOOK_URL", default="")
+AGENT_WEBHOOK_SECRET = env("AGENT_WEBHOOK_SECRET", default="")
+
 _CACHE_URL = env("CACHE_URL", default="")
 CACHES = {
     "default": (

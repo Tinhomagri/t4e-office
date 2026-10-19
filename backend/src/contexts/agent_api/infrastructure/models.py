@@ -81,3 +81,27 @@ class TrackedTimeEntryModel(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["card", "inicio"], name="tracked_time_card_inicio")
         ]
+
+
+class WebhookOutboxModel(models.Model):
+    """Evento a entregar aos agentes. Gravado na mesma transação da mudança
+    (signal), entregue depois pelo `entregar_webhooks` — se o servidor dos
+    agentes estiver fora, nada se perde: tenta de novo com espera crescente
+    por até 24 h. `id_evento` é o que o lado de lá usa para não processar
+    duas vezes."""
+
+    id_evento = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    evento = models.CharField(max_length=60)
+    recurso_tipo = models.CharField(max_length=20)
+    recurso_id = models.CharField(max_length=64)
+    dados = models.JSONField(default=dict)
+    ocorrido_em = models.DateTimeField(auto_now_add=True, db_index=True)
+    tentativas = models.PositiveSmallIntegerField(default=0)
+    proxima_tentativa = models.DateTimeField(auto_now_add=True, db_index=True)
+    entregue_em = models.DateTimeField(null=True, blank=True)
+    desistiu_em = models.DateTimeField(null=True, blank=True)
+    ultimo_erro = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "agent_api_webhook_outbox"
+        ordering = ["ocorrido_em"]
