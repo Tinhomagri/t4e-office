@@ -57,10 +57,14 @@ def test_recalcular_mantem_o_mesmo_id(card):
 
 
 def test_signal_cria_trecho_sem_comando(card, django_capture_on_commit_callbacks):
+    entrada = CardHistoryModel.objects.create(
+        card=card, field="status", old_value="todo", new_value="doing"
+    )
+    # Início numa segunda passada: até "agora" sempre há expediente.
+    CardHistoryModel.objects.filter(pk=entrada.pk).update(
+        created_at=datetime(2026, 10, 12, 10, tzinfo=SP)
+    )
     with django_capture_on_commit_callbacks(execute=True):
-        CardHistoryModel.objects.create(
-            card=card, field="status", old_value="todo", new_value="doing"
-        )
         CardHistoryModel.objects.create(card=card, field="paused", old_value="", new_value="1")
     assert TrackedTimeEntryModel.objects.filter(card=card).count() == 1
 
@@ -68,3 +72,23 @@ def test_signal_cria_trecho_sem_comando(card, django_capture_on_commit_callbacks
 def test_campo_irrelevante_nao_recalcula(card, django_assert_max_num_queries):
     with django_assert_max_num_queries(2):
         CardHistoryModel.objects.create(card=card, field="title", old_value="a", new_value="b")
+
+
+def test_recalcular_substitui_linha_antiga_do_mesmo_trecho(card):
+    """Linha gravada antes do id determinístico (uuid aleatório, mesmo início)
+    não pode travar o recálculo na unicidade (card, inicio)."""
+    import uuid
+
+    _hist(card, "status", "todo", "doing", datetime(2026, 10, 12, 10, tzinfo=SP))
+    _hist(card, "paused", "", "1", datetime(2026, 10, 12, 12, tzinfo=SP))
+    entry = TrackedTimeEntryModel.objects.get()
+    TrackedTimeEntryModel.objects.filter(pk=entry.pk).update(id=uuid.uuid4())
+    call_command("recalcular_tempo_rastreado", card=str(card.id))
+    assert TrackedTimeEntryModel.objects.get().id == entry.id
+
+
+def test_trecho_sem_horario_comercial_nao_vira_linha(card):
+    # Sábado inteiro em andamento: 0 s de expediente.
+    _hist(card, "status", "todo", "doing", datetime(2026, 10, 17, 10, tzinfo=SP))
+    _hist(card, "paused", "", "1", datetime(2026, 10, 17, 15, tzinfo=SP))
+    assert not TrackedTimeEntryModel.objects.exists()

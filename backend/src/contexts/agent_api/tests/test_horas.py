@@ -33,7 +33,11 @@ def test_junta_rastreado_e_manual(api, dados, ws):
     assert body["meta"]["total"] == 2
     por_fonte = {r["fonte"]: r for r in body["dados"]}
     r, m = por_fonte["rastreado"], por_fonte["manual"]
-    assert set(r) == {"id", "pessoa_id", "card_id", "projeto_id", "data", "horas", "descricao", "fonte"}
+    assert set(r) == {
+        "id", "pessoa_id", "card_id", "projeto_id", "data", "horas", "descricao", "fonte",
+        "em_andamento",
+    }
+    assert r["em_andamento"] is False and m["em_andamento"] is False
     assert r["id"].startswith("r_") and m["id"].startswith("m_")
     assert (r["horas"], r["data"], r["pessoa_id"]) == (2.0, "2026-10-12", str(ws.owner.id))
     assert (m["horas"], m["data"], m["descricao"]) == (1.5, "2026-10-13", "reunião")
@@ -66,3 +70,35 @@ def test_outro_workspace_nao_aparece(api, dados, ws):
     )
     WorklogModel.objects.create(card=card, author=ws.owner, time_seconds=60, started_at=datetime.now(SP))
     assert api.get(URL).json()["meta"]["total"] == 2
+
+
+def test_trecho_aberto_aparece_e_mantem_o_id_ao_fechar(api, ws, django_capture_on_commit_callbacks):
+    from contexts.projects.infrastructure.django.models import (
+        CardHistoryModel,
+        WorkflowStatusModel,
+    )
+
+    p = ProjectModel.objects.create(workspace=ws, name="Q", key="Q")
+    WorkflowStatusModel.objects.create(
+        project=p, name="Fazendo", slug="doing", category="in_progress", order=1, is_working=True
+    )
+    card = CardModel.objects.create(project=p, number=1, title="C", status="doing", assignee=ws.owner)
+    entrada = CardHistoryModel.objects.create(
+        card=card, field="status", old_value="todo", new_value="doing"
+    )
+    # Data fixa num dia útil: "3h atrás" cairia fora do expediente à noite.
+    CardHistoryModel.objects.filter(pk=entrada.pk).update(
+        created_at=datetime(2026, 10, 12, 10, tzinfo=SP)
+    )
+
+    (aberto,) = api.get(URL + f"?projeto={p.id}").json()["dados"]
+    assert aberto["em_andamento"] is True
+    assert aberto["fonte"] == "rastreado"
+    assert aberto["pessoa_id"] == str(ws.owner.id)
+    assert aberto["horas"] >= 0
+
+    with django_capture_on_commit_callbacks(execute=True):
+        CardHistoryModel.objects.create(card=card, field="paused", old_value="", new_value="1")
+    (fechado,) = api.get(URL + f"?projeto={p.id}").json()["dados"]
+    assert fechado["em_andamento"] is False
+    assert fechado["id"] == aberto["id"]

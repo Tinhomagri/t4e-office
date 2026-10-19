@@ -3,19 +3,31 @@ o agente não somar a mesma hora duas vezes:
 
 - `rastreado`: trechos automáticos (card em andamento e não pausado);
 - `manual`: worklogs lançados à mão.
+
+Trecho rastreado ainda aberto sai com `em_andamento: true` (horas até agora)
+e o mesmo id que terá ao fechar.
 """
 from __future__ import annotations
 
 from datetime import date
 
+from django.db.models import Exists, OuterRef
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.request import Request
 
+from contexts.agent_api.application.tracked_time import tracked_entry_id
 from contexts.agent_api.infrastructure.models import TrackedTimeEntryModel
 from contexts.agent_api.interface.base import AgentAPIView
 from contexts.agent_api.interface.formatting import day, hours
 from contexts.agent_api.interface.pagination import paginate_rows
-from contexts.projects.infrastructure.django.models import WorklogModel
+from contexts.projects.domain.working_time import business_seconds_between
+from contexts.projects.infrastructure.django.models import (
+    CardModel,
+    WorkflowStatusModel,
+    WorklogModel,
+)
+from contexts.projects.infrastructure.working_time_query import working_time_for_cards
 from shared.domain.errors import ValidationError
 
 
@@ -75,6 +87,7 @@ class HorasView(AgentAPIView):
                 "horas": hours(t.segundos),
                 "descricao": "",
                 "fonte": "rastreado",
+                "em_andamento": False,
                 "_ordem": (t.updated_at, f"r_{t.id}"),
             }
             for t in tracked
@@ -88,8 +101,56 @@ class HorasView(AgentAPIView):
                 "horas": hours(w.time_seconds),
                 "descricao": w.comment,
                 "fonte": "manual",
+                "em_andamento": False,
                 "_ordem": (w.updated_at, f"m_{w.id}"),
             }
             for w in logged
         ]
+        rows += self._open_rows(
+            workspaces, projeto=params.get("projeto"), pessoa=params.get("pessoa"), de=de, ate=ate
+        )
         return paginate_rows(request, rows)
+
+    @staticmethod
+    def _open_rows(workspaces, *, projeto, pessoa, de, ate) -> list[dict]:
+        """Trecho rodando agora (card em andamento, não pausado/bloqueado):
+        ainda não está em TrackedTimeEntry. Sai com `em_andamento: true`, horas
+        até agora, e o mesmo id que terá quando fechar."""
+        cards = CardModel.objects.filter(project__workspace_id__in=workspaces).filter(
+            Exists(
+                WorkflowStatusModel.objects.filter(
+                    project_id=OuterRef("project_id"), slug=OuterRef("status"), is_working=True
+                )
+            )
+        )
+        if projeto:
+            cards = cards.filter(project_id=projeto)
+        cards = list(cards)
+        project_of = {str(c.id): str(c.project_id) for c in cards}
+        now = timezone.now()
+        rows = []
+        for card_id, wt in working_time_for_cards(cards).items():
+            if wt.running_since is None:
+                continue
+            if pessoa and wt.running_assignee_id != str(pessoa):
+                continue
+            start_day = timezone.localtime(wt.running_since).date()
+            if (de and start_day < de) or (ate and start_day > ate):
+                continue
+            entry_id = f"r_{tracked_entry_id(card_id, wt.running_since)}"
+            rows.append(
+                {
+                    "id": entry_id,
+                    "pessoa_id": wt.running_assignee_id,
+                    "card_id": card_id,
+                    "projeto_id": project_of[card_id],
+                    "data": day(wt.running_since),
+                    "horas": hours(business_seconds_between(wt.running_since, now)),
+                    "descricao": "",
+                    "fonte": "rastreado",
+                    "em_andamento": True,
+                    # Muda a cada minuto: sempre "atualizado agora".
+                    "_ordem": (now, entry_id),
+                }
+            )
+        return rows
